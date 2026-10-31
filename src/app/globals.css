@@ -1,26 +1,200 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+
+  /* ========================================================
+     🎨 PALETA TIENDA / CATÁLOGO PÚBLICO (Inspirada en GadgetHub)
+     ======================================================== */
+  --color-store-primary: var(--store-primary);
+  --color-store-primary-hover: var(--store-primary-hover);
+  --color-store-primary-light: var(--store-primary-light);
+  --color-store-header-bg: var(--store-header-bg);
+  --color-store-header-sub: var(--store-header-sub);
+  --color-store-header-text: var(--store-header-text);
+  --color-store-header-muted: var(--store-header-muted);
+  --color-store-stars: var(--store-stars);
+  --color-store-discount: var(--store-discount);
+
+  /* ========================================================
+     💼 PALETA PANEL ADMINISTRATIVO (/admin)
+     Universal Multi-Nicho: Obsidian Graphite & Electric Sapphire
+     ======================================================== */
+  --color-admin-primary: var(--admin-primary);
+  --color-admin-primary-hover: var(--admin-primary-hover);
+  --color-admin-sidebar: var(--admin-sidebar);
+  --color-admin-sidebar-bg: var(--admin-sidebar-bg);
+  --color-admin-sidebar-border: var(--admin-sidebar-border);
+  --color-admin-sidebar-text: var(--admin-sidebar-text);
+  --color-admin-sidebar-muted: var(--admin-sidebar-muted);
+  --color-admin-sidebar-hover: var(--admin-sidebar-hover);
+  --color-admin-sidebar-active: var(--admin-sidebar-active);
+  --color-admin-sidebar-active-bg: var(--admin-sidebar-active-bg);
+  --color-admin-header-bg: var(--admin-header-bg);
+  --color-admin-header-border: var(--admin-header-border);
+  --color-admin-workspace-bg: var(--admin-workspace-bg);
+  --color-admin-accent: var(--admin-accent);
+  --color-admin-accent-hover: var(--admin-accent-hover);
+
+  /* Tokens estándar shadcn */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* =========================================================================
+     🟠 PALETA TIENDA PÚBLICA (Cambia estos valores para cambiar la tienda)
+     ========================================================================= */
+  --store-primary: #ff5500;             /* Naranja vibrante de botones y acentos */
+  --store-primary-hover: #e64a00;       /* Hover naranja */
+  --store-primary-light: #fff2eb;       /* Fondo suave */
+  --store-header-bg: #0b1120;           /* Dark Navy fondo principal del header */
+  --store-header-sub: #111827;          /* Sub-barra de categorías */
+  --store-header-text: #ffffff;         /* Texto blanco */
+  --store-header-muted: #94a3b8;        /* Texto secundario de header */
+  --store-stars: #f59e0b;               /* Dorado de calificaciones */
+  --store-discount: #ef4444;            /* Rojo de descuento (-25%, -30%) */
+
+  /* =========================================================================
+     🏢 PALETA PANEL ADMINISTRATIVO (/admin) - FINNOVA INDIGO & MIDNIGHT NAVY
+     Inspirada exactamente en el diseño de Finnova:
+     Fondo Midnight Indigo (#11162b), Acento Royal Indigo (#4338ca),
+     Bordes (#1e2648), Canvas Soft Porcelain (#f4f5f9).
+     ========================================================================= */
+  --admin-primary: #11162b;             /* Midnight Indigo Profundo (#11162b) */
+  --admin-primary-hover: #1a203f;
+  --admin-sidebar: #11162b;
+  --admin-sidebar-bg: #11162b;
+  --admin-sidebar-border: #1e2648;      /* Borde índigo noche (#1e2648) */
+  --admin-sidebar-text: #cbd5e1;        /* Texto Slate-300 de alto contraste */
+  --admin-sidebar-muted: #94a3b8;       /* Encabezados Slate-400 nítidos */
+  --admin-sidebar-hover: #1a203f;       /* Hover índigo noche (#1a203f) */
+  --admin-sidebar-active: #ffffff;
+  --admin-sidebar-active-bg: #4338ca;   /* Royal Indigo Finnova (#4338ca) */
+  --admin-header-bg: #ffffff;
+  --admin-header-border: #e2e8f0;       /* Borde suave header */
+  --admin-workspace-bg: #f4f5f9;        /* Canvas Soft Porcelain Finnova (#f4f5f9) */
+  --admin-accent: #4338ca;              /* Botón primario Royal Indigo */
+  --admin-accent-hover: #3730a3;
+
+  /* Variables base de la aplicación */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --radius: 0.625rem;
+
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --admin-sidebar-bg: #0c0f1d;
+  --admin-sidebar-border: #1a213d;
+  --admin-sidebar-text: #e2e8f0;
+  --admin-sidebar-muted: #94a3b8;
+  --admin-sidebar-hover: #151b33;
+  --admin-sidebar-active: #ffffff;
+  --admin-sidebar-active-bg: #4f46e5;
+  --admin-header-bg: #11162b;
+  --admin-header-border: #1e2648;
+  --admin-workspace-bg: #090c17;
+  --admin-accent: #4f46e5;
+  --admin-accent-hover: #4338ca;
+
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }
