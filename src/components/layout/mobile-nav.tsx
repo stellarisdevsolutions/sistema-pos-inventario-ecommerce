@@ -138,7 +138,7 @@ export function MobileNav() {
                     <p className="text-[10px] text-[#38bdf8]">Administrador</p>
                   </div>
                 </div>
-                <Link href="/admin/login" className="text-slate-400 hover:text-rose-400">
+                <Link href="/portal" className="text-slate-400 hover:text-rose-400">
                   <LogOut className="h-4 w-4" />
                 </Link>
               </div>

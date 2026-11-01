@@ -58,7 +58,7 @@ export function StoreMobileNav() {
       </button>
 
       <Link
-        href="/admin/login"
+        href="/portal"
         className="flex flex-col items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600"
       >
         <User className="h-5 w-5" />

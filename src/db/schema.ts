@@ -8,7 +8,7 @@ import {
   boolean,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 /* =========================================================================
    1. ENUMS (ESTADOS Y MÉTODOS DEL SISTEMA POS & INVENTARIO)
@@ -117,6 +117,7 @@ export const categories = pgTable("categories", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description"),
+  imageUrl: text("image_url"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -161,17 +162,21 @@ export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  sku: text("sku").notNull().unique(),           // Código SKU interno
-  barcode: text("barcode").unique(),             // Código de barras para lector POS
+  sku: text("sku").unique(),                                                        // Código SKU interno (opcional / nullable)
+  barcode: text("barcode").unique(),                                                // Código de barras (opcional / nullable)
   description: text("description"),
-  price: numeric("price", { precision: 12, scale: 2 }).notNull().default("0"),      // Precio de venta
-  costPrice: numeric("cost_price", { precision: 12, scale: 2 }).notNull().default("0"), // Costo unitario promedio
-  stock: integer("stock").notNull().default(0),                                     // Stock disponible en mano
-  minStock: integer("min_stock").notNull().default(5),                             // Umbral mínimo de alerta
-  imageUrl: text("image_url"),
-  categoryId: integer("category_id").references(() => categories.id),
-  brandId: integer("brand_id").references(() => brands.id),
-  isActive: boolean("is_active").default(true).notNull(),
+  price: numeric("price", { precision: 12, scale: 2 }).notNull().default("0"),      // Precio de venta en mostrador y web
+  costPrice: numeric("cost_price", { precision: 12, scale: 2 }).notNull().default("0"), // Costo Promedio Ponderado (CPP) vigente
+  stock: integer("stock").notNull().default(0),                                     // Stock físico disponible en mano
+  minStock: integer("min_stock").notNull().default(5),                             // Umbral mínimo de alerta para reorden
+  imageUrl: text("image_url"),                                                     // Imagen principal (POS y portada web)
+  images: text("images").array().default(sql`'{}'::text[]`).notNull(),             // Galería de imágenes adicionales (tienda online)
+  categoryId: integer("category_id").references(() => categories.id),              // Categoría comercial (nullable para "Sin categoría")
+  brandId: integer("brand_id").references(() => brands.id),                        // Marca comercial
+  supplierId: integer("supplier_id").references(() => suppliers.id),                // Proveedor habitual / por defecto
+  isActive: boolean("is_active").default(true).notNull(),                          // Estado operativo maestro (Habilitado en POS)
+  isVisibleWeb: boolean("is_visible_web").default(true).notNull(),                  // Visible en el catálogo de la tienda online
+  isFeatured: boolean("is_featured").default(false).notNull(),                      // Destacado en la portada de la tienda web
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -337,6 +342,7 @@ export const brandsRelations = relations(brands, ({ many }) => ({
 
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
   purchases: many(purchases),
+  products: many(products),
 }));
 
 export const customersRelations = relations(customers, ({ many }) => ({
@@ -351,6 +357,10 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   brand: one(brands, {
     fields: [products.brandId],
     references: [brands.id],
+  }),
+  supplier: one(suppliers, {
+    fields: [products.supplierId],
+    references: [suppliers.id],
   }),
   purchaseItems: many(purchaseItems),
   saleItems: many(saleItems),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -259,7 +260,9 @@ export default function CajasPage() {
                   className="rounded-xl h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
                   onClick={() => {
                     setIsClosingShiftOpen(false);
-                    alert("Turno cerrado con éxito. Arqueo auditado y archivado.");
+                    toast.success("Turno cerrado con éxito", {
+                      description: "Arqueo de caja auditado, descuadres conciliados y turno archivado.",
+                    });
                   }}
                 >
                   Confirmar y Cerrar Turno
@@ -457,7 +460,11 @@ export default function CajasPage() {
             <Button
               variant="outline"
               className="w-full h-11 rounded-2xl font-bold text-xs gap-2 border-indigo-200 text-indigo-600 dark:border-indigo-800 hover:bg-indigo-50"
-              onClick={() => alert("Función para abrir nuevo turno en Caja 2")}
+              onClick={() =>
+                toast.info("Apertura de terminal", {
+                  description: "Iniciando configuración de saldo base para Terminal 2...",
+                })
+              }
             >
               <Plus className="h-4 w-4" />
               Abrir Turno en Terminal 2

@@ -236,7 +236,7 @@ export function Sidebar() {
 
           {!isCollapsed && (
             <Link
-              href="/admin/login"
+              href="/portal"
               className="p-1.5 rounded-lg text-slate-300 hover:text-rose-400 transition-colors"
               title="Cerrar sesión"
             >

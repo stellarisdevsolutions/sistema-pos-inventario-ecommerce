@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { SidebarProvider } from "@/context/sidebar-context";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
@@ -14,14 +15,20 @@ export default function AdminLayout({
     <SidebarProvider>
       <div className="flex min-h-screen bg-[var(--admin-workspace-bg)] text-slate-900 font-sans antialiased selection:bg-[var(--admin-accent)] selection:text-white">
         {/* Sidebar Lateral Pegado al Costado */}
-        <Sidebar />
+        <Suspense fallback={<aside className="hidden lg:flex w-64 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800" />}>
+          <Sidebar />
+        </Suspense>
 
         {/* Área de Trabajo con Header */}
         <div className="flex flex-1 flex-col min-w-0 transition-all duration-300">
-          <MobileNav />
+          <Suspense fallback={null}>
+            <MobileNav />
+          </Suspense>
           <Header />
           <main className="flex-1 px-4 py-4 md:px-6 md:py-6 lg:px-8 lg:py-6 w-full mx-auto max-w-[1600px]">
-            {children}
+            <Suspense fallback={null}>
+              {children}
+            </Suspense>
           </main>
         </div>
       </div>
