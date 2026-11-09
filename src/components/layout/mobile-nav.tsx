@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { navigationItems } from "./nav-items";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/auth-context";
 import {
   Sheet,
   SheetContent,
@@ -24,16 +25,46 @@ import {
   LogOut,
 } from "lucide-react";
 
+function getRoleLabel(role?: string) {
+  switch (role) {
+    case "admin":
+      return "Administrador";
+    case "manager":
+      return "Supervisor";
+    case "cashier":
+      return "Cajero(a)";
+    case "warehouse":
+      return "Almacenero";
+    default:
+      return "Operador";
+  }
+}
+
+function getInitials(name?: string) {
+  if (!name) return "US";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { user, logout } = useAuth();
+
+  // Filtrar módulos estrictamente según el rol del usuario autenticado
+  const allowedItems = navigationItems.filter(
+    (item) => !user || item.allowedRoles.includes(user.role)
+  );
 
   const activeItem =
-    navigationItems.find((item) =>
+    allowedItems.find((item) =>
       item.href === "/admin"
         ? pathname === "/admin"
         : item.href !== "/" && pathname.startsWith(item.href)
-    ) || navigationItems[0];
+    ) || allowedItems[0] || navigationItems[0];
 
   return (
     <header className="lg:hidden sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur-md shadow-2xs">
@@ -71,7 +102,7 @@ export function MobileNav() {
               <div className="px-2 pb-1 text-[10px] font-extrabold uppercase tracking-widest text-[#64748b]">
                 Módulos de Gestión
               </div>
-              {navigationItems.map((item) => {
+              {allowedItems.map((item) => {
                 const isActive =
                   item.href === "/admin"
                     ? pathname === "/admin"
@@ -131,16 +162,28 @@ export function MobileNav() {
               <div className="flex items-center justify-between px-2 pt-1 text-xs">
                 <div className="flex items-center gap-2">
                   <div className="h-7 w-7 rounded-lg bg-[#0284c7] text-white font-bold text-xs flex items-center justify-center">
-                    AC
+                    {getInitials(user?.name)}
                   </div>
                   <div>
-                    <p className="font-bold text-white text-xs leading-none">Admin Studio</p>
-                    <p className="text-[10px] text-[#38bdf8]">Administrador</p>
+                    <p className="font-bold text-white text-xs leading-none">
+                      {user?.name || "Sesión Activa"}
+                    </p>
+                    <p className="text-[10px] text-[#38bdf8]">
+                      {getRoleLabel(user?.role)}
+                    </p>
                   </div>
                 </div>
-                <Link href="/portal" className="text-slate-400 hover:text-rose-400">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    logout();
+                  }}
+                  className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer"
+                  title="Cerrar sesión"
+                >
                   <LogOut className="h-4 w-4" />
-                </Link>
+                </button>
               </div>
             </div>
           </SheetContent>

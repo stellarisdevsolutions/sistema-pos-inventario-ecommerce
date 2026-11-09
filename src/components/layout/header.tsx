@@ -2,15 +2,44 @@
 
 import { useState, useEffect } from "react";
 import { useSidebar } from "@/context/sidebar-context";
+import { useAuth } from "@/context/auth-context";
 import {
   Menu,
   Search,
   Sun,
   Moon,
+  LogOut,
+  ShieldCheck,
+  User,
 } from "lucide-react";
+
+function getRoleBadge(role?: string) {
+  switch (role) {
+    case "admin":
+      return { label: "Administrador", color: "text-[#0284c7] dark:text-[#38bdf8]" };
+    case "manager":
+      return { label: "Supervisor", color: "text-purple-600 dark:text-purple-400" };
+    case "cashier":
+      return { label: "Cajero(a)", color: "text-emerald-600 dark:text-emerald-400" };
+    case "warehouse":
+      return { label: "Almacenero", color: "text-amber-600 dark:text-amber-400" };
+    default:
+      return { label: "Operador", color: "text-slate-500" };
+  }
+}
+
+function getInitials(name?: string) {
+  if (!name) return "US";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
 
 export function Header() {
   const { toggleSidebar, isCollapsed } = useSidebar();
+  const { user, logout } = useAuth();
   const [isDark, setIsDark] = useState(false);
 
   // Leer estado de tema al montar en cliente
@@ -91,15 +120,31 @@ export function Header() {
         {/* Separador nítido */}
         <div className="h-6 w-px bg-slate-300 dark:bg-slate-700" />
 
-        {/* 4. CUARTO ELEMENTO: Usuario (Avatar + Nombre + Rol) */}
-        <div className="flex items-center gap-2.5 pl-1 cursor-pointer group">
-          <div className="h-9 w-9 rounded-full bg-[#0b1329] border border-slate-700 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
-            AC
+        {/* 4. CUARTO ELEMENTO: Usuario (Avatar + Nombre + Rol) + Cerrar Sesión */}
+        <div className="flex items-center gap-3 pl-1">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-full bg-[#0b1329] dark:bg-sky-600 border border-slate-700 dark:border-sky-500 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+              {getInitials(user?.name)}
+            </div>
+            <div className="flex flex-col text-left leading-tight hidden xl:flex">
+              <span className="text-xs font-black text-slate-900 dark:text-white truncate max-w-[140px]">
+                {user?.name || "Sesión Activa"}
+              </span>
+              <span className={`text-[10px] font-bold ${getRoleBadge(user?.role).color}`}>
+                {getRoleBadge(user?.role).label}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col text-left leading-tight hidden xl:flex">
-            <span className="text-xs font-black text-slate-900 dark:text-white">Admin Studio</span>
-            <span className="text-[10px] text-[#0284c7] dark:text-[#38bdf8] font-bold">Administrador</span>
-          </div>
+
+          <button
+            type="button"
+            onClick={logout}
+            className="h-9 w-9 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-600 hover:text-rose-600 dark:text-slate-300 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+            title="Cerrar sesión"
+            aria-label="Cerrar sesión"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </header>

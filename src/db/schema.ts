@@ -94,6 +94,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  pin: text("pin"), // PIN numérico (4-6 dígitos) para autorizaciones rápidas de supervisores en caja
   role: userRoleEnum("role").default("cashier").notNull(),
   phone: text("phone"),
   isActive: boolean("is_active").default(true).notNull(),
@@ -250,6 +251,8 @@ export const sales = pgTable("sales", {
   discountAmount: numeric("discount_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  refundedAmount: numeric("refunded_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  netAmount: numeric("net_amount", { precision: 12, scale: 2 }),
   cashGiven: numeric("cash_given", { precision: 12, scale: 2 }),     // Monto entregado en efectivo
   changeGiven: numeric("change_given", { precision: 12, scale: 2 }), // Cambio / Vuelto
   paymentMethod: paymentMethodEnum("payment_method").default("cash").notNull(),
@@ -265,6 +268,7 @@ export const saleItems = pgTable("sale_items", {
   saleId: integer("sale_id").references(() => sales.id, { onDelete: "cascade" }).notNull(),
   productId: integer("product_id").references(() => products.id).notNull(),
   quantity: integer("quantity").notNull(),
+  returnedQuantity: integer("returned_quantity").default(0).notNull(), // Unidades devueltas/reembolsadas
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(), // Precio cobrado
   unitCost: numeric("unit_cost", { precision: 12, scale: 2 }).notNull(),   // Costo unitario histórico (para calcular utilidad)
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),

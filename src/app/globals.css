@@ -199,3 +199,37 @@
     @apply font-sans;
   }
 }
+
+/* =========================================================================
+   🖨️ ESTILOS DE IMPRESIÓN TÉRMICA PARA TICKETS DE VENTA (80MM / 58MM)
+   ========================================================================= */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ocultar todo en la página excepto el modal/recibo térmico */
+  body * {
+    visibility: hidden;
+  }
+
+  #thermal-receipt,
+  #thermal-receipt * {
+    visibility: visible;
+  }
+
+  #thermal-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 8px;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

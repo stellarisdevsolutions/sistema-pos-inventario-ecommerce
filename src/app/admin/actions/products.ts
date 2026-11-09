@@ -11,6 +11,7 @@ import {
   type ProductFormInput,
 } from "@/lib/validations/product";
 import { CURRENCY_SYMBOL } from "@/lib/currency";
+import { requireRole } from "@/lib/auth/session";
 
 function safeRevalidatePath(path: string) {
   try {
@@ -31,6 +32,8 @@ export type ActionResult<T = unknown> = {
  */
 export async function getInventoryProducts() {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
+
     const prods = await db.query.products.findMany({
       with: {
         category: true,
@@ -73,6 +76,8 @@ export async function getInventoryProducts() {
  */
 export async function getInventoryFormData() {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
+
     const [categoriesList, brandsList, suppliersList] = await Promise.all([
       db.select().from(schema.categories).where(eq(schema.categories.isActive, true)),
       db.select().from(schema.brands),
@@ -95,6 +100,8 @@ export async function getInventoryFormData() {
  */
 export async function getProductById(id: number) {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
+
     const product = await db.query.products.findFirst({
       where: eq(schema.products.id, id),
       with: {
@@ -116,6 +123,8 @@ export async function getProductById(id: number) {
  */
 export async function createProductAction(input: ProductFormInput): Promise<ActionResult> {
   try {
+    const currentUser = await requireRole(["admin", "manager", "warehouse"]);
+
     // 1. Validar datos con Zod
     const validated = productFormSchema.safeParse(input);
     if (!validated.success) {
@@ -172,6 +181,7 @@ export async function createProductAction(input: ProductFormInput): Promise<Acti
       referenceType: "product_creation",
       referenceId: newProduct.id,
       reason: `Apertura inicial en Kárdex al crear el producto. Stock inicial: ${initialUnits} uds | Costo de adquisición: ${CURRENCY_SYMBOL} ${initialCostFormatted} | Precio de venta: ${CURRENCY_SYMBOL} ${initialPriceFormatted}`,
+      userId: currentUser.id,
     });
 
     // 5. Revalidar rutas
@@ -196,6 +206,8 @@ export async function updateProductAction(
   input: ProductFormInput
 ): Promise<ActionResult> {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
+
     // 1. Validar datos con Zod
     const validated = productFormSchema.safeParse(input);
     if (!validated.success) {
@@ -387,6 +399,8 @@ export async function toggleProductActiveAction(
   isActive: boolean
 ): Promise<ActionResult> {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
+
     const [updated] = await db
       .update(schema.products)
       .set({
@@ -415,6 +429,8 @@ export async function toggleProductActiveAction(
  */
 export async function getProductKardexAction(productId?: number) {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
+
     const movements = await db.query.inventoryMovements.findMany({
       where: productId ? eq(schema.inventoryMovements.productId, productId) : undefined,
       with: {
@@ -437,7 +453,15 @@ export async function getProductKardexAction(productId?: number) {
         } else if (m.movementType === "adjustment_in") {
           typeLabel = "Ajuste de Entrada (+)";
         } else if (m.movementType === "adjustment_out") {
-          typeLabel = "Ajuste de Salida (-)";
+          if (
+            m.referenceType === "purchase" ||
+            m.reason?.toLowerCase().includes("anulacion") ||
+            m.reason?.toLowerCase().includes("compra")
+          ) {
+            typeLabel = "Anulación de Compra";
+          } else {
+            typeLabel = "Ajuste de Salida (-)";
+          }
         } else if (m.movementType === "damaged_out") {
           typeLabel = "Baja por Merma";
         } else if (m.movementType === "return_in") {
@@ -506,6 +530,8 @@ export async function createInventoryAdjustmentAction(
   input: CreateAdjustmentInput
 ): Promise<ActionResult> {
   try {
+    const currentUser = await requireRole(["admin", "manager", "warehouse"]);
+
     const { productId, quantity, reason, notes, authorizedByUserId } = input;
 
     if (!productId || typeof productId !== "number") {
@@ -545,17 +571,14 @@ export async function createInventoryAdjustmentAction(
     const adjustmentNumber = `BAJA-${currentYear}-${folioNumber}`;
 
     // 3. Asentar las operaciones en la base de datos
-    // Nota: El driver neon-http es stateless HTTP sobre fetch y no soporta transacciones interactivas (db.transaction).
-    // Se ejecuta la secuencia directa de inserciones y actualización de stock:
-    
     // a) Insertar cabecera de baja
     const [adj] = await db
       .insert(schema.inventoryAdjustments)
       .values({
         adjustmentNumber,
         reason,
-        userId: 1, // Administrador General por defecto
-        authorizedByUserId: authorizedByUserId || 2, // Martín Supervisor
+        userId: currentUser.id,
+        authorizedByUserId: authorizedByUserId || (currentUser.role === "admin" || currentUser.role === "manager" ? currentUser.id : 1),
         totalCost: totalCostNum.toFixed(2),
         notes: notes?.trim() || `Baja por ${reason}`,
       })
@@ -590,7 +613,7 @@ export async function createInventoryAdjustmentAction(
       referenceType: "adjustment",
       referenceId: adj.id,
       reason: `Baja #${adjustmentNumber}: ${notes?.trim() || reason}`,
-      userId: 1,
+      userId: currentUser.id,
     });
 
     const result = adj;
@@ -619,6 +642,8 @@ export async function createInventoryAdjustmentAction(
  */
 export async function getInventoryAdjustmentsAction() {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
+
     const adjustments = await db.query.inventoryAdjustments.findMany({
       with: {
         user: true,

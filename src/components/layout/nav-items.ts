@@ -11,7 +11,9 @@ import {
   ShieldCheck,
   AlertTriangle,
   Banknote,
+  TrendingUp,
 } from "lucide-react";
+import type { UserRole } from "@/lib/auth/session-edge";
 
 export interface NavItem {
   title: string;
@@ -21,6 +23,7 @@ export interface NavItem {
   badgeVariant?: "default" | "warning" | "success" | "outline";
   description?: string;
   section: "general" | "operaciones" | "canales";
+  allowedRoles: UserRole[];
 }
 
 export const navigationItems: NavItem[] = [
@@ -30,6 +33,7 @@ export const navigationItems: NavItem[] = [
     icon: LayoutDashboard,
     description: "Métricas y resumen de operaciones",
     section: "general",
+    allowedRoles: ["admin", "manager"],
   },
   {
     title: "Punto de Venta (POS)",
@@ -39,6 +43,7 @@ export const navigationItems: NavItem[] = [
     badgeVariant: "success",
     description: "Caja registradora y emisión de tickets",
     section: "general",
+    allowedRoles: ["admin", "manager", "cashier"],
   },
   {
     title: "Control de Cajas",
@@ -48,6 +53,37 @@ export const navigationItems: NavItem[] = [
     badgeVariant: "outline",
     description: "Turnos, terminales y arqueo de dinero",
     section: "general",
+    allowedRoles: ["admin", "manager", "cashier"],
+  },
+  {
+    title: "Reporte Z & Cierre",
+    href: "/admin/reportes",
+    icon: BarChart3,
+    badge: "Z",
+    badgeVariant: "default",
+    description: "Cierre diario oficial y arqueo",
+    section: "general",
+    allowedRoles: ["admin", "manager"],
+  },
+  {
+    title: "Reportes por Periodo",
+    href: "/admin/analitica",
+    icon: TrendingUp,
+    badge: "Rango",
+    badgeVariant: "outline",
+    description: "Semana, mes, año o fechas libres",
+    section: "general",
+    allowedRoles: ["admin", "manager"],
+  },
+  {
+    title: "Usuarios & Roles",
+    href: "/admin/usuarios",
+    icon: ShieldCheck,
+    badge: "PIN",
+    badgeVariant: "outline",
+    description: "Cajeros, supervisores y permisos",
+    section: "general",
+    allowedRoles: ["admin"],
   },
   {
     title: "Inventario & Kardex",
@@ -57,6 +93,7 @@ export const navigationItems: NavItem[] = [
     badgeVariant: "outline",
     description: "Control de stock, Kardex y mermas",
     section: "operaciones",
+    allowedRoles: ["admin", "manager", "warehouse"],
   },
   {
     title: "Compras & Entradas",
@@ -64,6 +101,7 @@ export const navigationItems: NavItem[] = [
     icon: Truck,
     description: "Ingreso de mercancía y facturas",
     section: "operaciones",
+    allowedRoles: ["admin", "manager", "warehouse"],
   },
   {
     title: "Proveedores",
@@ -71,6 +109,7 @@ export const navigationItems: NavItem[] = [
     icon: Users,
     description: "Directorio comercial y contactos",
     section: "operaciones",
+    allowedRoles: ["admin", "manager", "warehouse"],
   },
   {
     title: "Ver Tienda Online",
@@ -80,5 +119,6 @@ export const navigationItems: NavItem[] = [
     badgeVariant: "outline",
     description: "Catálogo público para clientes",
     section: "canales",
+    allowedRoles: ["admin", "manager", "cashier", "warehouse"],
   },
 ];
