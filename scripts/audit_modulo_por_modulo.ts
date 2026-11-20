@@ -73,20 +73,30 @@ test("PBKDF2 verifica contraseñas válidas y rechaza registros sin hash", () =>
   assert.equal(verifyPassword(password, password), false);
 });
 
-test("las credenciales de demostración requieren desarrollo explícito y un registro de semilla", (t) => {
-  const previous = { nodeEnv: process.env.NODE_ENV, enabled: process.env.ENABLE_DEMO_LOGIN };
+test("las cuentas de prueba requieren activación explícita y un registro de semilla", (t) => {
+  const keys = ["NODE_ENV", "ENABLE_DEMO_LOGIN", "VERCEL_ENV", "ENABLE_DEPLOYED_DEMO_LOGIN"] as const;
+  const previous = keys.map((name) => [name, process.env[name]] as const);
   t.after(() => {
-    if (previous.nodeEnv === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
-    else Reflect.set(process.env, "NODE_ENV", previous.nodeEnv);
-    if (previous.enabled === undefined) delete process.env.ENABLE_DEMO_LOGIN;
-    else process.env.ENABLE_DEMO_LOGIN = previous.enabled;
+    for (const [name, value] of previous) {
+      if (value === undefined) Reflect.deleteProperty(process.env, name);
+      else Reflect.set(process.env, name, value);
+    }
   });
 
   const demo = ["cajera@aurastudio.com", "password123", "$2b$10$hashedpasswordforcashier"] as const;
   process.env.ENABLE_DEMO_LOGIN = "1";
+  process.env.VERCEL_ENV = "production";
+  delete process.env.ENABLE_DEPLOYED_DEMO_LOGIN;
   Reflect.set(process.env, "NODE_ENV", "production");
   assert.equal(verifyDemoLogin(...demo), false);
   assert.equal(getDemoLoginOptions(), null);
+  process.env.ENABLE_DEPLOYED_DEMO_LOGIN = "1";
+  assert.equal(verifyDemoLogin(...demo), true);
+  assert.equal(getDemoLoginOptions()?.accounts.length, 4);
+  process.env.VERCEL_ENV = "preview";
+  assert.equal(verifyDemoLogin(...demo), false);
+  assert.equal(getDemoLoginOptions(), null);
+
   Reflect.set(process.env, "NODE_ENV", "development");
   assert.equal(verifyDemoLogin(...demo), true);
   const options = getDemoLoginOptions();

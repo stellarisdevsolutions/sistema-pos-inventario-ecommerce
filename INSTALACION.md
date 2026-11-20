@@ -17,6 +17,12 @@ En el portal, elige un rol en **Cuentas de prueba** para rellenar los campos y l
 
 El acceso de demostración acepta los registros originales de la semilla en este modo. Si ya cambiaste la contraseña o desactivaste una cuenta, se respetan esos cambios. El modo de demostración también admite los PIN heredados del administrador y supervisor de la semilla. Si vas a configurar PIN nuevos en la base de pruebas y quieres conservarlos entre reinicios, usa un `SUPERVISOR_PIN_SECRET` estable. El arranque reutiliza los datos existentes. Para poblar una base de pruebas vacía con `corepack pnpm db:seed`, configura `SEED_PASSWORD` con una contraseña de 16 a 100 caracteres.
 
+## Vercel con la base de pruebas
+
+1. En **Settings → Environment Variables**, configura `ENABLE_DEPLOYED_DEMO_LOGIN=1` para el entorno **Production** de tu proyecto de pruebas. Mantén `DATABASE_URL` apuntando a Neon de pruebas y configura `SESSION_SECRET` si todavía falta. Vercel expone `VERCEL_ENV` como variable del sistema.
+2. Vuelve a desplegar y abre `/portal`. **Cuentas de prueba** rellena los campos con los datos de la cuenta elegida.
+3. Cuando termines, elimina `ENABLE_DEPLOYED_DEMO_LOGIN` y vuelve a desplegar. Si reutilizas una URL anterior de Vercel, esa versión conserva la configuración con la que se desplegó.
+
 ## Instalación de producción
 
 1. Crea una base PostgreSQL de Neon exclusiva para producción. En el gestor de secretos del despliegue, configura `DATABASE_URL` y `SESSION_SECRET`. Usa una clave estable con al menos 32 bytes aleatorios. Puedes generar una con `openssl rand -hex 32`. Configura también `SUPERVISOR_PIN_SECRET` si quieres una clave independiente para los PIN.
@@ -25,7 +31,7 @@ El acceso de demostración acepta los registros originales de la semilla en este
 4. Ejecuta `corepack pnpm test` y `corepack pnpm build`. Arranca el artefacto con `corepack pnpm start` detrás de HTTPS. Comprueba el inicio de sesión con el administrador y ejecuta `corepack pnpm test:http` contra el proceso que acabas de levantar.
 5. Si el despliegue restringe el acceso a Internet, autoriza el endpoint HTTPS que usa el driver de Neon y los dominios `fonts.googleapis.com` y `fonts.gstatic.com` para el build. En el entorno cloud con proxy, usa `NODE_USE_ENV_PROXY=1`.
 
-El modo de demostración se limita a `dev:demo`. Las contraseñas reales se validan mediante PBKDF2 y las claves de sesión deben configurarse antes de habilitar el acceso en producción.
+Mantén `ENABLE_DEPLOYED_DEMO_LOGIN` sin definir en un despliegue de uso real. Las contraseñas reales se validan mediante PBKDF2 y las claves de sesión deben configurarse antes de habilitar el acceso.
 
 ## Paleta del panel
 
