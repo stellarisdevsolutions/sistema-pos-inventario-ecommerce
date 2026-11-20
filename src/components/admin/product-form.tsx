@@ -380,7 +380,7 @@ export function ProductForm({
                       <span className="text-xs font-bold">Optimizando...</span>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
                     <div className="flex items-center justify-end">
                       <button
                         type="button"

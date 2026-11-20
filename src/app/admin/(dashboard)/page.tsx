@@ -2,7 +2,7 @@
 
 import { MetricCard } from "@/components/admin/metric-card";
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -105,6 +105,8 @@ export default function AdminDashboardPage() {
     return true;
   });
 
+  const selectedSale: DashboardSalesItem | undefined =
+    filteredSales.find((s) => s.id === selectedSaleId) || filteredSales[0];
 
   const handlePrintTicket = (sale: DashboardSalesItem) => {
     const printWindow = window.open("", "_blank", "width=380,height=600");
@@ -278,69 +280,47 @@ export default function AdminDashboardPage() {
             <input type="search" aria-label="Buscar ticket, cliente o cajero" placeholder="Buscar transacción" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </label>
         </header>
-        {filteredSales.length > 0 ? (
-          <table className="ticket-table" aria-labelledby="ticket-heading">
-            <thead>
-              <tr><th scope="col">Ticket</th><th scope="col" className="ticket-secondary">Cliente</th><th scope="col" className="ticket-secondary">Canal</th><th scope="col">Estado</th><th scope="col">Total</th></tr>
-            </thead>
-            <tbody>
-              {filteredSales.map(sale => {
-                const expanded = sale.id === selectedSaleId;
-                const detailId = `ticket-detail-${sale.id}`;
-                return (
-                  <Fragment key={sale.id}>
-                    <tr>
-                      <th scope="row">
-                        <button className="ticket-toggle" aria-expanded={expanded} aria-controls={expanded ? detailId : undefined} onClick={() => setSelectedSaleId(expanded ? "" : sale.id)}>
-                          <span aria-hidden>{expanded ? "−" : "+"}</span> {sale.saleNumber}
-                        </button>
-                        <small>{sale.time}</small>
-                      </th>
-                      <td className="ticket-secondary">{sale.customer}</td>
-                      <td className="ticket-secondary">{sale.channel === "pos" ? "Mostrador" : "Administración"}</td>
-                      <td>{sale.status}</td>
-                      <td>{formatMetric(sale.total)}</td>
-                    </tr>
-                    {expanded && (
-                      <tr className="ticket-expanded">
-                        <td colSpan={5}>
-                          <article className="ticket-detail" id={detailId} aria-label="Detalle del comprobante">
-                            <header className="ticket-parties">
-                              <div><small>Comprobante</small><h3>{sale.saleNumber}</h3></div>
-                              <div><small>Cliente</small><strong>{sale.customer}</strong></div>
-                              <div><small>Atendido por</small><strong>{sale.cashier}</strong><small>{sale.channelLabel}</small></div>
-                            </header>
-                            <ul className="ticket-products" aria-label="Productos del comprobante">
-                              {sale.items.map((item, index) => (
-                                <li key={index}>
-                                  <div>
-                                    <strong>{item.name}</strong>
-                                    <small>{item.quantity} × {formatMetric(item.unitPrice)} · Costo unitario {formatMetric(item.unitCost)}</small>
-                                  </div>
-                                  <strong>{formatMetric(item.subtotal)}</strong>
-                                </li>
-                              ))}
-                            </ul>
-                            <dl className="ticket-totals">
-                              <div><dt>Subtotal</dt><dd>{formatMetric(sale.subtotal)}</dd></div>
-                              <div><dt>Costo total</dt><dd>{formatMetric(sale.costTotal)}</dd></div>
-                              <div><dt>Utilidad</dt><dd>{formatMetric(sale.grossProfit)}</dd></div>
-                              <div><dt>Total del ticket</dt><dd>{formatMetric(sale.total)}</dd></div>
-                            </dl>
-                            <footer className="ticket-actions">
-                              <span>{sale.status} · {sale.paymentMethod}{sale.changeGiven > 0 && ` · Cambio ${formatMetric(sale.changeGiven)}`}</span>
-                              <Link href="/admin/inventario">Kárdex</Link>
-                              <button onClick={() => handlePrintTicket(sale)}><Printer size={15} /> Imprimir ticket</button>
-                            </footer>
-                          </article>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+        {selectedSale ? (
+          <div className="ticket-columns">
+            <div className="ticket-index" aria-label="Tickets">
+              {filteredSales.map(sale => (
+                <button key={sale.id} aria-pressed={sale.id === selectedSale.id} onClick={() => setSelectedSaleId(sale.id)}>
+                  <span className="ticket-avatar" aria-hidden>{sale.customer.slice(0, 2).toUpperCase()}</span>
+                  <span className="ticket-id"><strong>{sale.saleNumber}</strong><small>{sale.time}</small></span>
+                  <span className="ticket-status">{sale.status}</span>
+                  <strong>{formatMetric(sale.total)}</strong>
+                </button>
+              ))}
+            </div>
+            <article className="ticket-detail" aria-label="Comprobante seleccionado">
+              <header className="ticket-parties">
+                <div><small>Comprobante</small><h3>{selectedSale.saleNumber}</h3></div>
+                <div><small>Cliente</small><strong>{selectedSale.customer}</strong></div>
+                <div><small>Atendido por</small><strong>{selectedSale.cashier}</strong><small>{selectedSale.channelLabel}</small></div>
+              </header>
+              <ul className="ticket-products" aria-label="Productos del comprobante">
+                {selectedSale.items.map((item, index) => (
+                  <li key={index}>
+                    <small>{item.quantity} × {formatMetric(item.unitPrice)}</small>
+                    <strong>{formatMetric(item.subtotal)}</strong>
+                    <span>{item.name}</span>
+                    <small>Costo unitario {formatMetric(item.unitCost)}</small>
+                  </li>
+                ))}
+              </ul>
+              <dl className="ticket-totals">
+                <div><dt>Subtotal</dt><dd>{formatMetric(selectedSale.subtotal)}</dd></div>
+                <div><dt>Costo total</dt><dd>{formatMetric(selectedSale.costTotal)}</dd></div>
+                <div><dt>Utilidad</dt><dd>{formatMetric(selectedSale.grossProfit)}</dd></div>
+                <div><dt>Total del ticket</dt><dd>{formatMetric(selectedSale.total)}</dd></div>
+              </dl>
+              <footer className="ticket-actions">
+                <span>{selectedSale.status} · {selectedSale.paymentMethod}{selectedSale.changeGiven > 0 && ` · Cambio ${formatMetric(selectedSale.changeGiven)}`}</span>
+                <Link href="/admin/inventario">Kárdex</Link>
+                <button onClick={() => handlePrintTicket(selectedSale)}><Printer size={15} /> Imprimir ticket</button>
+              </footer>
+            </article>
+          </div>
         ) : (
           <div className="ticket-empty">
             <p>{recentSales.length ? "Ninguna transacción coincide con los filtros." : "Aún no hay ventas registradas."}</p>
