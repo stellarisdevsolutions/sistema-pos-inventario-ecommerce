@@ -12,10 +12,12 @@ export interface SessionUser {
 export const SESSION_COOKIE_NAME = "aura_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
+export class SessionConfigurationError extends Error {}
+
 async function signingKey() {
   const secret = process.env.SESSION_SECRET;
   if (!secret || new TextEncoder().encode(secret).length < 32) {
-    throw new Error("Configura SESSION_SECRET con al menos 32 bytes aleatorios.");
+    throw new SessionConfigurationError("Configura SESSION_SECRET con al menos 32 bytes aleatorios.");
   }
 
   return crypto.subtle.importKey(

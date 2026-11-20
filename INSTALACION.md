@@ -21,7 +21,8 @@ El acceso de demostración acepta los registros originales de la semilla en este
 
 1. En Vercel, configura `DATABASE_URL` con tu base de pruebas y `SESSION_SECRET` para **Preview**. Puedes limitar ambas variables a la rama `mejoras-panel-admin`.
 2. En **Deployments**, abre el despliegue de `mejoras-panel-admin` y entra en `/portal`. El selector **Cuentas de prueba** se habilita automáticamente con las variables del sistema de Vercel `VERCEL_ENV` y `VERCEL_GIT_COMMIT_REF`.
-3. Usa **Deployment Protection** si el Preview debe quedar accesible solo para tu equipo.
+3. Si agregaste o cambiaste una variable, vuelve a desplegar el **Preview** de la rama. Para `SESSION_SECRET`, genera un valor propio con `openssl rand -hex 32` y guárdalo en Vercel. Si aparece un error de base de datos, comprueba que la conexión apunta a la base de pruebas con el esquema y las cuentas cargadas.
+4. Usa **Deployment Protection** si el Preview debe quedar accesible solo para tu equipo.
 
 ## Instalación de producción
 

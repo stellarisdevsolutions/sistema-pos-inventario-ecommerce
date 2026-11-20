@@ -2,9 +2,10 @@
 
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { DrizzleQueryError, eq } from "drizzle-orm";
 import { createSession, destroySession, getCurrentUser, type SessionUser } from "@/lib/auth/session";
-import { verifyDemoLogin } from "@/lib/auth/demo-login";
+import { SessionConfigurationError } from "@/lib/auth/session-edge";
+import { isDemoLoginEnabled, verifyDemoLogin } from "@/lib/auth/demo-login";
 import { verifyPassword } from "@/lib/auth/password";
 import { revalidatePath } from "next/cache";
 
@@ -29,6 +30,10 @@ export async function loginAction(email: string, password: string): Promise<Logi
 
     if (!cleanEmail || !cleanPassword) {
       return { success: false, error: "Debes ingresar tu correo y contraseña." };
+    }
+
+    if (isDemoLoginEnabled() && !process.env.DATABASE_URL) {
+      return { success: false, error: "Falta DATABASE_URL en el entorno de pruebas." };
     }
 
     // 1. Buscar usuario en la base de datos
@@ -72,7 +77,15 @@ export async function loginAction(email: string, password: string): Promise<Logi
       redirectTo,
     };
   } catch (error) {
-    console.error("Error en loginAction:", error instanceof Error ? error.name : "Unknown error");
+    console.error("Error en loginAction:", error instanceof Error ? error.constructor.name : "Unknown error");
+    if (isDemoLoginEnabled()) {
+      if (error instanceof SessionConfigurationError) {
+        return { success: false, error: "Configura SESSION_SECRET con una clave aleatoria de al menos 32 bytes en el entorno de pruebas." };
+      }
+      if (error instanceof DrizzleQueryError) {
+        return { success: false, error: "No se pudo consultar la base de pruebas. Revisa DATABASE_URL y que la base tenga el esquema instalado." };
+      }
+    }
     return {
       success: false,
       error: "Ocurrió un error inesperado al iniciar sesión.",
