@@ -6,7 +6,7 @@
 2. Configura `DATABASE_URL` con la conexión de la base Neon de pruebas. Si ya está configurada en el entorno, puedes reutilizarla.
 3. Ejecuta `corepack pnpm dev:demo`. El servidor escucha en la interfaz local. El proceso genera una clave de sesión temporal cuando falta `SESSION_SECRET`. En ese caso, tendrás que iniciar sesión otra vez al reiniciar el servidor.
 
-Con las cuentas de demostración existentes, usa `password123` y el correo del rol que quieras probar.
+En el portal, elige un rol en **Cuentas de prueba** para rellenar los campos y luego pulsa **Entrar al panel**. También puedes escribir el correo y `password123` manualmente.
 
 | Rol | Correo |
 | --- | --- |

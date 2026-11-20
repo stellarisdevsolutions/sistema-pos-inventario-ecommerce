@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { NextRequest } from "next/server";
 import { middleware } from "@/middleware";
 import { db } from "@/db";
-import { verifyDemoLogin } from "@/lib/auth/demo-login";
+import { getDemoLoginOptions, verifyDemoLogin } from "@/lib/auth/demo-login";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { decodeSessionToken, encodeSessionToken, type SessionUser } from "@/lib/auth/session-edge";
 import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
@@ -86,11 +86,17 @@ test("las credenciales de demostración requieren desarrollo explícito y un reg
   process.env.ENABLE_DEMO_LOGIN = "1";
   Reflect.set(process.env, "NODE_ENV", "production");
   assert.equal(verifyDemoLogin(...demo), false);
+  assert.equal(getDemoLoginOptions(), null);
   Reflect.set(process.env, "NODE_ENV", "development");
   assert.equal(verifyDemoLogin(...demo), true);
+  const options = getDemoLoginOptions();
+  assert.equal(options?.password, demo[1]);
+  assert.equal(options?.accounts.length, 4);
+  assert.deepEqual(options?.accounts.find(({ email }) => email === demo[0]), { label: "Cajera", email: demo[0] });
   assert.equal(verifyDemoLogin(demo[0], demo[1], "different-hash"), false);
   delete process.env.ENABLE_DEMO_LOGIN;
   assert.equal(verifyDemoLogin(...demo), false);
+  assert.equal(getDemoLoginOptions(), null);
 });
 
 test("el PIN se almacena como HMAC y la edición parcial conserva rol y estado", (t) => {
