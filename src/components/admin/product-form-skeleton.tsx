@@ -31,7 +31,7 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
       <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-indigo-600/40" />
+            <span className="h-2 w-2 rounded-full bg-[var(--admin-brand)]/50" />
             <Skeleton className="h-5 w-44 rounded-lg" />
           </div>
           <Skeleton className="h-3 w-48 rounded-md" />

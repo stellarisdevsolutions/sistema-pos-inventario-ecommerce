@@ -66,7 +66,7 @@ export default function InventarioLoading() {
                   <Skeleton className="h-3 w-28 rounded-md" />
                 </div>
               </div>
-              <Skeleton className="h-6 w-20 rounded-full hidden sm:block" />
+              <Skeleton className="h-6 w-20 rounded-md hidden sm:block" />
               <div className="space-y-1 text-right">
                 <Skeleton className="h-4 w-16 rounded-md ml-auto" />
                 <Skeleton className="h-3 w-12 rounded-md ml-auto" />

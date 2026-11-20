@@ -32,13 +32,13 @@ export default function AdminLayout({
         <Suspense fallback={null}>
           <AccessDeniedListener />
         </Suspense>
-        <div className="flex min-h-screen bg-[var(--admin-workspace-bg)] text-slate-900 font-sans antialiased selection:bg-[var(--admin-accent)] selection:text-white">
-          {/* Sidebar Lateral Pegado al Costado */}
-          <Suspense fallback={<aside className="hidden lg:flex w-64 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800" />}>
+        <div className="flex min-h-screen bg-[var(--admin-workspace-bg)] text-slate-900 font-sans antialiased selection:bg-[var(--admin-accent)] selection:text-white overflow-x-hidden">
+          {/* Sidebar Flotante Isla / Dock */}
+          <Suspense fallback={<aside className="hidden lg:flex w-20 shrink-0" />}>
             <Sidebar />
           </Suspense>
 
-          {/* Área de Trabajo con Header */}
+          {/* Área de Trabajo con Header Flotante */}
           <div className="flex flex-1 flex-col min-w-0 transition-all duration-300">
             <Suspense fallback={null}>
               <MobileNav />

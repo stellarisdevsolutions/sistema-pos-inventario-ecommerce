@@ -42,17 +42,38 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [cart, setCart] = useState<CartItem[]>([
-    {
-      id: 1,
-      name: "GadgetHub Watch X1 Pro Amoled",
-      price: 149.99,
-      quantity: 1,
-      image: "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=150&auto=format&fit=crop&q=80",
-    },
-  ]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [favorites, setFavorites] = useState<number[]>([1, 4]);
+  const [favorites, setFavorites] = useState<number[]>([]);
+
+  // Cargar estado guardado de localStorage al montar en cliente
+  useEffect(() => {
+    try {
+      const savedCart = localStorage.getItem("aura_ecommerce_cart");
+      if (savedCart) {
+        setCart(JSON.parse(savedCart));
+      }
+      const savedFavs = localStorage.getItem("aura_ecommerce_favs");
+      if (savedFavs) {
+        setFavorites(JSON.parse(savedFavs));
+      }
+    } catch (e) {
+      console.warn("Error leyendo carrito de localStorage:", e);
+    }
+  }, []);
+
+  // Persistir cambios
+  useEffect(() => {
+    try {
+      localStorage.setItem("aura_ecommerce_cart", JSON.stringify(cart));
+    } catch {}
+  }, [cart]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("aura_ecommerce_favs", JSON.stringify(favorites));
+    } catch {}
+  }, [favorites]);
 
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);

@@ -230,15 +230,12 @@ export default function AnaliticaPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <CalendarRange className="h-6 w-6 text-[#0284c7]" />
+              <CalendarRange className="h-6 w-6 text-[var(--admin-brand)]" />
               Analítica & Reportes Periódicos
             </h1>
-            <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border-sky-300">
-              Semanal · Mensual · Anual
-            </Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Analiza el rendimiento acumulado por cualquier rango de fechas: ingresos, costos, utilidades y top productos.
+            Rendimiento consolidado por rango de fechas: ingresos, costos, utilidades y top productos.
           </p>
         </div>
 
@@ -385,9 +382,9 @@ export default function AnaliticaPage() {
             <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
               {formatCurrency(data?.summary.grossProfit || 0)}
             </span>
-            <Badge variant="outline" className="text-[10px] font-black bg-emerald-50 text-emerald-700 border-emerald-200">
-              {data?.summary.profitMargin.toFixed(1)}% Margen
-            </Badge>
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              ({data?.summary.profitMargin.toFixed(1)}% margen)
+            </span>
           </div>
           <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
             <span>Costo Total Mercancía:</span>
@@ -401,7 +398,7 @@ export default function AnaliticaPage() {
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Volumen de Operación
             </span>
-            <div className="h-8 w-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-[var(--admin-brand)] flex items-center justify-center">
               <Receipt className="h-4 w-4" />
             </div>
           </div>
@@ -688,9 +685,9 @@ export default function AnaliticaPage() {
                           {formatCurrency(p.profit)}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <Badge variant="outline" className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border-emerald-200">
+                          <span className="font-semibold text-xs text-emerald-600 dark:text-emerald-400">
                             {p.marginPercent.toFixed(1)}%
-                          </Badge>
+                          </span>
                         </td>
                       </tr>
                     ))
@@ -837,19 +834,33 @@ export default function AnaliticaPage() {
                           {formatCurrency(s.profit)}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          {s.status === "completed" ? (
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              Completada
+                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                s.status === "completed"
+                                  ? "bg-emerald-500"
+                                  : s.status === "refunded"
+                                  ? "bg-amber-500"
+                                  : "bg-rose-500"
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                s.status === "completed"
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : s.status === "refunded"
+                                  ? "text-amber-700 dark:text-amber-400"
+                                  : "text-rose-700 dark:text-rose-400"
+                              )}
+                            >
+                              {s.status === "completed"
+                                ? "Completada"
+                                : s.status === "refunded"
+                                ? "Devolución"
+                                : "Anulada"}
                             </span>
-                          ) : s.status === "refunded" ? (
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                              Devolución
-                            </span>
-                          ) : (
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                              Anulada
-                            </span>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))

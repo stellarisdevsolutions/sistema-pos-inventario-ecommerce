@@ -261,12 +261,6 @@ export default function ComprasPage() {
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               Compras & Entradas de Stock
             </h1>
-            <Badge
-              variant="outline"
-              className="text-xs font-semibold px-2.5 py-0.5 rounded-lg border-indigo-200 dark:border-indigo-900 bg-indigo-50/70 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300"
-            >
-              Almacén & CPP
-            </Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Control de facturas de proveedores, recepción de existencias y Costo Promedio Ponderado.
@@ -282,14 +276,14 @@ export default function ComprasPage() {
             className="h-10 px-3 rounded-xl border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer shadow-2xs gap-1.5"
             title="Recargar datos"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-indigo-600")} />
+            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-[var(--admin-brand)]")} />
             <span className="hidden sm:inline">Actualizar</span>
           </Button>
 
           <Link href="/admin/compras/nueva">
             <Button
               size="sm"
-              className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold gap-2 shadow-md shadow-indigo-600/25 active:scale-95 transition-all cursor-pointer w-full sm:w-auto"
+              className="h-10 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-md shadow-[var(--admin-brand)]/25 active:scale-95 transition-all cursor-pointer w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 stroke-[2.5]" />
               <span>Registrar Compra</span>
@@ -330,14 +324,14 @@ export default function ComprasPage() {
             <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
               Facturas del Mes
             </span>
-            <div className="h-7 w-7 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+            <div className="h-7 w-7 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
               <Receipt className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold text-indigo-600 dark:text-indigo-400 tracking-tight mt-3">
+          <div className="text-2xl lg:text-3xl font-bold text-[var(--admin-brand)] tracking-tight mt-3">
             {kpis.monthlyPurchasesCount}
           </div>
-          <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1 block">
+          <span className="text-[11px] text-[var(--admin-brand)] font-semibold mt-1 block">
             Recepciones en almacén
           </span>
         </div>
@@ -583,17 +577,23 @@ export default function ComprasPage() {
 
                         {/* 6. Recepción en Almacén */}
                         <td className="py-4 px-4 text-center">
-                          {p.status === "received" ? (
-                            <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 text-[10px] font-semibold gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              <span>En Almacén</span>
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800 text-[10px] font-semibold gap-1">
-                              <AlertTriangle className="h-3 w-3" />
-                              <span>Anulada</span>
-                            </Badge>
-                          )}
+                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                p.status === "received" ? "bg-emerald-500" : "bg-rose-500"
+                              )}
+                            />
+                            <span
+                              className={
+                                p.status === "received"
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-rose-700 dark:text-rose-400"
+                              }
+                            >
+                              {p.status === "received" ? "En Almacén" : "Anulada"}
+                            </span>
+                          </div>
                         </td>
 
                         {/* 7. Medio de Pago */}
@@ -617,7 +617,7 @@ export default function ComprasPage() {
                               size="sm"
                               onClick={() => setSelectedPurchase(p)}
                               title="Ver Comprobante / Detalle"
-                              className="h-8 w-8 p-0 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 cursor-pointer"
+                              className="h-8 w-8 p-0 rounded-lg text-slate-500 hover:text-[var(--admin-brand)] hover:bg-[var(--admin-brand-light)] dark:hover:bg-slate-800 cursor-pointer"
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -675,15 +675,23 @@ export default function ComprasPage() {
                   <span className="font-mono text-base font-bold text-slate-900 dark:text-white">
                     {selectedPurchase.purchaseNumber}
                   </span>
-                  {selectedPurchase.status === "received" ? (
-                    <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 text-[10px] font-semibold">
-                      En Almacén
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 text-[10px] font-semibold">
-                      Anulada
-                    </Badge>
-                  )}
+                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        selectedPurchase.status === "received" ? "bg-emerald-500" : "bg-rose-500"
+                      )}
+                    />
+                    <span
+                      className={
+                        selectedPurchase.status === "received"
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-rose-700 dark:text-rose-400"
+                      }
+                    >
+                      {selectedPurchase.status === "received" ? "En Almacén" : "Anulada"}
+                    </span>
+                  </div>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Registrada el {selectedPurchase.createdAt} por {selectedPurchase.userName}
@@ -712,7 +720,7 @@ export default function ComprasPage() {
 
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                   <span className="text-[10px] text-slate-400 font-medium block">Unidades</span>
-                  <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 font-mono mt-0.5 block">
+                  <span className="text-sm font-bold text-[var(--admin-brand)] font-mono mt-0.5 block">
                     {selectedPurchase.itemsCount} piezas
                   </span>
                 </div>

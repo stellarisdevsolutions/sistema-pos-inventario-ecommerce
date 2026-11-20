@@ -203,20 +203,15 @@ export default function ReportesPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <BarChart3 className="h-6 w-6 text-[#0284c7]" />
+              <BarChart3 className="h-6 w-6 text-[var(--admin-brand)]" />
               Reporte Z & Balance Diario
             </h1>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px] font-bold px-2 py-0.5 rounded-md",
-                reportData?.isToday
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40"
-                  : "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800"
-              )}
-            >
-              {reportData?.isToday ? "Corte del Día (En Vivo)" : "Cierre Histórico"}
-            </Badge>
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+              <span className={cn("h-2 w-2 rounded-full", reportData?.isToday ? "bg-emerald-500" : "bg-slate-400")} />
+              <span className={reportData?.isToday ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500"}>
+                {reportData?.isToday ? "Corte del Día" : "Cierre Histórico"}
+              </span>
+            </div>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Consolidación oficial de ventas brutas, devoluciones, arqueo de gavetas y utilidad real del negocio.
@@ -338,9 +333,9 @@ export default function ReportesPage() {
             <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
               {formatCurrency(reportData?.summary.grossProfit || 0)}
             </span>
-            <Badge variant="outline" className="text-[10px] font-black bg-emerald-50 text-emerald-700 border-emerald-200">
-              {reportData?.summary.profitMargin.toFixed(1)}% Margen
-            </Badge>
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              ({reportData?.summary.profitMargin.toFixed(1)}% margen)
+            </span>
           </div>
           <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
             <span>Costo Mercadería:</span>
@@ -570,9 +565,9 @@ export default function ReportesPage() {
                       <Wallet className="h-3.5 w-3.5 text-emerald-600" />
                       Cajas Físicas Mostrador (POS)
                     </span>
-                    <Badge variant="outline" className="text-[10px] bg-white">
+                    <span className="text-xs font-semibold text-slate-500">
                       {reportData?.channels.posShiftCount || 0} tickets
-                    </Badge>
+                    </span>
                   </div>
                   <div className="flex justify-between text-slate-500 pt-1 text-xs">
                     <span>Recaudado en gavetas:</span>
@@ -588,9 +583,9 @@ export default function ReportesPage() {
                       <Building2 className="h-3.5 w-3.5 text-purple-600" />
                       Ventas Administrativas Directas
                     </span>
-                    <Badge variant="outline" className="text-[10px] bg-white text-purple-700">
+                    <span className="text-xs font-semibold text-purple-700 dark:text-purple-400">
                       {reportData?.channels.administrativeCount || 0} tickets
-                    </Badge>
+                    </span>
                   </div>
                   <div className="flex justify-between text-purple-700 dark:text-purple-400 pt-1 text-xs">
                     <span>Recaudado fuera de caja física:</span>
@@ -682,29 +677,35 @@ export default function ReportesPage() {
                           {s.difference === null ? (
                             <span className="text-slate-400">-</span>
                           ) : s.difference === 0 ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              0.00 Bs
-                            </span>
+                            <span className="font-semibold text-xs text-emerald-600">0.00 Bs</span>
                           ) : s.difference < 0 ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                            <span className="font-semibold text-xs text-rose-600">
                               {formatCurrency(s.difference)} (Faltante)
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="font-semibold text-xs text-amber-600">
                               +{formatCurrency(s.difference)} (Sobrante)
                             </span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          {s.status === "open" ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
-                              Abierto
+                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                s.status === "open" ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                              )}
+                            />
+                            <span
+                              className={
+                                s.status === "open"
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-slate-500"
+                              }
+                            >
+                              {s.status === "open" ? "Abierto" : "Cerrado"}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
-                              Cerrado
-                            </span>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -960,19 +961,33 @@ export default function ReportesPage() {
                           {formatCurrency(s.profit)}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          {s.status === "completed" ? (
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              Completada
+                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                s.status === "completed"
+                                  ? "bg-emerald-500"
+                                  : s.status === "refunded"
+                                  ? "bg-amber-500"
+                                  : "bg-rose-500"
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                s.status === "completed"
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : s.status === "refunded"
+                                  ? "text-amber-700 dark:text-amber-400"
+                                  : "text-rose-700 dark:text-rose-400"
+                              )}
+                            >
+                              {s.status === "completed"
+                                ? "Completada"
+                                : s.status === "refunded"
+                                ? "Devolución"
+                                : "Anulada"}
                             </span>
-                          ) : s.status === "refunded" ? (
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                              Devolución
-                            </span>
-                          ) : (
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                              Anulada
-                            </span>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))

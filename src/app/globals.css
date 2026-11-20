@@ -26,12 +26,16 @@
   --color-store-discount: var(--store-discount);
 
   /* ========================================================
-     💼 PALETA PANEL ADMINISTRATIVO (/admin)
-     Universal Multi-Nicho: Obsidian Graphite & Electric Sapphire
+     💼 PALETA PANEL ADMINISTRATIVO (/admin) - AZUL & CELESTE
+     Personalizable centralizadamente con variables CSS
      ======================================================== */
+  --color-admin-brand: var(--admin-brand);
+  --color-admin-brand-hover: var(--admin-brand-hover);
+  --color-admin-brand-light: var(--admin-brand-light);
+  --color-admin-brand-subtle: var(--admin-brand-subtle);
   --color-admin-primary: var(--admin-primary);
   --color-admin-primary-hover: var(--admin-primary-hover);
-  --color-admin-sidebar: var(--admin-sidebar);
+  --color-admin-sidebar: var(--admin-sidebar-bg);
   --color-admin-sidebar-bg: var(--admin-sidebar-bg);
   --color-admin-sidebar-border: var(--admin-sidebar-border);
   --color-admin-sidebar-text: var(--admin-sidebar-text);
@@ -42,6 +46,8 @@
   --color-admin-header-bg: var(--admin-header-bg);
   --color-admin-header-border: var(--admin-header-border);
   --color-admin-workspace-bg: var(--admin-workspace-bg);
+  --color-admin-card-bg: var(--admin-card-bg);
+  --color-admin-card-border: var(--admin-card-border);
   --color-admin-accent: var(--admin-accent);
   --color-admin-accent-hover: var(--admin-accent-hover);
 
@@ -94,26 +100,31 @@
   --store-discount: #ef4444;            /* Rojo de descuento (-25%, -30%) */
 
   /* =========================================================================
-     🏢 PALETA PANEL ADMINISTRATIVO (/admin) - FINNOVA INDIGO & MIDNIGHT NAVY
-     Inspirada exactamente en el diseño de Finnova:
-     Fondo Midnight Indigo (#11162b), Acento Royal Indigo (#4338ca),
-     Bordes (#1e2648), Canvas Soft Porcelain (#f4f5f9).
+     🏢 PALETA PANEL ADMINISTRATIVO (/admin) - AZUL / CELESTE MODERNO
+     Inspirado en Quixotic & Bento UI (Dribbble)
+     Variables centralizadas para cambio inmediato de color:
      ========================================================================= */
-  --admin-primary: #11162b;             /* Midnight Indigo Profundo (#11162b) */
-  --admin-primary-hover: #1a203f;
-  --admin-sidebar: #11162b;
-  --admin-sidebar-bg: #11162b;
-  --admin-sidebar-border: #1e2648;      /* Borde índigo noche (#1e2648) */
-  --admin-sidebar-text: #cbd5e1;        /* Texto Slate-300 de alto contraste */
-  --admin-sidebar-muted: #94a3b8;       /* Encabezados Slate-400 nítidos */
-  --admin-sidebar-hover: #1a203f;       /* Hover índigo noche (#1a203f) */
-  --admin-sidebar-active: #ffffff;
-  --admin-sidebar-active-bg: #4338ca;   /* Royal Indigo Finnova (#4338ca) */
+  --admin-brand: #0284c7;               /* Celeste / Azul Primario (#0284c7 Sky-600) */
+  --admin-brand-hover: #0369a1;         /* Azul profundo al pasar mouse */
+  --admin-brand-light: #e0f2fe;         /* Celeste suave para fondos de píldoras */
+  --admin-brand-subtle: #f0f9ff;        /* Tinte celeste ultra claro */
+  --admin-brand-glow: rgba(2, 132, 199, 0.2);
+  --admin-primary: #0284c7;             /* Color de acento primario */
+  --admin-primary-hover: #0369a1;
+  --admin-sidebar-bg: #ffffff;          /* Sidebar ultra limpio blanco */
+  --admin-sidebar-border: #e2e8f0;      /* Borde sutil slate-200 */
+  --admin-sidebar-text: #475569;        /* Texto slate-600 nítido */
+  --admin-sidebar-muted: #94a3b8;       /* Encabezados de sección discretos */
+  --admin-sidebar-hover: #f1f5f9;       /* Hover píldora suave slate-100 */
+  --admin-sidebar-active: #0284c7;       /* Icono y texto activo en celeste */
+  --admin-sidebar-active-bg: #e0f2fe;    /* Fondo píldora activa en celeste suave */
   --admin-header-bg: #ffffff;
   --admin-header-border: #e2e8f0;       /* Borde suave header */
-  --admin-workspace-bg: #f4f5f9;        /* Canvas Soft Porcelain Finnova (#f4f5f9) */
-  --admin-accent: #4338ca;              /* Botón primario Royal Indigo */
-  --admin-accent-hover: #3730a3;
+  --admin-workspace-bg: #f5f7fb;        /* Canvas limpio off-white Bento (#f5f7fb) */
+  --admin-card-bg: #ffffff;             /* Fondo de tarjetas Bento */
+  --admin-card-border: #e2e8f0;         /* Borde limpio de tarjetas */
+  --admin-accent: #0284c7;              /* Botones y badges de acción */
+  --admin-accent-hover: #0369a1;
 
   /* Variables base de la aplicación */
   --background: oklch(1 0 0);
@@ -147,18 +158,27 @@
 }
 
 .dark {
-  --admin-sidebar-bg: #0c0f1d;
-  --admin-sidebar-border: #1a213d;
-  --admin-sidebar-text: #e2e8f0;
-  --admin-sidebar-muted: #94a3b8;
-  --admin-sidebar-hover: #151b33;
-  --admin-sidebar-active: #ffffff;
-  --admin-sidebar-active-bg: #4f46e5;
-  --admin-header-bg: #11162b;
-  --admin-header-border: #1e2648;
-  --admin-workspace-bg: #090c17;
-  --admin-accent: #4f46e5;
-  --admin-accent-hover: #4338ca;
+  --admin-brand: #38bdf8;               /* Celeste claro vibrante (#38bdf8 Sky-400) */
+  --admin-brand-hover: #0ea5e9;
+  --admin-brand-light: rgba(56, 189, 248, 0.15);
+  --admin-brand-subtle: rgba(56, 189, 248, 0.08);
+  --admin-brand-glow: rgba(56, 189, 248, 0.25);
+  --admin-primary: #38bdf8;
+  --admin-primary-hover: #0ea5e9;
+  --admin-sidebar-bg: #0d1322;          /* Slate oscuro elegante */
+  --admin-sidebar-border: #1e293b;      /* Slate-800 */
+  --admin-sidebar-text: #94a3b8;        /* Slate-400 */
+  --admin-sidebar-muted: #64748b;
+  --admin-sidebar-hover: #172033;
+  --admin-sidebar-active: #38bdf8;
+  --admin-sidebar-active-bg: rgba(56, 189, 248, 0.15);
+  --admin-header-bg: #0d1322;
+  --admin-header-border: #1e293b;
+  --admin-workspace-bg: #090e1a;        /* Fondo oscuro Bento */
+  --admin-card-bg: #111827;             /* Tarjetas Bento oscuras */
+  --admin-card-border: #1f2937;
+  --admin-accent: #38bdf8;
+  --admin-accent-hover: #0ea5e9;
 
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -198,6 +218,130 @@
   html {
     @apply font-sans;
   }
+}
+
+/* =========================================================================
+   🎨 ESTILOS MODERNOS DE BARRAS DE DESPLAZAMIENTO (SCROLLBARS)
+   Sutilmente visibles (5px), sin botones/flechas nativas, pista transparente
+   ========================================================================= */
+:root {
+  --scrollbar-thumb: rgba(148, 163, 184, 0.35);
+  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.6);
+  --scrollbar-track: transparent;
+}
+
+.dark {
+  --scrollbar-thumb: rgba(148, 163, 184, 0.25);
+  --scrollbar-thumb-hover: rgba(203, 213, 225, 0.5);
+  --scrollbar-track: transparent;
+}
+
+/* Estilo estándar global (Firefox y navegadores modernos) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* Motores WebKit / Blink (Chrome, Edge, Safari, Opera) */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Utilidad para ocultar completamente la barra manteniendo el scroll activo */
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  overflow-x: hidden !important;
+}
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Barra sutil y claramente visible (5px) para listas de tickets y paneles */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Barra de scroll ultra-discreta y sutil solo para el sidebar (3px, sin track) */
+.sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
+  overflow-x: hidden !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 3px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 9999px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+.dark .sidebar-scrollbar {
+  scrollbar-color: rgba(148, 163, 184, 0.18) transparent;
+}
+.dark .sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.18);
+}
+.dark .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(203, 213, 225, 0.35);
 }
 
 /* =========================================================================

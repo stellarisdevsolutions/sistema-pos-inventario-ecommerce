@@ -352,12 +352,9 @@ export default function CajasPage() {
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               Control de Cajas & Arqueos
             </h1>
-            <Badge className="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 text-[11px] font-bold">
-              Multi-Terminal POS
-            </Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Gestión de turnos de cobro, conciliación de efectivo en gaveta y auditoría de arqueos ciegos.
+            Gestión de turnos de cobro, conciliación de efectivo en gaveta y auditoría de arqueos.
           </p>
         </div>
 
@@ -436,7 +433,7 @@ export default function CajasPage() {
         <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
             <span>Ventas Tarjeta / QR</span>
-            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600">
+            <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-[var(--admin-brand)]">
               <CreditCard className="h-4 w-4" />
             </div>
           </div>
@@ -444,7 +441,7 @@ export default function CajasPage() {
             <span className="text-2xl font-black text-slate-900 dark:text-white">
               {formatCurrency(kpis.todayCardTransferSales)}
             </span>
-            <p className="text-[11px] text-indigo-600 font-bold mt-0.5">
+            <p className="text-[11px] text-[var(--admin-brand)] font-bold mt-0.5">
               Cobros electrónicos conciliados
             </p>
           </div>
@@ -478,7 +475,7 @@ export default function CajasPage() {
           className={cn(
             "px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5",
             activeTab === "registers"
-              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
+              ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
           )}
         >
@@ -490,7 +487,7 @@ export default function CajasPage() {
           className={cn(
             "px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5",
             activeTab === "history"
-              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
+              ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
           )}
         >
@@ -505,7 +502,7 @@ export default function CajasPage() {
       {activeTab === "registers" ? (
         isLoadingRegisters ? (
           <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800">
-            <RefreshCw className="h-8 w-8 text-indigo-600 animate-spin mx-auto mb-3" />
+            <RefreshCw className="h-8 w-8 text-[var(--admin-brand)] animate-spin mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
               Cargando terminales y balances en vivo...
             </p>
@@ -521,7 +518,7 @@ export default function CajasPage() {
                 setNewRegisterCode("POS-01");
                 setCreateRegisterModalOpen(true);
               }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold"
+              className="bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white rounded-xl text-xs font-bold"
             >
               Crear Primera Caja Física
             </Button>
@@ -542,7 +539,7 @@ export default function CajasPage() {
                       {/* Cabecera de la Caja */}
                       <div className="flex items-center justify-between border-b border-slate-700/60 pb-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+                          <div className="h-10 w-10 rounded-2xl bg-[var(--admin-brand)] flex items-center justify-center text-white shadow-lg shadow-[var(--admin-brand)]/30">
                             <Store className="h-5 w-5" />
                           </div>
                           <div>
@@ -552,16 +549,16 @@ export default function CajasPage() {
                             </p>
                           </div>
                         </div>
-                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold text-xs gap-1.5">
+                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
                           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                          Turno Abierto
-                        </Badge>
+                          <span>Turno Abierto</span>
+                        </div>
                       </div>
 
                       {/* Info del Cajero */}
                       <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-xs">
                         <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center font-black">
+                          <div className="h-8 w-8 rounded-full bg-sky-900/60 text-sky-200 flex items-center justify-center font-black">
                             {active.cashierName.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
@@ -598,12 +595,12 @@ export default function CajasPage() {
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Tarjetas/QR
                           </span>
-                          <p className="text-sm font-black text-indigo-400 mt-0.5 truncate">
+                          <p className="text-sm font-black text-sky-300 mt-0.5 truncate">
                             {formatCurrency(active.cardSales + active.transferSales)}
                           </p>
                         </div>
-                        <div className="p-3 rounded-2xl bg-indigo-950/60 border border-indigo-800/80">
-                          <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider block">
+                        <div className="p-3 rounded-2xl bg-sky-950/60 border border-sky-800/80">
+                          <span className="text-[10px] font-bold text-sky-300 uppercase tracking-wider block">
                             Esperado
                           </span>
                           <p className="text-sm font-black text-white mt-0.5 truncate">
@@ -634,7 +631,7 @@ export default function CajasPage() {
                           setActualCashCounted(active.expectedCash.toFixed(2));
                           setCloseShiftModalOpen(true);
                         }}
-                        className="h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer active:scale-98 transition-all"
+                        className="h-11 rounded-2xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white font-black text-xs gap-2 shadow-lg shadow-[var(--admin-brand)]/30 cursor-pointer active:scale-98 transition-all"
                       >
                         <Banknote className="h-4 w-4" />
                         <span>Cerrar Turno & Arqueo</span>
@@ -665,9 +662,10 @@ export default function CajasPage() {
                           </p>
                         </div>
                       </div>
-                      <Badge variant="outline" className="font-bold text-xs text-slate-400">
-                        Sin Turno Activo
-                      </Badge>
+                      <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+                        <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-700" />
+                        <span>Sin Turno Activo</span>
+                      </div>
                     </div>
 
                     <div className="py-8 text-center space-y-2">
@@ -676,9 +674,6 @@ export default function CajasPage() {
                       </div>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
                         Terminal lista para nueva jornada
-                      </p>
-                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                        Inicia un nuevo turno asignando el cajero responsable y el fondo de caja inicial.
                       </p>
                     </div>
                   </div>
@@ -690,7 +685,7 @@ export default function CajasPage() {
                       setInitialCashInput("150.00");
                       setOpenShiftModalOpen(true);
                     }}
-                    className="w-full h-11 rounded-2xl font-bold text-xs gap-2 border-indigo-200 text-indigo-600 dark:border-indigo-800 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+                    className="w-full h-11 rounded-2xl font-bold text-xs gap-2 border-[var(--admin-brand)]/30 text-[var(--admin-brand)] hover:bg-[var(--admin-brand-light)] cursor-pointer"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Abrir Turno en {reg.code}</span>
@@ -762,7 +757,7 @@ export default function CajasPage() {
                   {isLoadingHistory ? (
                     <tr>
                       <td colSpan={9} className="text-center py-12 text-slate-400">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-indigo-600" />
+                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-[var(--admin-brand)]" />
                         Cargando historial de arqueos conciliados...
                       </td>
                     </tr>
@@ -814,22 +809,33 @@ export default function CajasPage() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <Badge
-                            className={cn(
-                              "text-[10px] font-bold px-2.5 py-0.5",
-                              shift.status === "balanced"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
+                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                shift.status === "balanced"
+                                  ? "bg-emerald-500"
+                                  : shift.status === "surplus"
+                                  ? "bg-blue-500"
+                                  : "bg-rose-500"
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                shift.status === "balanced"
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : shift.status === "surplus"
+                                  ? "text-blue-700 dark:text-blue-400"
+                                  : "text-rose-700 dark:text-rose-400"
+                              )}
+                            >
+                              {shift.status === "balanced"
+                                ? "Cuadrado"
                                 : shift.status === "surplus"
-                                ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300"
-                                : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
-                            )}
-                          >
-                            {shift.status === "balanced"
-                              ? "Cuadrado"
-                              : shift.status === "surplus"
-                              ? "Sobrante"
-                              : "Faltante"}
-                          </Badge>
+                                ? "Sobrante"
+                                : "Faltante"}
+                            </span>
+                          </div>
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <Button
@@ -862,7 +868,7 @@ export default function CajasPage() {
         <DialogContent className="sm:max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
           <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <DialogTitle className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-indigo-600" />
+              <ShieldCheck className="h-5 w-5 text-[var(--admin-brand)]" />
               Arqueo Ciego & Cierre de Caja
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -888,7 +894,7 @@ export default function CajasPage() {
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium">Ventas Tarjeta / QR:</span>
-                  <p className="font-bold text-indigo-600 dark:text-indigo-400 text-sm">
+                  <p className="font-bold text-[var(--admin-brand)] text-sm">
                     {formatCurrency(shiftToClose.cardSales + shiftToClose.transferSales)}
                   </p>
                 </div>
@@ -914,7 +920,7 @@ export default function CajasPage() {
                     step="0.01"
                     min="0"
                     placeholder="0.00"
-                    className="pl-9 h-11 text-base font-black rounded-xl border-slate-200 dark:border-slate-700 focus:border-indigo-600"
+                    className="pl-9 h-11 text-base font-black rounded-xl border-slate-200 dark:border-slate-700 focus:border-[var(--admin-brand)]"
                     value={actualCashCounted}
                     onChange={(e) => setActualCashCounted(e.target.value)}
                   />
@@ -998,7 +1004,7 @@ export default function CajasPage() {
               size="sm"
               disabled={isClosingShift}
               onClick={handleCloseShift}
-              className="rounded-xl h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 cursor-pointer"
+              className="rounded-xl h-10 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-1.5 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
             >
               {isClosingShift ? (
                 <>
@@ -1023,7 +1029,7 @@ export default function CajasPage() {
         <DialogContent className="sm:max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
           <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <DialogTitle className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Store className="h-5 w-5 text-indigo-600" />
+              <Store className="h-5 w-5 text-[var(--admin-brand)]" />
               Apertura de Turno en {selectedRegisterToOpen?.code}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -1075,7 +1081,7 @@ export default function CajasPage() {
                   value={initialCashInput}
                   onChange={(e) => setInitialCashInput(e.target.value)}
                   placeholder="150.00"
-                  className="pl-9 h-11 text-base font-black rounded-xl border-slate-200 dark:border-slate-700 focus:border-indigo-600"
+                  className="pl-9 h-11 text-base font-black rounded-xl border-slate-200 dark:border-slate-700 focus:border-[var(--admin-brand)]"
                 />
               </div>
               <p className="text-[11px] text-slate-400">
@@ -1111,7 +1117,7 @@ export default function CajasPage() {
               size="sm"
               disabled={isOpeningShift}
               onClick={handleOpenShift}
-              className="rounded-xl h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 cursor-pointer"
+              className="rounded-xl h-10 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-1.5 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
             >
               {isOpeningShift ? (
                 <>
@@ -1136,7 +1142,7 @@ export default function CajasPage() {
         <DialogContent className="sm:max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
           <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <DialogTitle className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Plus className="h-5 w-5 text-indigo-600" />
+              <Plus className="h-5 w-5 text-[var(--admin-brand)]" />
               Nueva Caja Física Registradora
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -1198,7 +1204,7 @@ export default function CajasPage() {
               size="sm"
               disabled={isCreatingRegister}
               onClick={handleCreateRegister}
-              className="rounded-xl h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 cursor-pointer"
+              className="rounded-xl h-10 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-1.5 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
             >
               {isCreatingRegister ? (
                 <>
@@ -1223,7 +1229,7 @@ export default function CajasPage() {
         <DialogContent className="sm:max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
           <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-indigo-600" />
+              <Receipt className="h-4 w-4 text-[var(--admin-brand)]" />
               Acta de Arqueo #{selectedClosedShift?.shiftNumber}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -1268,7 +1274,7 @@ export default function CajasPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Ventas Tarjeta / QR:</span>
-                  <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                  <span className="font-mono font-bold text-[var(--admin-brand)]">
                     {formatCurrency(selectedClosedShift.cardSales + selectedClosedShift.transferSales)}
                   </span>
                 </div>
@@ -1316,7 +1322,7 @@ export default function CajasPage() {
                     selectedClosedShift.registerName
                   );
                 }}
-                className="w-full h-10 rounded-xl border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-xs font-bold gap-2 cursor-pointer"
+                className="w-full h-10 rounded-xl border-[var(--admin-brand)]/30 text-[var(--admin-brand)] hover:bg-[var(--admin-brand-light)] text-xs font-bold gap-2 cursor-pointer"
               >
                 <Receipt className="h-4 w-4" />
                 <span>Ver Todos los Tickets y Productos Vendidos</span>
@@ -1353,15 +1359,15 @@ export default function CajasPage() {
                   Turno #{shiftSalesData?.shiftNumber} • {shiftSalesData?.ticketsCount || 0} tickets emitidos
                 </DialogDescription>
               </div>
-              <Badge className="bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border-sky-200 text-xs font-black">
+              <div className="text-sm font-black text-[var(--admin-brand)]">
                 Total: {formatCurrency(shiftSalesData?.totalRevenue || 0)}
-              </Badge>
+              </div>
             </div>
           </DialogHeader>
 
           {isLoadingShiftSales ? (
             <div className="py-12 text-center text-slate-400">
-              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-indigo-600" />
+              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-[var(--admin-brand)]" />
               <p className="text-xs font-medium">Cargando tickets y productos vendidos...</p>
             </div>
           ) : !shiftSalesData || shiftSalesData.sales.length === 0 ? (
@@ -1389,7 +1395,7 @@ export default function CajasPage() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 flex items-center gap-1.5 font-medium">
-                    <CreditCard className="h-3.5 w-3.5 text-indigo-600" />
+                    <CreditCard className="h-3.5 w-3.5 text-[var(--admin-brand)]" />
                     Tarjeta / QR:
                   </span>
                   <span className="font-bold text-slate-900 dark:text-white">

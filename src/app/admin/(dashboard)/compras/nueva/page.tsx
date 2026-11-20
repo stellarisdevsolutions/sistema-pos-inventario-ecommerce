@@ -266,7 +266,7 @@ export default function NuevaCompraPage() {
         <div className="space-y-1">
           <Link
             href="/admin/compras"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[var(--admin-brand)] dark:text-slate-400 dark:hover:text-[var(--admin-brand)] transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>Volver a Compras & Entradas</span>
@@ -275,22 +275,16 @@ export default function NuevaCompraPage() {
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               Registrar Compra / Ingreso de Mercadería
             </h1>
-            <Badge
-              variant="outline"
-              className="text-xs font-semibold px-2.5 py-0.5 rounded-lg border-indigo-200 dark:border-indigo-900 bg-indigo-50/70 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300"
-            >
-              Recepción Inmediata
-            </Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Ingreso físico de existencias a almacén, recálculo de Costo Promedio Ponderado (CPP) y registro en el Kardex.
+            Ingreso de existencias a almacén y actualización de Costo Promedio Ponderado (CPP).
           </p>
         </div>
       </div>
 
       {isLoadingCatalogs ? (
         <div className="py-24 text-center space-y-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800">
-          <RefreshCw className="h-8 w-8 text-indigo-600 animate-spin mx-auto" />
+          <RefreshCw className="h-8 w-8 text-[var(--admin-brand)] animate-spin mx-auto" />
           <p className="text-xs text-slate-500 font-medium">
             Cargando proveedores y productos disponibles...
           </p>
@@ -305,7 +299,7 @@ export default function NuevaCompraPage() {
               {/* Tarjeta 1: Datos de Factura y Proveedor */}
               <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <Building2 className="h-4 w-4 text-indigo-600" />
+                  <Building2 className="h-4 w-4 text-[var(--admin-brand)]" />
                   <h2 className="text-sm font-bold text-slate-900 dark:text-white">
                     Datos del Proveedor & Factura
                   </h2>
@@ -326,7 +320,7 @@ export default function NuevaCompraPage() {
                       value={supplierId}
                       onChange={(e) => setSupplierId(Number(e.target.value))}
                       required
-                      className="h-10 w-full rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 text-xs text-slate-800 dark:text-slate-200 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-600/20"
+                      className="h-10 w-full rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 text-xs text-slate-800 dark:text-slate-200 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[var(--admin-brand)]/20"
                     >
                       {availableSuppliers.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -357,7 +351,7 @@ export default function NuevaCompraPage() {
                     <select
                       value={paymentMethod}
                       onChange={(e) => setPaymentMethod(e.target.value as any)}
-                      className="h-10 w-full rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 text-xs text-slate-800 dark:text-slate-200 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-600/20"
+                      className="h-10 w-full rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 text-xs text-slate-800 dark:text-slate-200 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[var(--admin-brand)]/20"
                     >
                       <option value="transfer">Transferencia Bancaria</option>
                       <option value="cash">Efectivo de Caja</option>
@@ -385,7 +379,7 @@ export default function NuevaCompraPage() {
               <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs overflow-hidden">
                 <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-indigo-600" />
+                    <Package className="h-4 w-4 text-[var(--admin-brand)]" />
                     <div>
                       <h2 className="text-sm font-bold text-slate-900 dark:text-white">
                         Artículos a Ingresar
@@ -404,7 +398,7 @@ export default function NuevaCompraPage() {
                       setModalCurrentPage(1);
                       setIsProductModalOpen(true);
                     }}
-                    className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold gap-2 shadow-sm shadow-indigo-600/20 cursor-pointer w-full sm:w-auto"
+                    className="h-10 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-sm shadow-[var(--admin-brand)]/20 cursor-pointer w-full sm:w-auto"
                   >
                     <Plus className="h-4 w-4 stroke-[2.5]" />
                     <span>Seleccionar Productos</span>
@@ -420,7 +414,7 @@ export default function NuevaCompraPage() {
                         No has agregado ningún artículo a la compra
                       </h3>
                       <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                        Haz clic en el botón de abajo o en el superior para abrir el catálogo de productos con paginación y agregarlos.
+                        Abre el catálogo para agregar artículos a la orden de compra.
                       </p>
                     </div>
                     <Button
@@ -430,7 +424,7 @@ export default function NuevaCompraPage() {
                         setModalCurrentPage(1);
                         setIsProductModalOpen(true);
                       }}
-                      className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold gap-1.5 shadow-sm shadow-indigo-600/20 cursor-pointer"
+                      className="h-9 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-1.5 shadow-sm shadow-[var(--admin-brand)]/20 cursor-pointer"
                     >
                       <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                       <span>Abrir Catálogo de Productos</span>
@@ -554,7 +548,7 @@ export default function NuevaCompraPage() {
               {/* Tarjeta de Resumen Financiero */}
               <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs space-y-4 sticky top-6">
                 <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <Receipt className="h-4 w-4 text-indigo-600" />
+                  <Receipt className="h-4 w-4 text-[var(--admin-brand)]" />
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                     Resumen de Liquidación
                   </h3>
@@ -570,7 +564,7 @@ export default function NuevaCompraPage() {
 
                   <div className="flex justify-between items-center text-slate-500">
                     <span>Unidades físicas a ingresar:</span>
-                    <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                    <span className="font-bold text-[var(--admin-brand)] font-mono">
                       {totalUnits} piezas
                     </span>
                   </div>
@@ -601,7 +595,7 @@ export default function NuevaCompraPage() {
                   <Button
                     type="submit"
                     disabled={isSubmitting || items.length === 0}
-                    className="h-11 w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold gap-2 shadow-md shadow-indigo-600/25 active:scale-95 transition-all cursor-pointer"
+                    className="h-11 w-full rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-md shadow-[var(--admin-brand)]/25 active:scale-95 transition-all cursor-pointer"
                   >
                     {isSubmitting ? (
                       <>
@@ -630,11 +624,11 @@ export default function NuevaCompraPage() {
                 {/* Nota de Auditoría de Almacén */}
                 <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
                   <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
-                    <Info className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                    <Info className="h-3.5 w-3.5 text-[var(--admin-brand)] shrink-0" />
                     <span>Impacto en Almacén & Kardex</span>
                   </div>
                   <p>
-                    Al confirmar, el stock disponible en inventario aumentará de inmediato y se recalculará automáticamente el Costo Promedio Ponderado (CPP).
+                    Al confirmar, el stock disponible aumentará y se recalculará automáticamente el Costo Promedio Ponderado (CPP).
                   </p>
                 </div>
               </div>
@@ -653,19 +647,16 @@ export default function NuevaCompraPage() {
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Package className="h-5 w-5 text-indigo-600" />
+                  <Package className="h-5 w-5 text-[var(--admin-brand)]" />
                   <span>Catálogo de Productos para Compra</span>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Selecciona los artículos que deseas ingresar a la orden de compra.
                 </DialogDescription>
               </div>
-              <Badge
-                variant="outline"
-                className="text-xs font-semibold px-2.5 py-0.5 rounded-lg border-indigo-200 dark:border-indigo-900 bg-indigo-50/70 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hidden sm:inline-flex"
-              >
+              <span className="text-xs font-semibold text-slate-500 hidden sm:inline-flex">
                 {items.length} en la orden
-              </Badge>
+              </span>
             </div>
 
             {/* Buscador dentro del modal */}
@@ -771,10 +762,10 @@ export default function NuevaCompraPage() {
                         <td className="py-3 px-5 text-right">
                           <div className="flex items-center justify-end gap-2">
                             {inOrderQty > 0 && (
-                              <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 text-[10px] font-semibold gap-1">
-                                <Check className="h-3 w-3" />
+                              <div className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                 <span>{inOrderQty} u.</span>
-                              </Badge>
+                              </div>
                             )}
 
                             <Button
@@ -785,7 +776,7 @@ export default function NuevaCompraPage() {
                                 "h-8 px-3 rounded-lg text-xs font-bold gap-1 cursor-pointer transition-all active:scale-95",
                                 inOrderQty > 0
                                   ? "bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
-                                  : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                                  : "bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white shadow-xs"
                               )}
                             >
                               <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -836,7 +827,7 @@ export default function NuevaCompraPage() {
                       className={cn(
                         "h-8 w-8 rounded-lg text-xs font-bold flex items-center justify-center cursor-pointer transition-all",
                         modalCurrentPage === item
-                          ? "bg-indigo-600 text-white border border-indigo-600 shadow-sm"
+                          ? "bg-[var(--admin-brand)] text-white border border-[var(--admin-brand)] shadow-sm"
                           : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
                       )}
                     >
@@ -859,7 +850,7 @@ export default function NuevaCompraPage() {
               <Button
                 type="button"
                 onClick={() => setIsProductModalOpen(false)}
-                className="h-8 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                className="h-8 px-4 rounded-lg bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold cursor-pointer"
               >
                 Listo ({items.length} en orden)
               </Button>

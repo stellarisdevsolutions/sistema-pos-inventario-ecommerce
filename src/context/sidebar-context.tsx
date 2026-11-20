@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 interface SidebarContextType {
   isCollapsed: boolean;
+  isMounted: boolean;
   toggleSidebar: () => void;
   setCollapsed: (collapsed: boolean) => void;
 }
@@ -11,10 +12,13 @@ interface SidebarContextType {
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // En modo isla/dock Quixotic, el valor por defecto estable es colapsado (true)
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Intentar leer preferencia guardada en localStorage
+  // Leer preferencia de localStorage solo tras montar en cliente para evitar mismatch de hidratación
   useEffect(() => {
+    setIsMounted(true);
     try {
       const saved = localStorage.getItem("admin_sidebar_collapsed");
       if (saved !== null) {
@@ -45,7 +49,8 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   return (
     <SidebarContext.Provider
       value={{
-        isCollapsed,
+        isCollapsed: isMounted ? isCollapsed : true,
+        isMounted,
         toggleSidebar,
         setCollapsed,
       }}

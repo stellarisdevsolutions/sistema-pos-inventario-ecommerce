@@ -380,9 +380,9 @@ function PaginationBar({
               type="button"
               onClick={() => onPageChange(item)}
               className={cn(
-                "h-8 w-8 rounded-lg text-xs font-bold flex items-center justify-center cursor-pointer transition-all shadow-2xs",
+                "h-8 w-8 rounded-xl text-xs font-bold flex items-center justify-center cursor-pointer transition-all shadow-2xs",
                 currentPage === item
-                  ? "bg-indigo-600 text-white border border-indigo-600 shadow-sm shadow-indigo-600/30 scale-105"
+                  ? "bg-[var(--admin-brand)] text-white border border-[var(--admin-brand)] shadow-sm shadow-[var(--admin-brand)]/30 scale-105"
                   : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
               )}
             >
@@ -868,56 +868,40 @@ export default function InventarioPage() {
   const productSpecificKardex = productDrawerMovements;
 
   if (showSkeleton) {
-    return (
-      <div className="space-y-6 max-w-7xl mx-auto select-none">
-        <div className="flex items-center justify-between p-3.5 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl">
-          <div className="flex items-center gap-2 text-xs font-bold text-indigo-900 dark:text-indigo-200">
-            <span className="h-2.5 w-2.5 rounded-full bg-indigo-600 animate-ping" />
-            <span>Vista previa del Skeleton Loader de Inventario & Kárdex activo</span>
-          </div>
-          <button
-            onClick={() => setShowSkeleton(false)}
-            className="text-xs font-black px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition active:scale-95 cursor-pointer"
-          >
-            ✕ Salir del Esqueleto
-          </button>
-        </div>
-        <InventarioLoading />
-      </div>
-    );
+    return <InventarioLoading />;
   }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto select-none">
       {/* =========================================================================
-          1. HEADER DEL MÓDULO (FINNOVA INDIGO)
+          1. HEADER DEL MÓDULO (ESTILO BENTO / QUIXOTIC)
           ========================================================================= */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-2xl lg:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
             Inventario & Kárdex
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-            Control de existencias físicas, auditoría contable inmutable de movimientos y gestión de mermas.
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
+            Existencias físicas, auditoría contable y control de mermas
           </p>
         </div>
 
-        {/* Acciones Superiores: Gestión de Categorías + Ir a Nuevo Producto */}
+        {/* Acciones Superiores */}
         <div className="flex items-center gap-2.5">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setIsCategoryModalOpen(true)}
-            className="h-10 px-4 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shadow-2xs"
+            className="h-10 px-4 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shadow-2xs"
           >
-            <FolderTree className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <FolderTree className="h-4 w-4 text-[var(--admin-brand)]" />
             <span>Categorías</span>
           </Button>
 
           <Link href="/admin/inventario/nuevo">
             <Button
               size="sm"
-              className="h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold gap-2 shadow-md shadow-indigo-600/25 transition-all active:scale-95 cursor-pointer"
+              className="h-10 px-5 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-black gap-2 shadow-md shadow-[var(--admin-brand)]/25 transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="h-4 w-4 stroke-[2.5]" />
               <span>Nuevo Producto</span>
@@ -927,92 +911,92 @@ export default function InventarioPage() {
       </div>
 
       {/* =========================================================================
-          2. LAS 4 TARJETAS KPI DE INVENTARIO (ESTILO FINNOVA INDIGO)
+          2. LAS 4 TARJETAS KPI DE INVENTARIO BENTO
           ========================================================================= */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: VALORIZACIÓN TOTAL */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Valorización en Bodega</span>
-            <div className="h-7 w-7 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Valor en Bodega</span>
+            <div className="h-8 w-8 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600">
               <DollarSign className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight mt-3">
+          <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-3">
             {CURRENCY_SYMBOL}{" "}
             {products
               .reduce((acc, p) => acc + p.stock * p.costPrice, 0)
               .toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <span className="text-[11px] text-emerald-600 font-semibold mt-1 block">
-            En costo de reposición promedio
+          <span className="text-xs text-emerald-600 font-bold mt-1 block">
+            Costo de reposición
           </span>
         </div>
 
         {/* KPI 2: TOTAL EXISTENCIAS */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Unidades Físicas</span>
-            <div className="h-7 w-7 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Unidades Físicas</span>
+            <div className="h-8 w-8 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
               <Boxes className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight mt-3">
+          <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-3">
             {products.reduce((acc, p) => acc + p.stock, 0)}{" "}
-            <span className="text-sm font-semibold text-slate-400">uds</span>
+            <span className="text-sm font-bold text-slate-400">uds</span>
           </div>
-          <span className="text-[11px] text-indigo-600 font-semibold mt-1 block">
+          <span className="text-xs text-[var(--admin-brand)] font-bold mt-1 block">
             {categoriesList.filter((c) => c !== "Sin categoría").length} categorías activas
           </span>
         </div>
 
         {/* KPI 3: ALERTA STOCK CRÍTICO */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Stock Crítico & Mínimo</span>
-            <div className="h-7 w-7 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Stock Crítico</span>
+            <div className="h-8 w-8 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600">
               <AlertTriangle className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold text-amber-600 tracking-tight mt-3">
+          <div className="text-3xl font-black text-amber-600 tracking-tight mt-3">
             {products.filter((p) => p.stock <= p.minStock).length}{" "}
-            <span className="text-sm font-semibold text-amber-600/70">productos</span>
+            <span className="text-sm font-bold text-amber-600/70">ítems</span>
           </div>
-          <span className="text-[11px] text-amber-600 font-semibold mt-1 block">
-            Por debajo del umbral de seguridad
+          <span className="text-xs text-amber-600 font-bold mt-1 block">
+            Por debajo del umbral mínimo
           </span>
         </div>
 
         {/* KPI 4: MERMAS & PÉRDIDAS */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Mermas del Mes</span>
-            <div className="h-7 w-7 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 flex items-center justify-center text-rose-600">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Mermas del Mes</span>
+            <div className="h-8 w-8 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 flex items-center justify-center text-rose-600">
               <ShieldAlert className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold text-rose-600 tracking-tight mt-3">
+          <div className="text-3xl font-black text-rose-600 tracking-tight mt-3">
             {CURRENCY_SYMBOL}{" "}
             {activeAdjustmentsSource
               .reduce((acc, a) => acc + a.totalLoss, 0)
               .toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <span className="text-[11px] text-rose-600 font-semibold mt-1 block">
-            {activeAdjustmentsSource.length} actas de rotura/defecto
+          <span className="text-xs text-rose-600 font-bold mt-1 block">
+            {activeAdjustmentsSource.length} actas de baja
           </span>
         </div>
       </section>
 
       {/* =========================================================================
-          3. SELECTOR DE PESTAÑAS (SEGMENTED CONTROL FINNOVA)
+          3. SELECTOR DE PESTAÑAS (SEGMENTED CONTROL MODERNO)
           ========================================================================= */}
-      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-200/60 dark:bg-slate-800/60 w-fit">
+      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/60 w-fit">
         <button
           onClick={() => setActiveTab("catalog")}
           className={cn(
-            "px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "catalog"
-              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+              ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           )}
         >
@@ -1023,9 +1007,9 @@ export default function InventarioPage() {
         <button
           onClick={() => setActiveTab("kardex")}
           className={cn(
-            "px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "kardex"
-              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+              ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           )}
         >
@@ -1036,9 +1020,9 @@ export default function InventarioPage() {
         <button
           onClick={() => setActiveTab("adjustments")}
           className={cn(
-            "px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "adjustments"
-              ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+              ? "bg-white dark:bg-slate-900 text-rose-600 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           )}
         >
@@ -1222,7 +1206,7 @@ export default function InventarioPage() {
                   setSelectedCategory(e.target.value);
                   setCatalogPage(1);
                 }}
-                className="h-9 px-3.5 text-xs rounded-xl border border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="h-9 px-3.5 text-xs rounded-xl border border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-[var(--admin-brand)]/20"
               >
                 <option value="all">Categoría</option>
                 {categoriesList.map((cat) => (
@@ -1312,16 +1296,24 @@ export default function InventarioPage() {
                               <img
                                 src={p.image}
                                 alt={p.name}
-                                className="h-12 w-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
+                                className="h-12 w-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
                               />
                               <div className="flex flex-col min-w-0">
-                                <p className="font-semibold text-sm text-slate-900 dark:text-white leading-snug line-clamp-1">
+                                <p className="font-bold text-sm text-slate-900 dark:text-white leading-snug line-clamp-1">
                                   {p.name}
                                 </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800/60 w-fit">
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                                     {p.category}
                                   </span>
+                                  {p.sku && (
+                                    <>
+                                      <span className="text-slate-300 dark:text-slate-600">•</span>
+                                      <span className="text-[11px] font-mono text-slate-400">
+                                        {p.sku}
+                                      </span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1339,7 +1331,7 @@ export default function InventarioPage() {
                             <div className="inline-flex flex-col items-center">
                               <span
                                 className={cn(
-                                  "font-semibold text-sm font-mono",
+                                  "font-bold text-sm font-mono",
                                   isOut
                                     ? "text-rose-600"
                                     : isLow
@@ -1357,24 +1349,35 @@ export default function InventarioPage() {
                             </div>
                           </td>
 
-                          {/* 4. Columna Disponibilidad (Badge en stock / bajo / agotado) */}
+                          {/* 4. Columna Disponibilidad (Indicador Dot limpio, sin cápsula) */}
                           <td className="py-4 px-5 text-center">
-                            <Badge
-                              className={cn(
-                                "text-[11px] font-medium px-2.5 py-0.5 rounded-lg shadow-2xs border",
-                                p.status === "in_stock"
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+                            <div className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold">
+                              <span
+                                className={cn(
+                                  "h-2 w-2 rounded-full shrink-0",
+                                  p.status === "in_stock"
+                                    ? "bg-emerald-500"
+                                    : p.status === "low_stock"
+                                    ? "bg-amber-500 animate-pulse"
+                                    : "bg-rose-500"
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  p.status === "in_stock"
+                                    ? "text-emerald-700 dark:text-emerald-400"
+                                    : p.status === "low_stock"
+                                    ? "text-amber-700 dark:text-amber-400"
+                                    : "text-rose-700 dark:text-rose-400"
+                                )}
+                              >
+                                {p.status === "in_stock"
+                                  ? "En stock"
                                   : p.status === "low_stock"
-                                  ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
-                                  : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800"
-                              )}
-                            >
-                              {p.status === "in_stock"
-                                ? "En stock"
-                                : p.status === "low_stock"
-                                ? "Bajo stock"
-                                : "Agotado"}
-                            </Badge>
+                                  ? "Bajo stock"
+                                  : "Agotado"}
+                              </span>
+                            </div>
                           </td>
 
                           {/* 5. Estado (Toggle Switch con Loader y Toast) */}
@@ -1463,7 +1466,7 @@ export default function InventarioPage() {
                                   </Link>
                                   <DropdownMenuItem
                                     onClick={() => setSelectedProductForKardex(p)}
-                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-indigo-600 dark:text-indigo-400 focus:bg-indigo-50 dark:focus:bg-indigo-950/60"
+                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-[var(--admin-brand)] focus:bg-sky-50 dark:focus:bg-sky-950/60"
                                   >
                                     <BookOpen className="h-4 w-4 mr-2" />
                                     Ver Kárdex
@@ -1603,7 +1606,7 @@ export default function InventarioPage() {
                                       e.stopPropagation();
                                       setSelectedProductForKardex(p);
                                     }}
-                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-indigo-600 dark:text-indigo-400 focus:bg-indigo-50 dark:focus:bg-indigo-950/60"
+                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-[var(--admin-brand)] focus:bg-sky-50 dark:focus:bg-sky-950/60"
                                   >
                                     <BookOpen className="h-4 w-4 mr-2" />
                                     Ver Kárdex
@@ -1657,12 +1660,12 @@ export default function InventarioPage() {
                         {/* Datos del producto con padding */}
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <span className="inline-block text-[10px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800/60 w-fit">
+                            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
                               {p.category}
                             </span>
                             <h4
                               title={p.name}
-                              className="font-semibold text-sm text-slate-900 dark:text-white leading-snug line-clamp-2 mt-1.5"
+                              className="font-bold text-sm text-slate-900 dark:text-white leading-snug line-clamp-2 mt-1"
                             >
                               {p.name}
                             </h4>
@@ -1741,7 +1744,7 @@ export default function InventarioPage() {
                 }}
                 className={cn(
                   "rounded-xl text-xs font-bold h-8 cursor-pointer",
-                  kardexFilterType === "all" ? "bg-indigo-600 text-white" : ""
+                  kardexFilterType === "all" ? "bg-[var(--admin-brand)] text-white shadow-2xs hover:bg-[var(--admin-brand-hover)]" : ""
                 )}
               >
                 Todos ({activeKardexSource.length})
@@ -1755,7 +1758,7 @@ export default function InventarioPage() {
                 }}
                 className={cn(
                   "rounded-xl text-xs font-bold h-8 text-emerald-600 border-emerald-200 hover:bg-emerald-50 cursor-pointer",
-                  kardexFilterType === "in" ? "bg-emerald-600 text-white border-emerald-600" : ""
+                  kardexFilterType === "in" ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs" : ""
                 )}
               >
                 + Entradas (Compras)
@@ -1768,8 +1771,8 @@ export default function InventarioPage() {
                   setKardexPage(1);
                 }}
                 className={cn(
-                  "rounded-xl text-xs font-bold h-8 text-indigo-600 border-indigo-200 hover:bg-indigo-50 cursor-pointer",
-                  kardexFilterType === "out" ? "bg-indigo-600 text-white border-indigo-600" : ""
+                  "rounded-xl text-xs font-bold h-8 text-[var(--admin-brand)] border-sky-200 hover:bg-sky-50 cursor-pointer",
+                  kardexFilterType === "out" ? "bg-[var(--admin-brand)] text-white border-[var(--admin-brand)] shadow-2xs hover:bg-[var(--admin-brand-hover)]" : ""
                 )}
               >
                 - Salidas (Ventas)
@@ -1783,7 +1786,7 @@ export default function InventarioPage() {
                 }}
                 className={cn(
                   "rounded-xl text-xs font-bold h-8 text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer",
-                  kardexFilterType === "damaged" ? "bg-rose-600 text-white border-rose-600" : ""
+                  kardexFilterType === "damaged" ? "bg-rose-600 text-white border-rose-600 shadow-2xs" : ""
                 )}
               >
                 - Bajas (Mermas)
@@ -1817,20 +1820,23 @@ export default function InventarioPage() {
                       <p className="text-[10px] text-slate-400 font-mono">{m.sku}</p>
                     </td>
                     <td className="py-3.5 px-4">
-                      <Badge
-                        className={cn(
-                          "text-[10px] font-bold",
-                          m.type === "purchase_in"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
-                            : m.type === "sale_out"
-                            ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800"
-                            : m.typeLabel.includes("Anulación")
-                            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
-                            : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800"
-                        )}
-                      >
-                        {m.typeLabel}
-                      </Badge>
+                      <div className="inline-flex items-center gap-2 text-xs">
+                        <span
+                          className={cn(
+                            "h-2 w-2 rounded-full shrink-0",
+                            m.type === "purchase_in"
+                              ? "bg-emerald-500"
+                              : m.type === "sale_out"
+                              ? "bg-[var(--admin-brand)]"
+                              : m.typeLabel.includes("Anulación")
+                              ? "bg-amber-500"
+                              : "bg-rose-500"
+                          )}
+                        />
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {m.typeLabel}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 text-center font-black">
                       <span
@@ -1855,7 +1861,7 @@ export default function InventarioPage() {
                       {CURRENCY_SYMBOL} {m.unitCost.toFixed(2)}
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                      <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
                         {m.reference}
                       </span>
                       {m.reason && (
@@ -1961,7 +1967,7 @@ export default function InventarioPage() {
                     <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-300">
                       {a.reportedBy}
                     </td>
-                    <td className="py-3.5 px-4 text-indigo-600 dark:text-indigo-400 font-black">
+                    <td className="py-3.5 px-4 text-[var(--admin-brand)] font-black">
                       ✓ {a.authorizedBy}
                     </td>
                   </tr>
@@ -1998,7 +2004,7 @@ export default function InventarioPage() {
             {/* Header del Drawer */}
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+                <div className="h-10 w-10 rounded-2xl bg-[var(--admin-brand)] text-white flex items-center justify-center shadow-sm">
                   <Package className="h-5 w-5" />
                 </div>
                 <div>
@@ -2052,7 +2058,7 @@ export default function InventarioPage() {
                       className={cn(
                         "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg shadow-sm border backdrop-blur-md",
                         (selectedProductForDetails.isActive ?? true)
-                          ? "bg-indigo-600/90 text-white border-indigo-400"
+                          ? "bg-[var(--admin-brand)]/90 text-white border-sky-400"
                           : "bg-slate-600/90 text-white border-slate-500"
                       )}
                     >
@@ -2062,10 +2068,10 @@ export default function InventarioPage() {
                 </div>
 
                 <div className="p-4">
-                  <span className="inline-block text-[11px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-0.5 rounded-md border border-indigo-200/60 dark:border-indigo-800/60 w-fit">
+                  <span className="text-xs font-bold text-[var(--admin-brand)] block uppercase tracking-wider">
                     {selectedProductForDetails.category}
                   </span>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1.5 leading-snug">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1 leading-snug">
                     {selectedProductForDetails.name}
                   </h3>
                 </div>
@@ -2107,7 +2113,7 @@ export default function InventarioPage() {
 
                   <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                     <span className="text-[10px] text-slate-400 font-medium block">Margen Bruto</span>
-                    <span className="text-base font-bold text-indigo-600 font-mono tracking-tight mt-0.5 block">
+                    <span className="text-base font-bold text-[var(--admin-brand)] font-mono tracking-tight mt-0.5 block">
                       {selectedProductForDetails.price > 0
                         ? (
                             ((selectedProductForDetails.price - selectedProductForDetails.costPrice) /
@@ -2143,9 +2149,9 @@ export default function InventarioPage() {
                 </div>
 
                 {/* Valorización en Bodega de este Producto */}
-                <div className="p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/50 flex items-center justify-between text-xs">
+                <div className="p-3.5 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200/60 dark:border-sky-800/50 flex items-center justify-between text-xs">
                   <div>
-                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider block">
+                    <span className="text-[10px] text-[var(--admin-brand)] font-bold uppercase tracking-wider block">
                       Valor Total en Bodega (Costo)
                     </span>
                     <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">
@@ -2156,7 +2162,7 @@ export default function InventarioPage() {
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider block">
+                    <span className="text-[10px] text-[var(--admin-brand)] font-bold uppercase tracking-wider block">
                       Potencial Venta
                     </span>
                     <span className="text-sm font-bold text-emerald-600 font-mono">
@@ -2190,7 +2196,7 @@ export default function InventarioPage() {
                     setSelectedProductForDetails(null);
                     setSelectedProductForKardex(prod);
                   }}
-                  className="rounded-xl text-xs font-semibold text-indigo-600 dark:text-indigo-400 gap-1.5 cursor-pointer"
+                  className="rounded-xl text-xs font-semibold text-[var(--admin-brand)] gap-1.5 cursor-pointer"
                 >
                   <BookOpen className="h-4 w-4" />
                   <span>Ver Kárdex</span>
@@ -2199,7 +2205,7 @@ export default function InventarioPage() {
                 <Link href={`/admin/inventario/${selectedProductForDetails.id}/editar`}>
                   <Button
                     size="sm"
-                    className="rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 shadow-sm cursor-pointer"
+                    className="rounded-xl text-xs font-semibold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-1.5 shadow-sm cursor-pointer"
                   >
                     <Edit className="h-4 w-4" />
                     <span>Editar</span>
@@ -2227,7 +2233,7 @@ export default function InventarioPage() {
             {/* Header del Drawer */}
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+                <div className="h-10 w-10 rounded-2xl bg-[var(--admin-brand)] text-white flex items-center justify-center shadow-sm">
                   <BookOpen className="h-5 w-5" />
                 </div>
                 <div>
@@ -2235,9 +2241,6 @@ export default function InventarioPage() {
                     <h2 className="text-base font-black text-slate-900 dark:text-white">
                       Kárdex de Producto
                     </h2>
-                    <Badge className="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 text-[10px] font-bold">
-                      Trazabilidad Específica
-                    </Badge>
                   </div>
                   <p className="text-xs text-slate-500 font-mono mt-0.5">
                     SKU: {selectedProductForKardex.sku} • EAN: {selectedProductForKardex.barcode}
@@ -2309,8 +2312,8 @@ export default function InventarioPage() {
 
                 {loadingDrawerKardex ? (
                   <div className="p-8 text-center flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-                    <Loader2 className="h-6 w-6 text-indigo-600 animate-spin" />
-                    <span className="text-xs text-slate-500 font-bold">Cargando movimientos del Kárdex...</span>
+                    <Loader2 className="h-6 w-6 text-[var(--admin-brand)] animate-spin" />
+                    <span className="text-xs text-slate-500 font-bold">Cargando movimientos...</span>
                   </div>
                 ) : productSpecificKardex.length > 0 ? (
                   <div className="space-y-3">
@@ -2321,20 +2324,33 @@ export default function InventarioPage() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-mono text-slate-500">{item.date}</span>
-                          <Badge
-                            className={cn(
-                              "text-[10px] font-bold",
-                              item.type === "purchase_in" || item.typeLabel.includes("Apertura")
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                : item.type === "sale_out"
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300"
-                                : item.typeLabel.includes("Anulación")
-                                ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
-                                : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
-                            )}
-                          >
-                            {item.typeLabel}
-                          </Badge>
+                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                item.type === "purchase_in" || item.typeLabel.includes("Apertura")
+                                  ? "bg-emerald-500"
+                                  : item.type === "sale_out"
+                                  ? "bg-[var(--admin-brand)]"
+                                  : item.typeLabel.includes("Anulación")
+                                  ? "bg-amber-500"
+                                  : "bg-rose-500"
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                item.type === "purchase_in" || item.typeLabel.includes("Apertura")
+                                  ? "text-emerald-700 dark:text-emerald-300"
+                                  : item.type === "sale_out"
+                                  ? "text-[var(--admin-brand)] dark:text-sky-300"
+                                  : item.typeLabel.includes("Anulación")
+                                  ? "text-amber-700 dark:text-amber-300"
+                                  : "text-rose-700 dark:text-rose-300"
+                              )}
+                            >
+                              {item.typeLabel}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="flex items-center justify-between pt-1">
@@ -2359,7 +2375,7 @@ export default function InventarioPage() {
 
                           <div className="text-right">
                             <span className="text-xs text-slate-400">Saldo Resultante:</span>
-                            <p className="font-mono font-black text-xs text-indigo-600 dark:text-indigo-400">
+                            <p className="font-mono font-black text-xs text-[var(--admin-brand)]">
                               {item.newStock} uds
                             </p>
                           </div>
@@ -2399,7 +2415,7 @@ export default function InventarioPage() {
 
               <Button
                 size="sm"
-                className="rounded-xl h-10 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-2 cursor-pointer"
+                className="rounded-xl h-10 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-2 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
                 onClick={() =>
                   toast.success("Ficha de Auditoría exportada", {
                     description: "El reporte oficial del Kárdex CPP fue generado exitosamente.",
@@ -2436,15 +2452,15 @@ export default function InventarioPage() {
 
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+              <div className="h-10 w-10 rounded-2xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
                 <FolderTree className="h-5 w-5" />
               </div>
               <div>
                 <DialogTitle className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                  Gestión de Categorías del Catálogo
+                  Gestión de Categorías
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
-                  Crea, renombra o añade fotos para la Tienda Online. Los productos nunca se pierden.
+                  Crea, renombra o añade fotos para la Tienda Online.
                 </DialogDescription>
               </div>
             </div>
@@ -2460,7 +2476,7 @@ export default function InventarioPage() {
                   <img
                     src={newCategoryImage}
                     alt="Previsualización"
-                    className="h-10 w-10 rounded-xl object-cover border-2 border-indigo-500 shadow-sm"
+                    className="h-10 w-10 rounded-xl object-cover border-2 border-[var(--admin-brand)] shadow-sm"
                   />
                   <button
                     type="button"
@@ -2477,10 +2493,10 @@ export default function InventarioPage() {
                   onClick={() => newCatFileInputRef.current?.click()}
                   disabled={isUploadingCatImage}
                   title="Subir foto para Tienda Online (se optimiza a WebP)"
-                  className="h-10 px-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1.5 text-xs font-semibold shrink-0 cursor-pointer transition-colors disabled:opacity-50"
+                  className="h-10 px-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-[var(--admin-brand)] hover:bg-sky-50/50 dark:hover:bg-sky-950/30 text-slate-500 hover:text-[var(--admin-brand)] flex items-center gap-1.5 text-xs font-semibold shrink-0 cursor-pointer transition-colors disabled:opacity-50"
                 >
                   {isUploadingCatImage ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                    <Loader2 className="h-4 w-4 animate-spin text-[var(--admin-brand)]" />
                   ) : (
                     <Camera className="h-4 w-4" />
                   )}
@@ -2489,17 +2505,17 @@ export default function InventarioPage() {
               )}
 
               <Input
-                placeholder="Nueva categoría (ej. Iluminación Smart, Cables...)"
+                placeholder="Nueva categoría..."
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                className="h-10 text-xs rounded-lg flex-1"
+                className="h-10 text-xs rounded-xl flex-1"
               />
 
               <Button
                 type="submit"
                 size="sm"
                 disabled={isUploadingCatImage}
-                className="h-10 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs gap-1.5 shrink-0 cursor-pointer"
+                className="h-10 px-5 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white font-black text-xs gap-1.5 shrink-0 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
               >
                 <Plus className="h-4 w-4" />
                 <span>Crear</span>
@@ -2544,7 +2560,7 @@ export default function InventarioPage() {
           )}
 
           {/* Lista de Categorías Existentes */}
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1.5 custom-scrollbar">
             {categoriesList.map((cat) => {
               const productCount = products.filter((p) => p.category === cat).length;
               const isDefault = cat === "Sin categoría";
@@ -2772,7 +2788,7 @@ export default function InventarioPage() {
                 <div>
                   <span className="text-[11px] text-slate-400 font-mono">SKU: {selectedProdForAdjustment.sku}</span>
                   <p className="font-bold text-slate-800 dark:text-slate-200">
-                    Stock disponible: <span className="font-mono text-indigo-600 dark:text-indigo-400">{selectedProdForAdjustment.stock} uds</span>
+                    Stock disponible: <span className="font-mono text-[var(--admin-brand)] font-bold">{selectedProdForAdjustment.stock} uds</span>
                   </p>
                 </div>
                 <div className="text-right">

@@ -822,9 +822,10 @@ export default function VentasPage() {
                     <p className="text-xs font-bold text-purple-900 dark:text-purple-200">
                       Modo: Venta Administrativa Directa ({currentOperator?.name})
                     </p>
-                    <Badge className="bg-purple-600 text-white text-[9px] font-bold">
-                      Fuera de Caja Física
-                    </Badge>
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                      <span>Directa</span>
+                    </div>
                   </div>
                   <p className="text-[11px] text-purple-700 dark:text-purple-300 leading-relaxed max-w-3xl">
                     {allOpenShifts.length > 0
@@ -947,7 +948,7 @@ export default function VentasPage() {
 
                         {/* Indicador si ya está en el carrito */}
                         {cartItem && (
-                          <div className="absolute bottom-2 left-2 bg-[#0284c7] text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                          <div className="absolute bottom-2 left-2 bg-[var(--admin-brand)] text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
                             <ShoppingCart className="h-2.5 w-2.5" />
                             <span>{cartItem.quantity} en ticket</span>
                           </div>
@@ -1043,7 +1044,7 @@ export default function VentasPage() {
               </div>
 
               {/* Lista de Productos en Ticket */}
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1.5 custom-scrollbar">
                 {cart.length === 0 ? (
                   <div className="text-center py-8 text-slate-400 text-xs">
                     <ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -1536,15 +1537,15 @@ export default function VentasPage() {
                         </td>
                         <td className="py-3.5 px-4">
                           {sale.isAdministrativeSale ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                              <Building2 className="h-3 w-3" />
-                              Adm. Directa
-                            </span>
+                            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300">
+                              <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                              <span>Adm. Directa</span>
+                            </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                              <Wallet className="h-3 w-3" />
-                              {sale.cashRegisterName || "Caja"}
-                            </span>
+                            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              <span>{sale.cashRegisterName || "Caja"}</span>
+                            </div>
                           )}
                         </td>
                         <td className="py-3.5 px-4">
@@ -1587,25 +1588,35 @@ export default function VentasPage() {
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          {sale.status === "completed" ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                              Completada
+                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                sale.status === "completed"
+                                  ? "bg-emerald-500"
+                                  : sale.status === "refunded"
+                                  ? "bg-amber-500"
+                                  : "bg-rose-500"
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                sale.status === "completed"
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : sale.status === "refunded"
+                                  ? "text-amber-700 dark:text-amber-400"
+                                  : "text-rose-700 dark:text-rose-400"
+                              )}
+                            >
+                              {sale.status === "completed"
+                                ? "Completada"
+                                : sale.status === "refunded"
+                                ? (sale.netAmount !== undefined && sale.netAmount <= 0
+                                    ? "Devolución Total"
+                                    : "Devolución Parcial")
+                                : "Anulada"}
                             </span>
-                          ) : sale.status === "refunded" ? (
-                            (sale.netAmount !== undefined && sale.netAmount <= 0) ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                Devolución Total
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
-                                Devolución Parcial
-                              </span>
-                            )
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                              Anulada
-                            </span>
-                          )}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
@@ -2102,7 +2113,7 @@ export default function VentasPage() {
                 Productos del Ticket (Elige unidades a reingresar):
               </label>
 
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1.5 custom-scrollbar">
                 {saleToRefund?.items.map((item) => {
                   const returned = item.returnedQuantity || 0;
                   const maxReturnable =
@@ -2229,9 +2240,9 @@ export default function VentasPage() {
                   <ShieldCheck className="h-4 w-4 text-[#0284c7]" />
                   <span>Autorización de Supervisor (PIN de Seguridad)</span>
                 </div>
-                <Badge variant="outline" className="text-[10px] bg-white/80 dark:bg-slate-900 border-sky-300 text-sky-700">
+                <span className="text-xs font-semibold text-sky-700 dark:text-sky-300">
                   Doble Custodia
-                </Badge>
+                </span>
               </div>
               <p className="text-[11px] text-sky-800 dark:text-sky-400">
                 Para prevenir fraudes y cuadres inconsistentes, un Administrador o Supervisor debe ingresar su PIN (4 a 6 dígitos).

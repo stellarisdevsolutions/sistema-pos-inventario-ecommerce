@@ -136,7 +136,7 @@ function PaginationBar({
               className={cn(
                 "h-8 w-8 rounded-lg text-xs font-bold flex items-center justify-center cursor-pointer transition-all shadow-2xs",
                 currentPage === item
-                  ? "bg-indigo-600 text-white border border-indigo-600 shadow-sm shadow-indigo-600/30 scale-105"
+                  ? "bg-[var(--admin-brand)] text-white border border-[var(--admin-brand)] shadow-sm shadow-[var(--admin-brand)]/20 scale-105"
                   : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
               )}
             >
@@ -400,19 +400,16 @@ export default function ProveedoresPage() {
             <h1 className="text-xl lg:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               Directorio de Proveedores
             </h1>
-            <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[10px] border border-slate-200 dark:border-slate-700">
-              {suppliers.length} Registrados
-            </Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Empresas asociadas, contactos comerciales, condiciones de compra y abastecimiento de almacén.
+            Empresas asociadas, contactos comerciales y abastecimiento de almacén.
           </p>
         </div>
 
         <Button
           onClick={handleOpenCreateModal}
           size="sm"
-          className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold gap-2 shadow-md shadow-indigo-600/25 active:scale-95 transition-all cursor-pointer w-full sm:w-auto shrink-0"
+          className="h-10 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-md shadow-[var(--admin-brand)]/20 active:scale-95 transition-all cursor-pointer w-full sm:w-auto shrink-0"
         >
           <Plus className="h-4 w-4 stroke-[2.5]" />
           <span>Registrar Proveedor</span>
@@ -429,15 +426,15 @@ export default function ProveedoresPage() {
             <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
               Total Proveedores
             </span>
-            <div className="h-7 w-7 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+            <div className="h-7 w-7 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
               <Building2 className="h-4 w-4" />
             </div>
           </div>
           <div className="text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight mt-3">
             {totalSuppliersCount}
           </div>
-          <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1 block">
-            Directorio comercial auditado
+          <span className="text-[11px] text-[var(--admin-brand)] font-semibold mt-1 block">
+            Directorio comercial
           </span>
         </div>
 
@@ -634,7 +631,7 @@ export default function ProveedoresPage() {
           ========================================================================= */}
       {isLoading ? (
         <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--admin-brand)]" />
           <p className="text-xs text-slate-500 font-medium">Cargando directorio de proveedores...</p>
         </div>
       ) : paginatedSuppliers.length === 0 ? (
@@ -672,7 +669,7 @@ export default function ProveedoresPage() {
                 key={s.id}
                 onClick={() => setSelectedSupplierForDetails(s)}
                 className={cn(
-                  "rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-indigo-500/50 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden cursor-pointer group",
+                  "rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-[var(--admin-brand)]/50 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden cursor-pointer group",
                   !s.isActive && "opacity-65 bg-slate-50/50 dark:bg-slate-900/50"
                 )}
               >
@@ -680,11 +677,11 @@ export default function ProveedoresPage() {
                   {/* Encabezado del Card */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-3">
-                      <div className="h-11 w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center shrink-0 font-black text-sm">
+                      <div className="h-11 w-11 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-[var(--admin-brand)] border border-sky-100 dark:border-sky-800/80 flex items-center justify-center shrink-0 font-black text-sm">
                         {s.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-snug line-clamp-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-snug line-clamp-1 group-hover:text-[var(--admin-brand)] transition-colors">
                           {s.name}
                         </h2>
                         <div className="flex items-center gap-2 mt-0.5">
@@ -773,7 +770,7 @@ export default function ProveedoresPage() {
                         <a
                           href={`tel:${s.phone}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="font-mono text-[11px] font-semibold hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline"
+                          className="font-mono text-[11px] font-semibold hover:text-[var(--admin-brand)] hover:underline"
                         >
                           {s.phone}
                         </a>
@@ -788,7 +785,7 @@ export default function ProveedoresPage() {
                         <a
                           href={`mailto:${s.email}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="text-[11px] truncate hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline"
+                          className="text-[11px] truncate hover:text-[var(--admin-brand)] hover:underline"
                         >
                           {s.email}
                         </a>
@@ -818,16 +815,12 @@ export default function ProveedoresPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Badge
-                      className={cn(
-                        "text-[10px] font-semibold px-2 py-0.5 rounded-lg border",
-                        s.isActive
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
-                          : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400"
-                      )}
-                    >
-                      {s.isActive ? "Activo" : "Inactivo"}
-                    </Badge>
+                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                      <span className={cn("h-2 w-2 rounded-full", s.isActive ? "bg-emerald-500" : "bg-slate-400")} />
+                      <span className={s.isActive ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500"}>
+                        {s.isActive ? "Activo" : "Inactivo"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -865,11 +858,11 @@ export default function ProveedoresPage() {
                       {/* 1. Empresa / Razón Social y NIT */}
                       <td className="py-4 px-5">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center shrink-0 font-bold text-xs">
+                          <div className="h-9 w-9 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-[var(--admin-brand)] border border-sky-100 dark:border-sky-800/80 flex items-center justify-center shrink-0 font-bold text-xs">
                             {s.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            <p className="font-bold text-slate-900 dark:text-white group-hover:text-[var(--admin-brand)] transition-colors">
                               {s.name}
                             </p>
                             <span className="text-[10px] text-slate-400 font-mono block">
@@ -1030,7 +1023,7 @@ export default function ProveedoresPage() {
               {/* Header del Drawer */}
               <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center font-bold text-sm">
+                  <div className="h-10 w-10 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-[var(--admin-brand)] border border-sky-200 dark:border-sky-800 flex items-center justify-center font-bold text-sm">
                     {selectedSupplierForDetails.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -1070,7 +1063,7 @@ export default function ProveedoresPage() {
 
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
                     <span className="text-[10px] text-slate-400 font-medium block">Artículos</span>
-                    <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 font-mono mt-0.5 block">
+                    <span className="text-sm font-bold text-[var(--admin-brand)] font-mono mt-0.5 block">
                       {selectedSupplierForDetails.productsCount} vinculados
                     </span>
                   </div>
@@ -1102,7 +1095,7 @@ export default function ProveedoresPage() {
                       {selectedSupplierForDetails.phone ? (
                         <a
                           href={`tel:${selectedSupplierForDetails.phone}`}
-                          className="font-mono font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                          className="font-mono font-bold text-[var(--admin-brand)] hover:underline"
                         >
                           {selectedSupplierForDetails.phone}
                         </a>
@@ -1116,7 +1109,7 @@ export default function ProveedoresPage() {
                       {selectedSupplierForDetails.email ? (
                         <a
                           href={`mailto:${selectedSupplierForDetails.email}`}
-                          className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline truncate max-w-[200px]"
+                          className="font-medium text-[var(--admin-brand)] hover:underline truncate max-w-[200px]"
                         >
                           {selectedSupplierForDetails.email}
                         </a>
@@ -1188,7 +1181,7 @@ export default function ProveedoresPage() {
         <DialogContent className="sm:max-w-lg rounded-2xl p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
           <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <DialogTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-indigo-600" />
+              <Building2 className="h-4 w-4 text-[var(--admin-brand)]" />
               <span>{editingSupplier ? "Editar Proveedor" : "Registrar Nuevo Proveedor"}</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -1291,7 +1284,7 @@ export default function ProveedoresPage() {
                 placeholder="Ej. Descuento del 5% por pronto pago, entregas los martes..."
                 value={formNotes}
                 onChange={(e) => setFormNotes(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium placeholder:font-normal"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--admin-brand)]/20 focus:border-[var(--admin-brand)] font-medium placeholder:font-normal"
               />
             </div>
 
@@ -1346,7 +1339,7 @@ export default function ProveedoresPage() {
                 type="submit"
                 size="sm"
                 disabled={isSubmitting}
-                className="rounded-lg h-9 px-4 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-sm cursor-pointer disabled:opacity-50"
+                className="rounded-lg h-9 px-4 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-2 shadow-sm cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>

@@ -231,21 +231,18 @@ export default function UsuariosPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <Users className="h-6 w-6 text-sky-600" />
+              <Users className="h-6 w-6 text-[var(--admin-brand)]" />
               Gestión de Usuarios & Roles
             </h1>
-            <Badge className="bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border-sky-200">
-              Control de Accesos & PINs
-            </Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Administra cajeros, supervisores y administradores. Configura PINs numéricos para autorizaciones de mostrador.
+            Administra cajeros, supervisores y administradores con control de roles y PINs.
           </p>
         </div>
 
         <Button
           onClick={() => setCreateModalOpen(true)}
-          className="h-10 px-4 rounded-xl bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-bold gap-2 shadow-md shadow-[#0284c7]/20 cursor-pointer self-start sm:self-auto"
+          className="h-10 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-md shadow-[var(--admin-brand)]/20 cursor-pointer self-start sm:self-auto"
         >
           <UserPlus className="h-4 w-4" />
           <span>Nuevo Usuario</span>
@@ -381,25 +378,39 @@ export default function UsuariosPage() {
                     </td>
 
                     <td className="py-3.5 px-4">
-                      {user.role === "admin" ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                          <ShieldCheck className="h-3 w-3" />
-                          Administrador General
+                      <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            user.role === "admin"
+                              ? "bg-purple-500"
+                              : user.role === "manager"
+                              ? "bg-sky-500"
+                              : user.role === "cashier"
+                              ? "bg-emerald-500"
+                              : "bg-amber-500"
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            user.role === "admin"
+                              ? "text-purple-700 dark:text-purple-300"
+                              : user.role === "manager"
+                              ? "text-sky-700 dark:text-sky-300"
+                              : user.role === "cashier"
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-amber-700 dark:text-amber-300"
+                          )}
+                        >
+                          {user.role === "admin"
+                            ? "Administrador General"
+                            : user.role === "manager"
+                            ? "Supervisor de Tienda"
+                            : user.role === "cashier"
+                            ? "Cajero de Mostrador"
+                            : "Almacenero"}
                         </span>
-                      ) : user.role === "manager" ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
-                          <ShieldCheck className="h-3 w-3" />
-                          Supervisor de Tienda
-                        </span>
-                      ) : user.role === "cashier" ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                          Cajero de Mostrador
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                          Almacenero
-                        </span>
-                      )}
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
@@ -431,17 +442,12 @@ export default function UsuariosPage() {
                     </td>
 
                     <td className="py-3.5 px-4 text-center">
-                      {user.isActive ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          Activo
+                      <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                        <span className={cn("h-2 w-2 rounded-full", user.isActive ? "bg-emerald-500" : "bg-rose-500")} />
+                        <span className={user.isActive ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}>
+                          {user.isActive ? "Activo" : "Inactivo"}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                          Inactivo
-                        </span>
-                      )}
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
