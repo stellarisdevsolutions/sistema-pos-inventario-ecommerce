@@ -106,7 +106,7 @@ export default function AdminDashboardPage() {
   });
 
   const selectedSale: DashboardSalesItem | undefined =
-    recentSales.find((s) => s.id === selectedSaleId) || recentSales[0];
+    filteredSales.find((s) => s.id === selectedSaleId) || filteredSales[0];
 
   const handlePrintTicket = (sale: DashboardSalesItem) => {
     const printWindow = window.open("", "_blank", "width=380,height=600");
@@ -229,6 +229,7 @@ export default function AdminDashboardPage() {
       <section className="admin-metrics" aria-label="Indicadores del negocio">
         <MetricCard
           label="Ventas del mes"
+          trend={kpis.dailySales}
           value={formatMetric(kpis.monthSalesTotal)}
           detail={
             <>
@@ -245,6 +246,7 @@ export default function AdminDashboardPage() {
         />
         <MetricCard
           label="Ganancia bruta"
+          trend={kpis.dailyProfit}
           value={formatMetric(kpis.grossProfit)}
           detail={`${kpis.profitMargin.toFixed(1)}% de margen`}
           icon={DollarSign}
@@ -252,10 +254,10 @@ export default function AdminDashboardPage() {
         />
         <MetricCard
           label="Ticket promedio"
+          trend={kpis.dailyTickets}
           value={formatMetric(kpis.averageTicket)}
           detail="Importe medio por venta"
           icon={Receipt}
-          appearance="desk"
         />
         <MetricCard
           label="Efectivo en cajas"
@@ -265,247 +267,64 @@ export default function AdminDashboardPage() {
         />
       </section>
 
-      {/* =========================================================================
-          3. BARRA DE FILTROS SEGMENTADA (ESTILO MODERNO BENTO)
-          ========================================================================= */}
-      <section className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-        <div className="admin-segments">
-          <button
-            onClick={() => setActiveChannelTab("all")}
-            aria-pressed={activeChannelTab === "all"}
-            className="admin-segment"
-          >
-            Todos ({recentSales.length})
-          </button>
-
-          <button
-            onClick={() => setActiveChannelTab("pos")}
-            aria-pressed={activeChannelTab === "pos"}
-            className="admin-segment"
-          >
-            Mostrador POS
-          </button>
-
-          <button
-            onClick={() => setActiveChannelTab("administrative")}
-            aria-pressed={activeChannelTab === "administrative"}
-            className="admin-segment"
-          >
-            Venta Administrativa
-          </button>
-        </div>
-
-        <div className="relative ml-auto w-full sm:w-64 mt-2 sm:mt-0">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por ticket, cliente..."
-            className="w-full h-9 pl-9 pr-4 text-xs admin-panel focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20 focus:border-admin-brand"
-          />
-        </div>
-      </section>
-
-      <section className="admin-ledger p-4 sm:p-5 space-y-4">
-        <div className="border-b border-admin-card-border pb-3">
-          <h2 className="text-base font-semibold text-admin-text">Últimas transacciones</h2>
-        </div>
-
-        {filteredSales.length === 0 ? (
-          <div className="text-center py-12 text-admin-muted space-y-3">
-            <Receipt className="h-10 w-10 mx-auto text-admin-muted stroke-[1.5]" />
-            <p className="text-sm font-medium">No se encontraron ventas para el filtro seleccionado.</p>
-            <Link href="/admin/ventas">
-              <Button size="sm" className="bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold rounded-xl">
-                + Realizar Venta en POS
-              </Button>
-            </Link>
+      <section className="ticket-book" aria-labelledby="ticket-heading">
+        <header className="ticket-toolbar">
+          <h2 id="ticket-heading"><Receipt size={18} /> Últimas transacciones <small>{filteredSales.length}</small></h2>
+          <div className="ticket-tabs" role="group" aria-label="Canal de venta">
+            {([["all", "Todas"], ["pos", "Mostrador"], ["administrative", "Administración"]] as const).map(([channel, label]) => (
+              <button key={channel} aria-pressed={activeChannelTab === channel} onClick={() => setActiveChannelTab(channel)}>{label}</button>
+            ))}
+          </div>
+          <label className="ticket-search">
+            <Search size={15} aria-hidden />
+            <input type="search" aria-label="Buscar ticket, cliente o cajero" placeholder="Buscar transacción" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </label>
+        </header>
+        {selectedSale ? (
+          <div className="ticket-columns">
+            <div className="ticket-index" aria-label="Tickets">
+              {filteredSales.map(sale => (
+                <button key={sale.id} aria-pressed={sale.id === selectedSale.id} onClick={() => setSelectedSaleId(sale.id)}>
+                  <span className="ticket-avatar" aria-hidden>{sale.customer.slice(0, 2).toUpperCase()}</span>
+                  <span className="ticket-id"><strong>{sale.saleNumber}</strong><small>{sale.time}</small></span>
+                  <span className="ticket-status">{sale.status}</span>
+                  <strong>{formatMetric(sale.total)}</strong>
+                </button>
+              ))}
+            </div>
+            <article className="ticket-detail" aria-label="Comprobante seleccionado">
+              <header className="ticket-parties">
+                <div><small>Comprobante</small><h3>{selectedSale.saleNumber}</h3></div>
+                <div><small>Cliente</small><strong>{selectedSale.customer}</strong></div>
+                <div><small>Atendido por</small><strong>{selectedSale.cashier}</strong><small>{selectedSale.channelLabel}</small></div>
+              </header>
+              <ul className="ticket-products" aria-label="Productos del comprobante">
+                {selectedSale.items.map((item, index) => (
+                  <li key={index}>
+                    <small>{item.quantity} × {formatMetric(item.unitPrice)}</small>
+                    <strong>{formatMetric(item.subtotal)}</strong>
+                    <span>{item.name}</span>
+                    <small>Costo unitario {formatMetric(item.unitCost)}</small>
+                  </li>
+                ))}
+              </ul>
+              <dl className="ticket-totals">
+                <div><dt>Subtotal</dt><dd>{formatMetric(selectedSale.subtotal)}</dd></div>
+                <div><dt>Costo total</dt><dd>{formatMetric(selectedSale.costTotal)}</dd></div>
+                <div><dt>Utilidad</dt><dd>{formatMetric(selectedSale.grossProfit)}</dd></div>
+                <div><dt>Total del ticket</dt><dd>{formatMetric(selectedSale.total)}</dd></div>
+              </dl>
+              <footer className="ticket-actions">
+                <span>{selectedSale.status} · {selectedSale.paymentMethod}{selectedSale.changeGiven > 0 && ` · Cambio ${formatMetric(selectedSale.changeGiven)}`}</span>
+                <Link href="/admin/inventario">Kárdex</Link>
+                <button onClick={() => handlePrintTicket(selectedSale)}><Printer size={15} /> Imprimir ticket</button>
+              </footer>
+            </article>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* COLUMNA IZQUIERDA: LISTA INTERACTIVA DE TICKETS */}
-            <div className="lg:col-span-5 space-y-2.5">
-              <div className="text-xs font-semibold text-admin-sidebar-text px-2">
-                Últimos Tickets ({filteredSales.length})
-              </div>
-
-              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1.5 custom-scrollbar">
-                {filteredSales.map((sale) => {
-                  const isSelected = sale.id === selectedSaleId;
-
-                  return (
-                    <button
-                      type="button"
-                      aria-pressed={isSelected}
-                      key={sale.id}
-                      onClick={() => setSelectedSaleId(sale.id)}
-                      className="admin-ledger-row"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-10 w-10 rounded-full bg-admin-brand-subtle border border-admin-brand flex items-center justify-center font-semibold text-admin-brand-text text-xs shrink-0">
-                          {sale.customer.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-xs font-bold text-admin-text block truncate">
-                            #{sale.saleNumber}
-                          </span>
-                          <span className="text-[10px] text-admin-muted">
-                            {sale.time} • {sale.cashier}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
-                          <span
-                            className={cn(
-                              "h-1.5 w-1.5 rounded-full",
-                              sale.channel === "pos" ? "bg-admin-brand" : "bg-emerald-400"
-                            )}
-                          />
-                          <span className={sale.channel === "pos" ? "text-admin-brand-text" : "text-admin-success"}>
-                            {sale.channel === "pos" ? "POS" : "Adm"}
-                          </span>
-                        </div>
-                        <span className="text-sm font-semibold text-admin-text">
-                          {CURRENCY_SYMBOL} {sale.total.toFixed(2)}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* COLUMNA DERECHA: TARJETA DE DETALLE AUDITADO */}
-            {selectedSale && (
-              <div className="lg:col-span-7">
-                <div className="admin-receipt p-4 lg:p-6 space-y-5">
-                  {/* Encabezado del Detalle */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-admin-card-border">
-                    <div>
-                      <span className="text-[11px] font-bold text-admin-brand-text uppercase tracking-wider block">
-                        Detalle del Comprobante
-                      </span>
-                      <div className="flex items-center gap-3 mt-1">
-                        <h3 className="text-2xl font-semibold text-admin-text tracking-tight">
-                          #{selectedSale.saleNumber}
-                        </h3>
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-admin-success">
-                          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                          <span>{selectedSale.status}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-admin-brand-subtle border border-admin-brand flex items-center justify-center font-bold text-admin-brand-text text-xs">
-                        {selectedSale.customer.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div className="text-left">
-                        <span className="text-xs font-bold text-admin-text block">
-                          {selectedSale.customer}
-                        </span>
-                        <span className="text-[10px] text-admin-brand-text">
-                          {selectedSale.channelLabel} • {selectedSale.cashier}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Grid de Ítems Vendidos */}
-                  <div className="space-y-3">
-                    <div className="text-xs font-bold text-admin-muted uppercase tracking-wider">
-                      Productos ({selectedSale.items.length})
-                    </div>
-
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1.5 custom-scrollbar">
-                      {selectedSale.items.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="p-3.5 admin-panel flex items-center justify-between"
-                        >
-                          <div>
-                            <p className="font-bold text-admin-text text-xs">{item.name}</p>
-                            <p className="text-[11px] text-admin-muted mt-0.5">
-                              {item.quantity} ud x {CURRENCY_SYMBOL} {item.unitPrice.toFixed(2)} (Costo: {CURRENCY_SYMBOL} {item.unitCost.toFixed(2)})
-                            </p>
-                          </div>
-
-                          <div className="text-right">
-                            <span className="text-sm font-semibold text-admin-text block">
-                              {CURRENCY_SYMBOL} {item.subtotal.toFixed(2)}
-                            </span>
-                            <span className="text-[10px] font-bold text-admin-success">
-                              +{CURRENCY_SYMBOL} {(item.unitPrice - item.unitCost).toFixed(2)} margen
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Resumen Financiero */}
-                  <div className="p-4 admin-panel grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="text-[10px] text-admin-muted block font-medium">Subtotal</span>
-                      <span className="text-sm font-bold text-admin-muted">
-                        {CURRENCY_SYMBOL} {selectedSale.subtotal.toFixed(2)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-admin-muted block font-medium">Costo Total</span>
-                      <span className="text-sm font-bold text-admin-muted">
-                        {CURRENCY_SYMBOL} {selectedSale.costTotal.toFixed(2)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-admin-muted block font-medium">Utilidad</span>
-                      <span className="text-sm font-semibold text-admin-success">
-                        +{CURRENCY_SYMBOL} {selectedSale.grossProfit.toFixed(2)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-admin-brand-text block font-medium">Total Cobrado</span>
-                      <span className="text-base font-semibold text-admin-text">
-                        {CURRENCY_SYMBOL} {selectedSale.total.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Pie de Acción: Vuelto e Impresión */}
-                  <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="text-xs text-admin-muted">
-                      <span className="text-admin-muted">Medio: </span>
-                      <span className="font-bold text-admin-text">{selectedSale.paymentMethod}</span>
-                      {selectedSale.changeGiven > 0 && (
-                        <span className="ml-2 text-admin-success font-bold">
-                          (Cambio: {CURRENCY_SYMBOL} {selectedSale.changeGiven.toFixed(2)})
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Link href="/admin/inventario">
-                        <button className="h-10 px-4 rounded-xl bg-admin-card-bg hover:bg-admin-card-bg text-admin-brand-text text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer">
-                          <Boxes className="h-4 w-4" />
-                          <span>Kardex</span>
-                        </button>
-                      </Link>
-
-                      <button
-                        onClick={() => handlePrintTicket(selectedSale)}
-                        className="h-10 px-5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 text-xs font-semibold transition-all active:scale-95 cursor-pointer flex items-center gap-2"
-                      >
-                        <Printer className="h-4 w-4" />
-                        <span>Imprimir Ticket</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="ticket-empty">
+            <p>{recentSales.length ? "Ninguna transacción coincide con los filtros." : "Aún no hay ventas registradas."}</p>
+            {recentSales.length ? <button onClick={() => { setSearchQuery(""); setActiveChannelTab("all"); }}>Limpiar filtros</button> : <Link href="/admin/ventas">Cobrar en POS</Link>}
           </div>
         )}
       </section>

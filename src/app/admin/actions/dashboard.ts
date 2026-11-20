@@ -58,6 +58,9 @@ export interface DashboardAdjustmentItem {
 
 export interface DashboardData {
   kpis: {
+    dailySales: number[];
+    dailyProfit: number[];
+    dailyTickets: number[];
     monthSalesTotal: number;
     monthSalesCount: number;
     posPercentage: number;
@@ -86,7 +89,7 @@ export async function getDashboardSummaryAction(): Promise<{
   try {
     await requireRole(["admin", "manager"]);
 
-    const [year, month] = businessDate().split("-").map(Number);
+    const [year, month, day] = businessDate().split("-").map(Number);
     const monthDate = (offset: number) => new Date(Date.UTC(year, month - 1 + offset, 1)).toISOString().slice(0, 10);
     const startOfMonth = businessDayStart(monthDate(0));
     const endOfMonth = businessDayStart(monthDate(1));
@@ -114,6 +117,9 @@ export async function getDashboardSummaryAction(): Promise<{
       orderBy: [desc(schema.sales.createdAt)],
     });
 
+    const dailySales = Array<number>(day).fill(0);
+    const dailyProfit = Array<number>(day).fill(0);
+    const dailyCount = Array<number>(day).fill(0);
     let monthSalesTotal = 0;
     let monthSalesCost = 0;
     let completedCount = 0;
@@ -127,7 +133,9 @@ export async function getDashboardSummaryAction(): Promise<{
         const total = parseFloat(s.totalAmount) || 0;
         const refunded = parseFloat(s.refundedAmount || "0") || 0;
         const net = Math.max(0, total - refunded);
+        const index = Number(businessDate(s.createdAt).slice(-2)) - 1;
         monthSalesTotal += net;
+        let cost = 0;
         completedCount += 1;
 
         if (s.cashShiftId) {
@@ -146,7 +154,13 @@ export async function getDashboardSummaryAction(): Promise<{
         for (const it of s.items || []) {
           const uCost = parseFloat(it.unitCost) || 0;
           const netQty = Math.max(0, it.quantity - (it.returnedQuantity || 0));
-          monthSalesCost += uCost * netQty;
+          cost += uCost * netQty;
+        }
+        monthSalesCost += cost;
+        if (index < day) {
+          dailySales[index] += net;
+          dailyProfit[index] += net - cost;
+          dailyCount[index]++;
         }
       }
     }
@@ -301,6 +315,9 @@ export async function getDashboardSummaryAction(): Promise<{
       success: true,
       data: {
         kpis: {
+          dailySales,
+          dailyProfit,
+          dailyTickets: dailySales.map((amount, i) => dailyCount[i] ? amount / dailyCount[i] : 0),
           monthSalesTotal,
           monthSalesCount: completedCount,
           posPercentage,
