@@ -287,7 +287,7 @@ export default function ReportesPage() {
           ========================================================================= */}
       <div className="admin-kpi-grid">
         {/* Card 1: Ventas Netas Reales */}
-        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
+        <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Venta Neta Total
@@ -312,7 +312,7 @@ export default function ReportesPage() {
         </div>
 
         {/* Card 2: Utilidad Bruta & Margen */}
-        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
+        <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Ganancia Bruta Real
@@ -336,7 +336,7 @@ export default function ReportesPage() {
         </div>
 
         {/* Card 3: Desglose de Medios de Pago */}
-        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
+        <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Flujo de Cobro
@@ -366,7 +366,7 @@ export default function ReportesPage() {
         </div>
 
         {/* Card 4: Auditoría de Cajas (Cuadre Ciego) */}
-        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
+        <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Cuadre de Cajas Físicas
@@ -427,16 +427,12 @@ export default function ReportesPage() {
           ========================================================================= */}
       <div className="space-y-4">
         {/* Navegación entre pestañas */}
-        <div className="flex items-center gap-1.5 border-b border-admin-card-border pb-1 overflow-x-auto">
+        <div className="admin-segments">
           <button
             type="button"
             onClick={() => setActiveTab("resumen")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "resumen"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "resumen"}
+            className="admin-segment"
           >
             <BarChart3 className="h-3.5 w-3.5" />
             <span>Balance Consolidado</span>
@@ -445,12 +441,8 @@ export default function ReportesPage() {
           <button
             type="button"
             onClick={() => setActiveTab("turnos")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "turnos"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "turnos"}
+            className="admin-segment"
           >
             <Wallet className="h-3.5 w-3.5" />
             <span>Arqueo de Turnos ({reportData?.shifts.length || 0})</span>
@@ -459,12 +451,8 @@ export default function ReportesPage() {
           <button
             type="button"
             onClick={() => setActiveTab("productos")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "productos"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "productos"}
+            className="admin-segment"
           >
             <Package className="h-3.5 w-3.5" />
             <span>Top Productos ({reportData?.topProducts.length || 0})</span>
@@ -473,12 +461,8 @@ export default function ReportesPage() {
           <button
             type="button"
             onClick={() => setActiveTab("devoluciones")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "devoluciones"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "devoluciones"}
+            className="admin-segment"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             <span>Auditoría de Devoluciones ({reportData?.returns.length || 0})</span>
@@ -487,12 +471,8 @@ export default function ReportesPage() {
           <button
             type="button"
             onClick={() => setActiveTab("ventas")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "ventas"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "ventas"}
+            className="admin-segment"
           >
             <Receipt className="h-3.5 w-3.5" />
             <span>Detalle de Ventas ({reportData?.sales.length || 0})</span>
@@ -505,7 +485,7 @@ export default function ReportesPage() {
         {activeTab === "resumen" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Desglose de Ventas y Utilidades */}
-            <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border space-y-4">
+            <div className="p-5 admin-panel space-y-4">
               <h3 className="font-bold text-sm text-admin-text flex items-center gap-2">
                 <Receipt className="h-4 w-4 text-admin-brand-text" />
                 Estado de Resultados Diario
@@ -544,7 +524,7 @@ export default function ReportesPage() {
             </div>
 
             {/* Desglose por Canales y Cajas */}
-            <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border space-y-4">
+            <div className="p-5 admin-panel space-y-4">
               <h3 className="font-bold text-sm text-admin-text flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-admin-brand-text" />
                 Segregación por Canal de Cobro
@@ -595,7 +575,7 @@ export default function ReportesPage() {
             PESTAÑA 2: ARQUEO DE TURNOS DE CAJA
             ========================================================================= */}
         {activeTab === "turnos" && (
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="admin-panel overflow-hidden">
             <div className="p-4 border-b border-admin-card-border flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-sm text-admin-text">
@@ -712,7 +692,7 @@ export default function ReportesPage() {
             PESTAÑA 3: TOP PRODUCTOS VENDIDOS
             ========================================================================= */}
         {activeTab === "productos" && (
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="admin-panel overflow-hidden">
             <div className="p-4 border-b border-admin-card-border">
               <h3 className="font-bold text-sm text-admin-text">
                 Ranking de Productos por Recaudación y Margen
@@ -799,7 +779,7 @@ export default function ReportesPage() {
             PESTAÑA 4: AUDITORÍA DE DEVOLUCIONES DEL DÍA
             ========================================================================= */}
         {activeTab === "devoluciones" && (
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="admin-panel overflow-hidden">
             <div className="p-4 border-b border-admin-card-border">
               <h3 className="font-bold text-sm text-admin-text">
                 Registro Oficial de Devoluciones y Salidas de Gaveta
@@ -862,7 +842,7 @@ export default function ReportesPage() {
             PESTAÑA 5: DETALLE DE TODAS LAS VENTAS DEL DÍA
             ========================================================================= */}
         {activeTab === "ventas" && (
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden space-y-3">
+          <div className="admin-panel overflow-hidden space-y-3">
             {/* Filtros de búsqueda */}
             <div className="p-4 border-b border-admin-card-border flex flex-wrap items-center justify-between gap-3">
               <div className="relative flex-1 min-w-[200px] max-w-sm">

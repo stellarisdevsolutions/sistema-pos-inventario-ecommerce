@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard } from "@/components/admin/metric-card";
+
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
 
 import { useState, useEffect, useMemo } from "react";
@@ -43,7 +45,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { CURRENCY_SYMBOL, CURRENCY_NAME } from "@/lib/currency";
+import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrencyLocale } from "@/lib/currency";
 import {
   getPurchasesAction,
   cancelPurchaseAction,
@@ -293,89 +295,40 @@ export default function ComprasPage() {
       {/* =========================================================================
           2. METRIC KPIS CORPORATIVOS (4 TARJETAS)
           ========================================================================= */}
-      <section className="admin-kpi-grid">
-        {/* KPI 1: Inversión en Compras (Mes) */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-admin-secondary">
-              Inversión del Mes
-            </span>
-            <div className="h-7 w-7 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400">
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-bold text-admin-text tracking-tight mt-3">
-            {CURRENCY_SYMBOL}{" "}
-            {kpis.monthlyInvestment.toLocaleString("es-BO", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </div>
-          <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-1 block">
-            Compras en el mes en curso ({CURRENCY_NAME})
-          </span>
-        </div>
-
-        {/* KPI 2: Facturas Procesadas */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-admin-secondary">
-              Facturas del Mes
-            </span>
-            <div className="h-7 w-7 rounded-full bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-center text-admin-brand-text">
-              <Receipt className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-bold text-admin-brand-text tracking-tight mt-3">
-            {kpis.monthlyPurchasesCount}
-          </div>
-          <span className="text-[11px] text-admin-brand-text font-semibold mt-1 block">
-            Recepciones en almacén
-          </span>
-        </div>
-
-        {/* KPI 3: Unidades Ingresadas */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-admin-secondary">
-              Unidades Ingresadas
-            </span>
-            <div className="h-7 w-7 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <PackagePlus className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight mt-3">
-            {kpis.monthlyUnitsReceived.toLocaleString("es-BO")}{" "}
-            <span className="text-sm font-semibold text-slate-500">piezas</span>
-          </div>
-          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1 block">
-            Sumadas al stock disponible
-          </span>
-        </div>
-
-        {/* KPI 4: Proveedores con Compras */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-admin-secondary">
-              Proveedores Suministradores
-            </span>
-            <div className="h-7 w-7 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400">
-              <Building2 className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-bold text-amber-600 dark:text-amber-400 tracking-tight mt-3">
-            {kpis.totalSuppliersCount}
-          </div>
-          <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-1 block">
-            Empresas con compras activas
-          </span>
-        </div>
+      <section className="admin-metrics" aria-label="Indicadores de compras">
+        <MetricCard
+          label="Inversión del mes"
+          value={formatCurrencyLocale(kpis.monthlyInvestment)}
+          detail={`Compras en el mes en curso (${CURRENCY_NAME})`}
+          icon={DollarSign}
+          appearance="lead"
+        />
+        <MetricCard
+          label="Facturas del mes"
+          value={kpis.monthlyPurchasesCount}
+          detail="Recepciones en almacén"
+          icon={Receipt}
+          appearance="desk"
+        />
+        <MetricCard
+          label="Unidades ingresadas"
+          value={kpis.monthlyUnitsReceived.toLocaleString("es-BO")}
+          detail="Piezas sumadas al stock disponible"
+          icon={PackagePlus}
+          tone="success"
+        />
+        <MetricCard
+          label="Proveedores"
+          value={kpis.totalSuppliersCount}
+          detail="Empresas con compras registradas"
+          icon={Building2}
+        />
       </section>
 
       {/* =========================================================================
           3. BARRA DE HERRAMIENTAS: BUSCADOR Y FILTROS POR ESTADO
           ========================================================================= */}
-      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 space-y-3">
+      <div className="admin-panel p-4 space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Buscador */}
           <div className="relative flex-1">
@@ -387,7 +340,7 @@ export default function ComprasPage() {
                 setCurrentPage(1);
               }}
               placeholder="Buscar por orden COM-..., factura, proveedor o producto..."
-              className="pl-9 h-11 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-white dark:focus:bg-slate-900 transition-colors"
+              className="pl-9 h-11 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-admin-card-bg transition-colors"
             />
             {searchTerm && (
               <button
@@ -462,7 +415,7 @@ export default function ComprasPage() {
       {/* =========================================================================
           4. TABLA PRINCIPAL DE COMPRAS Y RECEPCIONES
           ========================================================================= */}
-      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+      <div className="admin-panel overflow-hidden">
         {isLoading ? (
           <div className="py-20 text-center space-y-3">
             <RefreshCw className="h-7 w-7 text-admin-brand-text animate-spin mx-auto" />
@@ -871,7 +824,7 @@ export default function ComprasPage() {
         open={!!purchaseToCancel}
         onOpenChange={(open) => !open && setPurchaseToCancel(null)}
       >
-        <DialogContent className="sm:max-w-md rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+        <DialogContent className="sm:max-w-md admin-panel p-6">
           <DialogHeader className="pb-2 border-b border-admin-card-border">
             <DialogTitle className="text-base font-semibold text-rose-600 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />

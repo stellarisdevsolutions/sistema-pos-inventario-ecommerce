@@ -726,27 +726,19 @@ export default function VentasPage() {
             <span>Control de Cajas</span>
           </Link>
 
-          <div className="flex items-center bg-admin-raised p-1 rounded-xl border border-admin-card-border">
+          <div className="admin-segments">
             <button
               onClick={() => setActiveTab("pos")}
-              className={cn(
-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                activeTab === "pos"
-                  ? "bg-admin-brand text-admin-on-solid"
-                  : "text-admin-secondary hover:text-slate-900"
-              )}
+              aria-pressed={activeTab === "pos"}
+              className="admin-segment"
             >
               <ShoppingCart className="h-3.5 w-3.5" />
               <span>Terminal POS</span>
             </button>
             <button
               onClick={() => setActiveTab("history")}
-              className={cn(
-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                activeTab === "history"
-                  ? "bg-admin-brand text-admin-on-solid"
-                  : "text-admin-secondary hover:text-slate-900"
-              )}
+              aria-pressed={activeTab === "history"}
+              className="admin-segment"
             >
               <Receipt className="h-3.5 w-3.5" />
               <span>Historial de Ventas</span>
@@ -819,7 +811,7 @@ export default function VentasPage() {
             {/* LADO IZQUIERDO: CATÁLOGO DE PRODUCTOS (7 Columnas) */}
             <div className="lg:col-span-7 space-y-4">
               {/* Buscador + Escáner de Códigos de Barra */}
-              <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 space-y-3">
+              <div className="admin-panel p-4 space-y-3">
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 <Input
@@ -961,9 +953,9 @@ export default function VentasPage() {
 
           {/* LADO DERECHO: TICKET DE CAJA / REGISTRADORA (5 Columnas) */}
           <div id="pos-ticket-panel" className="lg:col-span-5">
-            <div className="sticky top-20 rounded-xl bg-admin-card-bg border border-admin-card-border p-5 space-y-4">
+            <div className="sticky top-20 admin-panel p-5 space-y-4">
               {/* Header del Ticket */}
-              <div className="flex items-center justify-between pb-3 border-b border-admin-card-border">
+              <div className="admin-ticket-head flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="h-9 w-9 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center">
                     <Receipt className="h-4 w-4" />
@@ -1346,7 +1338,7 @@ export default function VentasPage() {
         <div className="space-y-4">
           {/* Tarjetas de Métricas Rápidas: Desglose Cajas vs Venta Administrativa */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
+            <div className="admin-panel p-4">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                 Total Facturado
               </span>
@@ -1358,7 +1350,7 @@ export default function VentasPage() {
               </span>
             </div>
 
-            <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
+            <div className="admin-panel p-4">
               <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
                 <Wallet className="h-3 w-3" />
                 Cajas Mostrador
@@ -1371,7 +1363,7 @@ export default function VentasPage() {
               </span>
             </div>
 
-            <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
+            <div className="admin-panel p-4">
               <span className="text-[10px] font-bold text-admin-brand-text uppercase tracking-wider flex items-center gap-1">
                 <Building2 className="h-3 w-3" />
                 Ventas Adm. Directas
@@ -1384,7 +1376,7 @@ export default function VentasPage() {
               </span>
             </div>
 
-            <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
+            <div className="admin-panel p-4">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                 Ventas de Hoy
               </span>
@@ -1396,7 +1388,7 @@ export default function VentasPage() {
               </span>
             </div>
 
-            <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 col-span-2 sm:col-span-1">
+            <div className="admin-panel p-4 col-span-2 sm:col-span-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                 Ticket Promedio
               </span>
@@ -1410,7 +1402,7 @@ export default function VentasPage() {
           </div>
 
           {/* Filtros de Búsqueda del Historial */}
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 flex flex-col sm:flex-row items-center gap-3">
+          <div className="admin-panel p-4 flex flex-col sm:flex-row items-center gap-3">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
@@ -1469,7 +1461,7 @@ export default function VentasPage() {
           </div>
 
           {/* Tabla de Ventas */}
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="admin-panel overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-slate-500 uppercase tracking-wider">
@@ -1958,7 +1950,7 @@ export default function VentasPage() {
           6. MODAL DE CONFIRMACIÓN DE ANULACIÓN DE VENTA
           ========================================================================= */}
       <Dialog open={cancelModalOpen} onOpenChange={setCancelModalOpen}>
-        <DialogContent className="sm:max-w-md p-6 rounded-xl bg-admin-card-bg border border-admin-card-border">
+        <DialogContent className="sm:max-w-md p-6 admin-panel">
           <DialogHeader>
             <div className="h-10 w-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center mb-2">
               <AlertTriangle className="h-5 w-5" />
@@ -2041,7 +2033,7 @@ export default function VentasPage() {
           7. MODAL DE DEVOLUCIÓN PARCIAL / POR ÍTEM CON AUTORIZACIÓN PIN SUPERVISOR
           ========================================================================= */}
       <Dialog open={refundModalOpen} onOpenChange={setRefundModalOpen}>
-        <DialogContent className="sm:max-w-xl p-6 rounded-xl bg-admin-card-bg border border-admin-card-border max-h-[92vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-xl p-6 admin-panel max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <div className="h-10 w-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 flex items-center justify-center mb-1">
               <RotateCcw className="h-5 w-5" />

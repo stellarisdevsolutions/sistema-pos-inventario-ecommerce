@@ -18,7 +18,7 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   badge?: string;
-  section: "general" | "operaciones" | "canales";
+  section: "general" | "seguimiento" | "operaciones" | "canales";
   allowedRoles: UserRole[];
 }
 
@@ -48,21 +48,21 @@ export const navigationItems: NavItem[] = [
     title: "Reporte Z",
     href: "/admin/reportes",
     icon: BarChart3,
-    section: "general",
+    section: "seguimiento",
     allowedRoles: ["admin", "manager"],
   },
   {
     title: "Analítica",
     href: "/admin/analitica",
     icon: TrendingUp,
-    section: "general",
+    section: "seguimiento",
     allowedRoles: ["admin", "manager"],
   },
   {
     title: "Usuarios",
     href: "/admin/usuarios",
     icon: ShieldCheck,
-    section: "general",
+    section: "seguimiento",
     allowedRoles: ["admin"],
   },
   {

@@ -264,11 +264,11 @@ export default function NuevaCompraPage() {
       {/* =========================================================================
           1. HEADER CON RETORNO Y TÍTULO
           ========================================================================= */}
-      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+      <div className="admin-page-header admin-cover flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
         <div className="space-y-1">
           <Link
             href="/admin/compras"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-admin-brand-text dark:text-slate-400 dark:hover:text-admin-brand-text transition-colors"
+            className="admin-return"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>Volver a Compras & Entradas</span>
@@ -295,7 +295,7 @@ export default function NuevaCompraPage() {
                 =================================================================== */}
             <div className="lg:col-span-8 space-y-6">
               {/* Tarjeta 1: Datos de Factura y Proveedor */}
-              <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 space-y-4">
+              <div className="admin-panel p-5 space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-admin-card-border">
                   <Building2 className="h-4 w-4 text-admin-brand-text" />
                   <h2 className="text-sm font-bold text-admin-text">
@@ -374,7 +374,7 @@ export default function NuevaCompraPage() {
               </div>
 
               {/* Tarjeta 2: Detalle de Productos a Ingresar */}
-              <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+              <div className="admin-panel overflow-hidden">
                 <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-admin-card-border">
                   <div className="flex items-center gap-2">
                     <Package className="h-4 w-4 text-admin-brand-text" />
@@ -544,7 +544,7 @@ export default function NuevaCompraPage() {
                 =================================================================== */}
             <div className="lg:col-span-4 space-y-4">
               {/* Tarjeta de Resumen Financiero */}
-              <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 space-y-4 sticky top-6">
+              <div className="admin-panel p-5 space-y-4 sticky top-6">
                 <div className="flex items-center gap-2 pb-3 border-b border-admin-card-border">
                   <Receipt className="h-4 w-4 text-admin-brand-text" />
                   <h3 className="text-sm font-bold text-admin-text">
@@ -639,7 +639,7 @@ export default function NuevaCompraPage() {
           MODAL: LISTADO DE PRODUCTOS CON BUSCADOR, PAGINACIÓN Y BOTÓN AGREGAR
           ========================================================================= */}
       <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
-        <DialogContent className="sm:max-w-3xl h-[85vh] sm:h-[620px] max-h-[90vh] flex flex-col rounded-xl bg-admin-card-bg border border-admin-card-border p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-3xl h-[85vh] sm:h-[620px] max-h-[90vh] flex flex-col admin-panel p-0 overflow-hidden">
           {/* Header del Modal */}
           <DialogHeader className="p-5 pb-4 border-b border-admin-card-border shrink-0">
             <div className="flex items-center justify-between">
@@ -667,7 +667,7 @@ export default function NuevaCompraPage() {
                   setModalCurrentPage(1);
                 }}
                 placeholder="Buscar por nombre de producto..."
-                className="pl-9 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-white dark:focus:bg-slate-900"
+                className="pl-9 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-admin-card-bg"
               />
               {modalSearchTerm && (
                 <button

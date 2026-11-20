@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard } from "@/components/admin/metric-card";
+
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -385,104 +387,51 @@ export default function CajasPage() {
       {/* =========================================================================
           2. KPIS FINANCIEROS DE CONTROL DE CAJAS
           ========================================================================= */}
-      <div className="admin-kpi-grid">
-        {/* Card 1: Fondo Inicial Activo */}
-        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-            <span>Fondo Inicial en Gavetas</span>
-            <div className="p-2 rounded-xl bg-admin-raised text-admin-secondary">
-              <Banknote className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-semibold text-admin-text">
-              {formatCurrency(kpis.activeInitialCash)}
-            </span>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {kpis.activeShiftsCount} {kpis.activeShiftsCount === 1 ? "caja abierta" : "cajas abiertas"}
-            </p>
-          </div>
-        </div>
-
-        {/* Card 2: Ventas Efectivo Hoy */}
-        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-            <span>Ventas Efectivo Hoy</span>
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-semibold text-admin-text">
-              {formatCurrency(kpis.todayCashSales)}
-            </span>
-            <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
-              Dinero ingresado en turnos
-            </p>
-          </div>
-        </div>
-
-        {/* Card 3: Ventas Tarjeta / QR */}
-        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-            <span>Ventas Tarjeta / QR</span>
-            <div className="p-2 rounded-xl bg-admin-brand-subtle text-admin-brand-text">
-              <CreditCard className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-semibold text-admin-text">
-              {formatCurrency(kpis.todayCardTransferSales)}
-            </span>
-            <p className="text-[11px] text-admin-brand-text font-bold mt-0.5">
-              Cobros electrónicos conciliados
-            </p>
-          </div>
-        </div>
-
-        {/* Card 4: Precisión de Arqueos */}
-        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
-            <span>Precisión de Arqueos</span>
-            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-semibold text-admin-text">
-              {kpis.auditPrecisionPercent}%
-            </span>
-            <p className="text-[11px] text-blue-600 font-bold mt-0.5">
-              Cierres cuadrados exactos
-            </p>
-          </div>
-        </div>
-      </div>
+      <section className="admin-metrics" aria-label="Indicadores de cajas">
+        <MetricCard
+          label="Fondo inicial en gavetas"
+          value={formatCurrency(kpis.activeInitialCash)}
+          detail={`${kpis.activeShiftsCount} ${kpis.activeShiftsCount === 1 ? "caja abierta" : "cajas abiertas"}`}
+          icon={Banknote}
+          appearance="lead"
+        />
+        <MetricCard
+          label="Ventas en efectivo hoy"
+          value={formatCurrency(kpis.todayCashSales)}
+          detail="Dinero ingresado en turnos"
+          icon={TrendingUp}
+          tone="success"
+        />
+        <MetricCard
+          label="Ventas con tarjeta o QR"
+          value={formatCurrency(kpis.todayCardTransferSales)}
+          detail="Cobros electrónicos conciliados"
+          icon={CreditCard}
+        />
+        <MetricCard
+          label="Precisión de arqueos"
+          value={`${kpis.auditPrecisionPercent}%`}
+          detail="Cierres sin diferencias"
+          icon={ShieldCheck}
+        />
+      </section>
 
       {/* =========================================================================
           3. SELECTOR DE PESTAÑAS (TERMINALES vs HISTORIAL)
           ========================================================================= */}
-      <div className="flex items-center gap-2 p-1.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/60 w-fit">
+      <div className="admin-segments">
         <button
           onClick={() => setActiveTab("registers")}
-          className={cn(
-            "px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5",
-            activeTab === "registers"
-              ? "bg-admin-card-bg text-admin-brand-text"
-              : "text-admin-secondary hover:text-slate-900"
-          )}
+          aria-pressed={activeTab === "registers"}
+          className="admin-segment"
         >
           <Store className="h-3.5 w-3.5" />
           <span>Terminales POS & Turno Activo</span>
         </button>
         <button
           onClick={() => setActiveTab("history")}
-          className={cn(
-            "px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5",
-            activeTab === "history"
-              ? "bg-admin-card-bg text-admin-brand-text"
-              : "text-admin-secondary hover:text-slate-900"
-          )}
+          aria-pressed={activeTab === "history"}
+          className="admin-segment"
         >
           <Receipt className="h-3.5 w-3.5" />
           <span>Historial de Arqueos Auditados</span>
@@ -526,7 +475,7 @@ export default function CajasPage() {
                 return (
                   <div
                     key={reg.id}
-                    className="rounded-xl p-6 bg-admin-inverse border border-admin-inverse-border text-white relative overflow-hidden flex flex-col justify-between"
+                    className="admin-register p-6 border border-admin-inverse-border text-white relative overflow-hidden flex flex-col justify-between"
                   >
                     <div className="space-y-4">
                       {/* Cabecera de la Caja */}
@@ -568,7 +517,7 @@ export default function CajasPage() {
 
                       {/* Métricas del turno activo */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <div className="p-3 rounded-xl bg-admin-sidebar-hover border border-admin-inverse-border">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Fondo
                           </span>
@@ -576,7 +525,7 @@ export default function CajasPage() {
                             {formatCurrency(active.initialCash)}
                           </p>
                         </div>
-                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <div className="p-3 rounded-xl bg-admin-sidebar-hover border border-admin-inverse-border">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Efectivo
                           </span>
@@ -584,7 +533,7 @@ export default function CajasPage() {
                             +{formatCurrency(active.cashSales)}
                           </p>
                         </div>
-                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                        <div className="p-3 rounded-xl bg-admin-sidebar-hover border border-admin-inverse-border">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Tarjetas/QR
                           </span>
@@ -694,7 +643,7 @@ export default function CajasPage() {
             ========================================================================= */
         <div className="space-y-4">
           {/* Barra de Filtros */}
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 flex flex-col sm:flex-row items-center gap-3">
+          <div className="admin-panel p-4 flex flex-col sm:flex-row items-center gap-3">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
@@ -730,7 +679,7 @@ export default function CajasPage() {
           </div>
 
           {/* Tabla de Arqueos Auditados */}
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="admin-panel overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
@@ -858,7 +807,7 @@ export default function CajasPage() {
           6. MODAL: ARQUEO CIEGO & CIERRE DE TURNO
           ========================================================================= */}
       <Dialog open={closeShiftModalOpen} onOpenChange={setCloseShiftModalOpen}>
-        <DialogContent className="sm:max-w-lg rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+        <DialogContent className="sm:max-w-lg admin-panel p-6">
           <DialogHeader className="pb-3 border-b border-admin-card-border">
             <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-admin-brand-text" />
@@ -1001,7 +950,7 @@ export default function CajasPage() {
           7. MODAL: APERTURA DE TURNO DE CAJA
           ========================================================================= */}
       <Dialog open={openShiftModalOpen} onOpenChange={setOpenShiftModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+        <DialogContent className="sm:max-w-md admin-panel p-6">
           <DialogHeader className="pb-3 border-b border-admin-card-border">
             <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
               <Store className="h-5 w-5 text-admin-brand-text" />
@@ -1114,7 +1063,7 @@ export default function CajasPage() {
           8. MODAL: CREAR NUEVA CAJA FÍSICA
           ========================================================================= */}
       <Dialog open={createRegisterModalOpen} onOpenChange={setCreateRegisterModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+        <DialogContent className="sm:max-w-md admin-panel p-6">
           <DialogHeader className="pb-3 border-b border-admin-card-border">
             <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
               <Plus className="h-5 w-5 text-admin-brand-text" />
@@ -1201,7 +1150,7 @@ export default function CajasPage() {
           9. MODAL: VER ACTA DE ARQUEO HISTÓRICO
           ========================================================================= */}
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+        <DialogContent className="sm:max-w-md admin-panel p-6">
           <DialogHeader className="pb-3 border-b border-admin-card-border">
             <DialogTitle className="text-base font-semibold text-admin-text flex items-center gap-2">
               <Receipt className="h-4 w-4 text-admin-brand-text" />
@@ -1322,7 +1271,7 @@ export default function CajasPage() {
           10. MODAL: TICKETS Y PRODUCTOS VENDIDOS EN LA CAJA (DRILL-DOWN)
           ========================================================================= */}
       <Dialog open={shiftSalesModalOpen} onOpenChange={setShiftSalesModalOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto admin-panel p-6">
           <DialogHeader className="pb-3 border-b border-admin-card-border">
             <div className="flex items-center justify-between">
               <div>

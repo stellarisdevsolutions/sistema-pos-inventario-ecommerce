@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard } from "@/components/admin/metric-card";
+
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
 
 import { useState, useEffect, useRef } from "react";
@@ -878,7 +880,7 @@ export default function InventarioPage() {
       {/* =========================================================================
           1. HEADER DEL MÓDULO (ESTILO BENTO / QUIXOTIC)
           ========================================================================= */}
-      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header admin-cover flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <h1 className="admin-page-title">Inventario y Kárdex</h1>
           <p className="admin-page-description">Productos, existencias y movimientos de stock.</p>
@@ -911,92 +913,44 @@ export default function InventarioPage() {
       {/* =========================================================================
           2. LAS 4 TARJETAS KPI DE INVENTARIO BENTO
           ========================================================================= */}
-      <section className="admin-kpi-grid">
-        {/* KPI 1: VALORIZACIÓN TOTAL */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between min-h-[160px]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-admin-muted">Valor en Bodega</span>
-            <div className="h-8 w-8 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600">
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-3xl font-semibold text-admin-text tracking-tight mt-3">
-            {CURRENCY_SYMBOL}{" "}
-            {products
-              .reduce((acc, p) => acc + p.stock * p.costPrice, 0)
-              .toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <span className="text-xs text-emerald-600 font-bold mt-1 block">
-            Costo de reposición
-          </span>
-        </div>
-
-        {/* KPI 2: TOTAL EXISTENCIAS */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between min-h-[160px]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-admin-muted">Unidades Físicas</span>
-            <div className="h-8 w-8 rounded-full bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-center text-admin-brand-text">
-              <Boxes className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-3xl font-semibold text-admin-text tracking-tight mt-3">
-            {products.reduce((acc, p) => acc + p.stock, 0)}{" "}
-            <span className="text-sm font-bold text-slate-400">uds</span>
-          </div>
-          <span className="text-xs text-admin-brand-text font-bold mt-1 block">
-            {categoriesList.filter((c) => c !== "Sin categoría").length} categorías activas
-          </span>
-        </div>
-
-        {/* KPI 3: ALERTA STOCK CRÍTICO */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between min-h-[160px]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-admin-muted">Stock Crítico</span>
-            <div className="h-8 w-8 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600">
-              <AlertTriangle className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-3xl font-semibold text-amber-600 tracking-tight mt-3">
-            {products.filter((p) => p.stock <= p.minStock).length}{" "}
-            <span className="text-sm font-bold text-amber-600/70">ítems</span>
-          </div>
-          <span className="text-xs text-amber-600 font-bold mt-1 block">
-            Por debajo del umbral mínimo
-          </span>
-        </div>
-
-        {/* KPI 4: MERMAS & PÉRDIDAS */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between min-h-[160px]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-admin-muted">Mermas del Mes</span>
-            <div className="h-8 w-8 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 flex items-center justify-center text-rose-600">
-              <ShieldAlert className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-3xl font-semibold text-rose-600 tracking-tight mt-3">
-            {CURRENCY_SYMBOL}{" "}
-            {activeAdjustmentsSource
-              .reduce((acc, a) => acc + a.totalLoss, 0)
-              .toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <span className="text-xs text-rose-600 font-bold mt-1 block">
-            {activeAdjustmentsSource.length} actas de baja
-          </span>
-        </div>
+      <section className="admin-metrics" aria-label="Indicadores de inventario">
+        <MetricCard
+          label="Valor en bodega"
+          value={formatCurrencyLocale(products.reduce((sum, p) => sum + p.stock * p.costPrice, 0))}
+          detail="Costo de reposición"
+          icon={DollarSign}
+          appearance="lead"
+        />
+        <MetricCard
+          label="Unidades físicas"
+          value={products.reduce((sum, p) => sum + p.stock, 0)}
+          detail={`${categoriesList.filter((c) => c !== "Sin categoría").length} categorías activas`}
+          icon={Boxes}
+        />
+        <MetricCard
+          label="Stock crítico"
+          value={products.filter((p) => p.stock <= p.minStock).length}
+          detail="Productos en el mínimo o por debajo"
+          icon={AlertTriangle}
+          tone="warning"
+        />
+        <MetricCard
+          label="Mermas del mes"
+          value={formatCurrencyLocale(activeAdjustmentsSource.reduce((sum, a) => sum + a.totalLoss, 0))}
+          detail={`${activeAdjustmentsSource.length} actas de baja`}
+          icon={ShieldAlert}
+          tone="danger"
+        />
       </section>
 
       {/* =========================================================================
           3. SELECTOR DE PESTAÑAS (SEGMENTED CONTROL MODERNO)
           ========================================================================= */}
-      <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-admin-raised w-fit">
+      <div className="admin-segments">
         <button
           onClick={() => setActiveTab("catalog")}
-          className={cn(
-            "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
-            activeTab === "catalog"
-              ? "bg-admin-card-bg text-admin-brand-text"
-              : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
-          )}
+          aria-pressed={activeTab === "catalog"}
+          className="admin-segment"
         >
           <Package className="h-4 w-4" />
           <span>Stock & Catálogo</span>
@@ -1004,12 +958,8 @@ export default function InventarioPage() {
 
         <button
           onClick={() => setActiveTab("kardex")}
-          className={cn(
-            "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
-            activeTab === "kardex"
-              ? "bg-admin-card-bg text-admin-brand-text"
-              : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
-          )}
+          aria-pressed={activeTab === "kardex"}
+          className="admin-segment"
         >
           <BookOpen className="h-4 w-4" />
           <span>Kárdex</span>
@@ -1017,12 +967,8 @@ export default function InventarioPage() {
 
         <button
           onClick={() => setActiveTab("adjustments")}
-          className={cn(
-            "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
-            activeTab === "adjustments"
-              ? "bg-admin-card-bg text-rose-600"
-              : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
-          )}
+          aria-pressed={activeTab === "adjustments"}
+          className="admin-segment"
         >
           <ShieldAlert className="h-4 w-4 text-rose-500" />
           <span>Bajas & Mermas</span>
@@ -1034,7 +980,7 @@ export default function InventarioPage() {
           ========================================================================= */}
       {activeTab === "catalog" ? (
         /* PESTAÑA 1: CATÁLOGO DE PRODUCTOS & STOCK ACTUAL */
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+        <div className="admin-panel overflow-hidden">
           {/* =========================================================================
               BARRA DE BÚSQUEDA, VISTA Y FILTROS SEGÚN ESPECIFICACIÓN
               ========================================================================= */}
@@ -1050,7 +996,7 @@ export default function InventarioPage() {
                     setSearchTerm(e.target.value);
                     setCatalogPage(1);
                   }}
-                  className="pl-9 h-11 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-white dark:focus:bg-slate-900 transition-colors"
+                  className="pl-9 h-11 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-admin-card-bg transition-colors"
                 />
                 {searchTerm && (
                   <button
@@ -1712,7 +1658,7 @@ export default function InventarioPage() {
         </div>
       ) : activeTab === "kardex" ? (
         /* PESTAÑA 2: KÁRDEX AUDITORÍA GENERAL (LIBRO MAYOR) */
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+        <div className="admin-panel overflow-hidden">
           {/* Header de la auditoría */}
           <div className="p-4 border-b border-admin-card-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -1887,7 +1833,7 @@ export default function InventarioPage() {
         </div>
       ) : (
         /* PESTAÑA 3: BAJAS & MERMAS POR DAÑO */
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+        <div className="admin-panel overflow-hidden">
           <div className="p-4 border-b border-admin-card-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -2315,7 +2261,7 @@ export default function InventarioPage() {
                     {productSpecificKardex.map((item) => (
                       <div
                         key={item.id}
-                        className="p-3.5 rounded-xl bg-admin-card-bg border border-admin-card-border space-y-2"
+                        className="p-3.5 admin-panel space-y-2"
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-mono text-slate-500">{item.date}</span>

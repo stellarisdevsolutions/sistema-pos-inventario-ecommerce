@@ -7,8 +7,9 @@ import { useAuth } from "@/context/auth-context";
 import { isModuleActive, navigationItems } from "./nav-items";
 
 const sections = [
-  { id: "general", label: "Gestión" },
+  { id: "general", label: "Operación diaria" },
   { id: "operaciones", label: "Abastecimiento" },
+  { id: "seguimiento", label: "Control y análisis" },
 ] as const;
 
 export function Sidebar({ collapsed = false, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {

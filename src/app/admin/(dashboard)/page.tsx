@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard } from "@/components/admin/metric-card";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -225,66 +227,69 @@ export default function AdminDashboardPage() {
       </div>
 
       <section className="admin-metrics" aria-label="Indicadores del negocio">
-        <div className="admin-metric admin-metric-lead">
-          <div className="admin-metric-label">Ventas del mes <TrendingUp size={17} aria-hidden /></div>
-          <div className="admin-metric-value">{formatMetric(kpis.monthSalesTotal)}</div>
-          <div className="admin-metric-detail">{kpis.monthSalesCount} tickets · {kpis.posPercentage}% POS · {kpis.adminPercentage}% administración</div>
-        </div>
-        <div className="admin-metric">
-          <div className="admin-metric-label">Ganancia bruta <DollarSign size={17} aria-hidden /></div>
-          <div className="admin-metric-value">{formatMetric(kpis.grossProfit)}</div>
-          <div className="admin-metric-detail">{kpis.profitMargin.toFixed(1)}% de margen</div>
-        </div>
-        <div className="admin-metric">
-          <div className="admin-metric-label">Ticket promedio <Receipt size={17} aria-hidden /></div>
-          <div className="admin-metric-value">{formatMetric(kpis.averageTicket)}</div>
-          <div className="admin-metric-detail">Importe medio por venta</div>
-        </div>
-        <div className="admin-metric">
-          <div className="admin-metric-label">Efectivo en cajas <Wallet size={17} aria-hidden /></div>
-          <div className="admin-metric-value">{formatMetric(kpis.cashInDrawers)}</div>
-          <div className="admin-metric-detail">{kpis.activeDrawersCount} de {kpis.totalDrawersCount} terminales activas</div>
-          <div className="admin-metric-detail">Efectivo {formatMetric(kpis.cashAmount)} · QR {formatMetric(kpis.qrAmount)}</div>
-        </div>
+        <MetricCard
+          label="Ventas del mes"
+          value={formatMetric(kpis.monthSalesTotal)}
+          detail={
+            <>
+              <span>{kpis.monthSalesCount} tickets · {kpis.posPercentage}% POS · {kpis.adminPercentage}% administración</span>
+              {kpis.monthSalesCount > 0 && (
+                <div className="admin-channel-mix" aria-hidden="true">
+                  <span style={{ width: `${kpis.posPercentage}%` }} />
+                </div>
+              )}
+            </>
+          }
+          icon={TrendingUp}
+          appearance="lead"
+        />
+        <MetricCard
+          label="Ganancia bruta"
+          value={formatMetric(kpis.grossProfit)}
+          detail={`${kpis.profitMargin.toFixed(1)}% de margen`}
+          icon={DollarSign}
+          tone="success"
+        />
+        <MetricCard
+          label="Ticket promedio"
+          value={formatMetric(kpis.averageTicket)}
+          detail="Importe medio por venta"
+          icon={Receipt}
+          appearance="desk"
+        />
+        <MetricCard
+          label="Efectivo en cajas"
+          value={formatMetric(kpis.cashInDrawers)}
+          detail={<>{kpis.activeDrawersCount} de {kpis.totalDrawersCount} terminales activas<br />Efectivo {formatMetric(kpis.cashAmount)} · QR {formatMetric(kpis.qrAmount)}</>}
+          icon={Wallet}
+        />
       </section>
 
       {/* =========================================================================
           3. BARRA DE FILTROS SEGMENTADA (ESTILO MODERNO BENTO)
           ========================================================================= */}
       <section className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-admin-raised border border-admin-card-border">
+        <div className="admin-segments">
           <button
             onClick={() => setActiveChannelTab("all")}
-            className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
-              activeChannelTab === "all"
-                ? "bg-admin-card-bg text-admin-brand-text"
-                : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
-            )}
+            aria-pressed={activeChannelTab === "all"}
+            className="admin-segment"
           >
             Todos ({recentSales.length})
           </button>
 
           <button
             onClick={() => setActiveChannelTab("pos")}
-            className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
-              activeChannelTab === "pos"
-                ? "bg-admin-card-bg text-admin-brand-text"
-                : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
-            )}
+            aria-pressed={activeChannelTab === "pos"}
+            className="admin-segment"
           >
             Mostrador POS
           </button>
 
           <button
             onClick={() => setActiveChannelTab("administrative")}
-            className={cn(
-              "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
-              activeChannelTab === "administrative"
-                ? "bg-admin-card-bg text-admin-brand-text"
-                : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
-            )}
+            aria-pressed={activeChannelTab === "administrative"}
+            className="admin-segment"
           >
             Venta Administrativa
           </button>
@@ -297,12 +302,12 @@ export default function AdminDashboardPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por ticket, cliente..."
-            className="w-full h-9 pl-9 pr-4 text-xs rounded-xl bg-admin-card-bg border border-admin-card-border focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20 focus:border-admin-brand"
+            className="w-full h-9 pl-9 pr-4 text-xs admin-panel focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20 focus:border-admin-brand"
           />
         </div>
       </section>
 
-      <section className="rounded-xl bg-admin-raised border border-admin-card-border p-4 sm:p-5 space-y-4">
+      <section className="admin-ledger p-4 sm:p-5 space-y-4">
         <div className="border-b border-admin-card-border pb-3">
           <h2 className="text-base font-semibold text-admin-text">Últimas transacciones</h2>
         </div>
@@ -321,7 +326,7 @@ export default function AdminDashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* COLUMNA IZQUIERDA: LISTA INTERACTIVA DE TICKETS */}
             <div className="lg:col-span-5 space-y-2.5">
-              <div className="text-xs font-bold text-admin-muted uppercase tracking-wider px-2">
+              <div className="text-xs font-semibold text-admin-sidebar-text px-2">
                 Últimos Tickets ({filteredSales.length})
               </div>
 
@@ -335,12 +340,7 @@ export default function AdminDashboardPage() {
                       aria-pressed={isSelected}
                       key={sale.id}
                       onClick={() => setSelectedSaleId(sale.id)}
-                      className={cn(
-                        "flex w-full items-center justify-between text-left p-3.5 rounded-xl transition-colors cursor-pointer",
-                        isSelected
-                          ? "bg-admin-brand-subtle border border-admin-brand"
-                          : "bg-admin-card-bg hover:bg-admin-card-bg border border-admin-card-border text-admin-muted"
-                      )}
+                      className="admin-ledger-row"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="h-10 w-10 rounded-full bg-admin-brand-subtle border border-admin-brand flex items-center justify-center font-semibold text-admin-brand-text text-xs shrink-0">
@@ -381,7 +381,7 @@ export default function AdminDashboardPage() {
             {/* COLUMNA DERECHA: TARJETA DE DETALLE AUDITADO */}
             {selectedSale && (
               <div className="lg:col-span-7">
-                <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 lg:p-7 space-y-6">
+                <div className="admin-receipt p-4 lg:p-6 space-y-5">
                   {/* Encabezado del Detalle */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-admin-card-border">
                     <div>
@@ -424,7 +424,7 @@ export default function AdminDashboardPage() {
                       {selectedSale.items.map((item, idx) => (
                         <div
                           key={idx}
-                          className="p-3.5 rounded-xl bg-admin-card-bg border border-admin-card-border flex items-center justify-between"
+                          className="p-3.5 admin-panel flex items-center justify-between"
                         >
                           <div>
                             <p className="font-bold text-admin-text text-xs">{item.name}</p>
@@ -447,7 +447,7 @@ export default function AdminDashboardPage() {
                   </div>
 
                   {/* Resumen Financiero */}
-                  <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="p-4 admin-panel grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <div>
                       <span className="text-[10px] text-admin-muted block font-medium">Subtotal</span>
                       <span className="text-sm font-bold text-admin-muted">
@@ -515,7 +515,7 @@ export default function AdminDashboardPage() {
           ========================================================================= */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Bento A: Stock Crítico */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 flex flex-col justify-between">
+        <div className="admin-panel p-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
               <div className="flex items-center gap-2.5">
@@ -578,7 +578,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Bento B: Mermas & Bajas */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 flex flex-col justify-between">
+        <div className="admin-panel p-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
               <div className="flex items-center gap-2.5">

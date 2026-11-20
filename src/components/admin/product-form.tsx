@@ -273,15 +273,10 @@ export function ProductForm({
       {/* =========================================================================
           BARRA SUPERIOR (HEADER DE ACCIONES)
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 admin-page-header">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 admin-page-header admin-cover">
         <div className="flex items-center gap-3">
-          <Link href="/admin/inventario">
-            <button
-              type="button"
-              className="h-10 w-10 rounded-xl border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
+          <Link href="/admin/inventario" aria-label="Volver al inventario" className="admin-return rounded-xl p-2">
+            <ArrowLeft size={18} aria-hidden />
           </Link>
           <div>
             <div className="flex items-center gap-3">
@@ -294,7 +289,7 @@ export function ProductForm({
                 </span>
               )}
             </div>
-            <p className="text-xs text-admin-muted mt-0.5">
+            <p className="admin-page-description">
               Ficha comercial, precios y control de stock
             </p>
           </div>
@@ -337,7 +332,7 @@ export function ProductForm({
       {/* =========================================================================
           FILA 1: INFORMACIÓN PRINCIPAL (FOTOS A LA IZQUIERDA + DATOS A LA DERECHA)
           ========================================================================= */}
-      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-5">
+      <div className="admin-panel p-6 space-y-5">
         <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-admin-brand" />
@@ -544,7 +539,7 @@ export function ProductForm({
       {/* =========================================================================
           FILA 2: PRECIOS Y RENTABILIDAD COMERCIAL
           ========================================================================= */}
-      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-4">
+      <div className="admin-panel p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-emerald-600" />
@@ -693,7 +688,7 @@ export function ProductForm({
           ========================================================================= */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* INVENTARIO */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-4">
+        <div className="admin-panel p-6 space-y-4">
           <div className="flex items-center gap-2 border-b border-admin-card-border pb-3">
             <Boxes className="h-4 w-4 text-admin-brand-text" />
             <h2 className="text-sm font-semibold text-admin-text tracking-tight">
@@ -765,7 +760,7 @@ export function ProductForm({
         </div>
 
         {/* CANALES DE VENTA */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-4">
+        <div className="admin-panel p-6 space-y-4">
           <div className="flex items-center gap-2 border-b border-admin-card-border pb-3">
             <Store className="h-4 w-4 text-admin-brand-text" />
             <h2 className="text-sm font-semibold text-admin-text tracking-tight">

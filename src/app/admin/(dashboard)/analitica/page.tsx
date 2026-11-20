@@ -224,52 +224,36 @@ export default function AnaliticaPage() {
         {/* Acciones de exportación y presets */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Botones Presets Rápidos */}
-          <div className="flex items-center bg-admin-raised p-0.5 rounded-xl border border-admin-card-border">
+          <div className="admin-segments">
             <button
               type="button"
               onClick={() => handlePresetChange("week")}
-              className={cn(
-                "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
-                preset === "week"
-                  ? "bg-admin-card-bg text-admin-text"
-                  : "text-admin-secondary hover:text-slate-900"
-              )}
+              aria-pressed={preset === "week"}
+              className="admin-segment"
             >
               Semana
             </button>
             <button
               type="button"
               onClick={() => handlePresetChange("month")}
-              className={cn(
-                "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
-                preset === "month"
-                  ? "bg-admin-card-bg text-admin-text"
-                  : "text-admin-secondary hover:text-slate-900"
-              )}
+              aria-pressed={preset === "month"}
+              className="admin-segment"
             >
               Este Mes
             </button>
             <button
               type="button"
               onClick={() => handlePresetChange("last30")}
-              className={cn(
-                "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
-                preset === "last30"
-                  ? "bg-admin-card-bg text-admin-text"
-                  : "text-admin-secondary hover:text-slate-900"
-              )}
+              aria-pressed={preset === "last30"}
+              className="admin-segment"
             >
               30 Días
             </button>
             <button
               type="button"
               onClick={() => handlePresetChange("year")}
-              className={cn(
-                "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
-                preset === "year"
-                  ? "bg-admin-card-bg text-admin-text"
-                  : "text-admin-secondary hover:text-slate-900"
-              )}
+              aria-pressed={preset === "year"}
+              className="admin-segment"
             >
               Año
             </button>
@@ -328,7 +312,7 @@ export default function AnaliticaPage() {
           ========================================================================= */}
       <div className="admin-kpi-grid">
         {/* Card 1: Ingresos Netos */}
-        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
+        <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Venta Neta del Periodo
@@ -351,7 +335,7 @@ export default function AnaliticaPage() {
         </div>
 
         {/* Card 2: Ganancia Bruta Real */}
-        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
+        <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Ganancia Bruta Real
@@ -375,7 +359,7 @@ export default function AnaliticaPage() {
         </div>
 
         {/* Card 3: Tickets y Volumen */}
-        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
+        <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Volumen de Operación
@@ -399,7 +383,7 @@ export default function AnaliticaPage() {
         </div>
 
         {/* Card 4: Efectivo vs QR */}
-        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
+        <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Distribución de Medios
@@ -435,7 +419,7 @@ export default function AnaliticaPage() {
           3. HISTOGRAMA / EVOLUCIÓN VISUAL POR DÍA
           ========================================================================= */}
       {data && data.dailyTrend.length > 0 && data.dailyTrend.length <= 60 && (
-        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border space-y-3">
+        <div className="p-5 admin-panel space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-bold text-sm text-admin-text flex items-center gap-2">
@@ -468,7 +452,7 @@ export default function AnaliticaPage() {
                       style={{ height: `${heightPercent}%` }}
                       className={cn(
                         "w-full rounded-t-md transition-all duration-300 group-hover:brightness-110",
-                        d.netSales > 0 ? "bg-admin-brand" : "bg-transparent"
+                        d.netSales > 0 ? "admin-chart-bar" : "bg-transparent"
                       )}
                     />
                   </div>
@@ -487,16 +471,12 @@ export default function AnaliticaPage() {
           4. PESTAÑAS DE TABLAS DE DETALLE
           ========================================================================= */}
       <div className="space-y-4">
-        <div className="flex items-center gap-1.5 border-b border-admin-card-border pb-1 overflow-x-auto">
+        <div className="admin-segments">
           <button
             type="button"
             onClick={() => setActiveTab("evolucion")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "evolucion"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "evolucion"}
+            className="admin-segment"
           >
             <Calendar className="h-3.5 w-3.5" />
             <span>Evolución Diaria ({data?.dailyTrend.length || 0})</span>
@@ -505,12 +485,8 @@ export default function AnaliticaPage() {
           <button
             type="button"
             onClick={() => setActiveTab("productos")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "productos"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "productos"}
+            className="admin-segment"
           >
             <Package className="h-3.5 w-3.5" />
             <span>Top Productos ({data?.topProducts.length || 0})</span>
@@ -519,12 +495,8 @@ export default function AnaliticaPage() {
           <button
             type="button"
             onClick={() => setActiveTab("cajeros")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "cajeros"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "cajeros"}
+            className="admin-segment"
           >
             <Users className="h-3.5 w-3.5" />
             <span>Rendimiento por Operador ({data?.cashiers.length || 0})</span>
@@ -533,12 +505,8 @@ export default function AnaliticaPage() {
           <button
             type="button"
             onClick={() => setActiveTab("ventas")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
-              activeTab === "ventas"
-                ? "bg-admin-brand text-admin-on-solid"
-                : "text-admin-secondary hover:bg-admin-raised"
-            )}
+            aria-pressed={activeTab === "ventas"}
+            className="admin-segment"
           >
             <Receipt className="h-3.5 w-3.5" />
             <span>Todas las Ventas ({data?.sales.length || 0})</span>
@@ -547,7 +515,7 @@ export default function AnaliticaPage() {
 
         {/* TAB 1: EVOLUCIÓN DÍA POR DÍA */}
         {activeTab === "evolucion" && (
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="admin-panel overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider">
@@ -609,7 +577,7 @@ export default function AnaliticaPage() {
 
         {/* TAB 2: TOP PRODUCTOS */}
         {activeTab === "productos" && (
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="admin-panel overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider">
@@ -691,7 +659,7 @@ export default function AnaliticaPage() {
 
         {/* TAB 3: RENDIMIENTO POR CAJERO / OPERADOR */}
         {activeTab === "cajeros" && (
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="admin-panel overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider">
@@ -745,7 +713,7 @@ export default function AnaliticaPage() {
 
         {/* TAB 4: TODAS LAS VENTAS */}
         {activeTab === "ventas" && (
-          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden space-y-3">
+          <div className="admin-panel overflow-hidden space-y-3">
             <div className="p-4 border-b border-admin-card-border flex flex-wrap items-center justify-between gap-3">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
                 <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-admin-muted" />

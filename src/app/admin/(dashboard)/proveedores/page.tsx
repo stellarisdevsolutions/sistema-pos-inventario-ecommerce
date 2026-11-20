@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard } from "@/components/admin/metric-card";
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -53,7 +55,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency } from "@/lib/currency";
+import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
 import {
   getSuppliersAction,
   createSupplierAction,
@@ -393,7 +395,7 @@ export default function ProveedoresPage() {
       {/* =========================================================================
           1. HEADER CON TÍTULO, SUBTÍTULO Y BOTÓN REGISTRAR
           ========================================================================= */}
-      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header admin-cover flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="admin-page-title">Proveedores</h1>
@@ -414,88 +416,39 @@ export default function ProveedoresPage() {
       {/* =========================================================================
           2. METRIC KPIS CORPORATIVOS (4 TARJETAS)
           ========================================================================= */}
-      <section className="admin-kpi-grid">
-        {/* KPI 1: Total Proveedores */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-admin-secondary">
-              Total Proveedores
-            </span>
-            <div className="h-7 w-7 rounded-full bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-center text-admin-brand-text">
-              <Building2 className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-bold text-admin-text tracking-tight mt-3">
-            {totalSuppliersCount}
-          </div>
-          <span className="text-[11px] text-admin-brand-text font-semibold mt-1 block">
-            Directorio comercial
-          </span>
-        </div>
-
-        {/* KPI 2: Proveedores Activos */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-admin-secondary">
-              Proveedores Activos
-            </span>
-            <div className="h-7 w-7 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight mt-3">
-            {activeSuppliersCount}
-          </div>
-          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1 block">
-            Disponibles para compras
-          </span>
-        </div>
-
-        {/* KPI 3: Inversión del Mes */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-admin-secondary">
-              Inversión del Mes
-            </span>
-            <div className="h-7 w-7 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400">
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-bold text-admin-text tracking-tight mt-3">
-            {CURRENCY_SYMBOL}{" "}
-            {totalMonthlyPurchasedSum.toLocaleString("es-BO", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </div>
-          <span className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-1 block">
-            Compras del mes en curso ({CURRENCY_NAME})
-          </span>
-        </div>
-
-        {/* KPI 4: Órdenes de Compra */}
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-admin-secondary">
-              Órdenes de Compra
-            </span>
-            <div className="h-7 w-7 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400">
-              <Truck className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="text-2xl lg:text-3xl font-bold text-amber-600 dark:text-amber-400 tracking-tight mt-3">
-            {totalPurchasesOrders}
-          </div>
-          <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-1 block">
-            Entradas y recepciones
-          </span>
-        </div>
+      <section className="admin-metrics" aria-label="Indicadores de proveedores">
+        <MetricCard
+          label="Proveedores"
+          value={totalSuppliersCount}
+          detail="Directorio comercial"
+          icon={Building2}
+          appearance="lead"
+        />
+        <MetricCard
+          label="Proveedores activos"
+          value={activeSuppliersCount}
+          detail="Disponibles para compras"
+          icon={CheckCircle2}
+          tone="success"
+        />
+        <MetricCard
+          label="Inversión del mes"
+          value={formatCurrencyLocale(totalMonthlyPurchasedSum)}
+          detail={`Compras del mes en curso (${CURRENCY_NAME})`}
+          icon={DollarSign}
+        />
+        <MetricCard
+          label="Órdenes de compra"
+          value={totalPurchasesOrders}
+          detail="Entradas y recepciones"
+          icon={Truck}
+        />
       </section>
 
       {/* =========================================================================
           3. BARRA DE HERRAMIENTAS: BUSCADOR, FILTROS Y SELECTOR DE VISTA
           ========================================================================= */}
-      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 space-y-3">
+      <div className="admin-panel p-4 space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Buscador */}
           <div className="relative flex-1">
@@ -507,7 +460,7 @@ export default function ProveedoresPage() {
                 setCurrentPage(1);
               }}
               placeholder="Buscar por empresa, contacto, NIT o correo..."
-              className="pl-9 h-11 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-white dark:focus:bg-slate-900 transition-colors"
+              className="pl-9 h-11 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-admin-card-bg transition-colors"
             />
             {searchTerm && (
               <button
@@ -664,7 +617,7 @@ export default function ProveedoresPage() {
                 key={s.id}
                 onClick={() => setSelectedSupplierForDetails(s)}
                 className={cn(
-                  "rounded-xl bg-admin-card-bg border border-admin-card-border hover:border-admin-brand/50 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden cursor-pointer group",
+                  "admin-panel hover:border-admin-brand/50 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden cursor-pointer group",
                   !s.isActive && "opacity-65 bg-admin-raised"
                 )}
               >
@@ -712,7 +665,7 @@ export default function ProveedoresPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
                           align="end"
-                          className="w-48 rounded-xl bg-admin-card-bg border border-admin-card-border"
+                          className="w-48 admin-panel"
                         >
                           <DropdownMenuGroup>
                             <DropdownMenuItem
@@ -824,7 +777,7 @@ export default function ProveedoresPage() {
         </div>
       ) : (
         /* VISTA 2: MODO LISTA (TABLA) */
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+        <div className="admin-panel overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
@@ -954,7 +907,7 @@ export default function ProveedoresPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
                             align="end"
-                            className="w-48 rounded-xl bg-admin-card-bg border border-admin-card-border"
+                            className="w-48 admin-panel"
                           >
                             <DropdownMenuGroup>
                               <DropdownMenuItem

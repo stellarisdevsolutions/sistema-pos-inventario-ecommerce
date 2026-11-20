@@ -1,5 +1,7 @@
 "use client";
 
+import { MetricCard } from "@/components/admin/metric-card";
+
 import { useState, useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,7 @@ import {
 import {
   UserPlus,
   ShieldCheck,
+  Banknote,
   Search,
   KeyRound,
   Phone,
@@ -226,7 +229,7 @@ export default function UsuariosPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* 1. Header Principal */}
-      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header admin-cover flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="admin-page-title">Usuarios y roles</h1>
@@ -244,50 +247,37 @@ export default function UsuariosPage() {
       </div>
 
       {/* 2. Tarjetas Bento de Resumen */}
-      <div className="admin-kpi-grid">
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-            Total Usuarios
-          </span>
-          <p className="text-xl font-semibold text-admin-text mt-1">
-            {kpis.totalUsers}
-          </p>
-          <span className="text-[10px] text-slate-400">Registrados en la plataforma</span>
-        </div>
-
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
-          <span className="text-[10px] font-bold text-admin-brand-text uppercase tracking-wider block">
-            Supervisores & Admins
-          </span>
-          <p className="text-xl font-semibold text-admin-brand-text mt-1">
-            {kpis.adminsCount}
-          </p>
-          <span className="text-[10px] text-slate-400">Con autorización de arqueo y PIN</span>
-        </div>
-
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
-          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
-            Cajeros de Mostrador
-          </span>
-          <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
-            {kpis.cashiersCount}
-          </p>
-          <span className="text-[10px] text-slate-400">Habilitados para operar turnos</span>
-        </div>
-
-        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
-          <span className="text-[10px] font-bold text-admin-brand-text uppercase tracking-wider block">
-            Usuarios Activos
-          </span>
-          <p className="text-xl font-semibold text-admin-brand-text mt-1">
-            {kpis.activeUsersCount}
-          </p>
-          <span className="text-[10px] text-slate-400">Con acceso habilitado al sistema</span>
-        </div>
-      </div>
+      <section className="admin-metrics" aria-label="Indicadores de usuarios">
+        <MetricCard
+          label="Usuarios"
+          value={kpis.totalUsers}
+          detail="Cuentas registradas"
+          icon={User}
+          appearance="lead"
+        />
+        <MetricCard
+          label="Supervisores y administradores"
+          value={kpis.adminsCount}
+          detail="Con autorización de arqueo y PIN"
+          icon={ShieldCheck}
+        />
+        <MetricCard
+          label="Cajeros"
+          value={kpis.cashiersCount}
+          detail="Habilitados para operar turnos"
+          icon={Banknote}
+        />
+        <MetricCard
+          label="Usuarios activos"
+          value={kpis.activeUsersCount}
+          detail="Con acceso habilitado"
+          icon={CheckCircle2}
+          tone="success"
+        />
+      </section>
 
       {/* 3. Filtros y Búsqueda */}
-      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 flex flex-col sm:flex-row items-center gap-3">
+      <div className="admin-panel p-4 flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
@@ -324,7 +314,7 @@ export default function UsuariosPage() {
       </div>
 
       {/* 4. Tabla de Usuarios */}
-      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+      <div className="admin-panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-slate-500 uppercase tracking-wider">
@@ -487,7 +477,7 @@ export default function UsuariosPage() {
 
       {/* 5. Modal Crear Nuevo Usuario */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="sm:max-w-md p-6 rounded-xl bg-admin-card-bg border border-admin-card-border">
+        <DialogContent className="sm:max-w-md p-6 admin-panel">
           <DialogHeader>
             <div className="h-10 w-10 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center mb-2">
               <UserPlus className="h-5 w-5" />
@@ -624,7 +614,7 @@ export default function UsuariosPage() {
 
       {/* 6. Modal Editar Usuario */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="sm:max-w-md p-6 rounded-xl bg-admin-card-bg border border-admin-card-border">
+        <DialogContent className="sm:max-w-md p-6 admin-panel">
           <DialogHeader>
             <div className="h-10 w-10 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center mb-2">
               <Edit2 className="h-5 w-5" />
