@@ -4,13 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:demo": "node scripts/dev-demo.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "test": "tsx --test scripts/audit_modulo_por_modulo.ts scripts/audit_postgres.test.ts",
+    "test:http": "tsx --test scripts/audit_http_routes.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -23,7 +26,7 @@
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.4",
     "lucide-react": "^1.64.0",
-    "next": "16.4.3",
+    "next": "16.4.5",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "^7.91.0",
@@ -33,6 +36,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.17",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -40,7 +44,7 @@
     "dotenv": "^18.0.9",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

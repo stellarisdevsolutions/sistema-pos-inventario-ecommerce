@@ -7,6 +7,7 @@ import {
   timestamp,
   boolean,
   pgEnum,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -204,7 +205,10 @@ export const cashShifts = pgTable("cash_shifts", {
   openedAt: timestamp("opened_at").defaultNow().notNull(),
   closedAt: timestamp("closed_at"),
   notes: text("notes"),
-});
+}, (t) => [
+  uniqueIndex("cash_shifts_open_register_unique").on(t.cashRegisterId).where(sql`${t.status} = 'open'`),
+  uniqueIndex("cash_shifts_open_operator_unique").on(t.userId).where(sql`${t.status} = 'open'`),
+]);
 
 /* =========================================================================
    4. COMPRAS Y ENTRADAS DE MERCANCÍA (PURCHASES)

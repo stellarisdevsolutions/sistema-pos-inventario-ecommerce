@@ -8,6 +8,13 @@
       "when": 1793381919921,
       "tag": "0000_new_meggan",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795148114233,
+      "tag": "0001_unique_open_cash_shifts",
+      "breakpoints": true
     }
   ]
 }

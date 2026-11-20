@@ -38,3 +38,8 @@ export const userFormSchema = z.object({
 });
 
 export type UserFormInput = z.infer<typeof userFormSchema>;
+
+export const userUpdateSchema = userFormSchema.omit({ role: true, isActive: true }).partial().extend({
+  role: userRoleEnumSchema.optional(),
+  isActive: z.boolean().optional(),
+});

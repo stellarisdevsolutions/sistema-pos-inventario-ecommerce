@@ -83,7 +83,6 @@ export default function CajasPage() {
   const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
   const [shiftToClose, setShiftToClose] = useState<ActiveShiftDetail | null>(null);
   const [actualCashCounted, setActualCashCounted] = useState<string>("");
-  const [selectedSupervisorId, setSelectedSupervisorId] = useState<number>(1);
   const [supervisorNote, setSupervisorNote] = useState("");
   const [isClosingShift, setIsClosingShift] = useState(false);
 
@@ -169,8 +168,6 @@ export default function CajasPage() {
         setUsers(res.users);
 
         // Preseleccionar supervisor y cajero por defecto
-        const defaultSupervisor = res.users.find((u) => u.role === "manager" || u.role === "admin");
-        if (defaultSupervisor) setSelectedSupervisorId(defaultSupervisor.id);
 
         if (user?.role === "cashier") {
           setSelectedCashierId(user.id);
@@ -266,13 +263,13 @@ export default function CajasPage() {
       const res = await closeShiftAction({
         shiftId: shiftToClose.id,
         actualCash: countedNum,
-        closedByUserId: selectedSupervisorId,
         notes: supervisorNote.trim() || null,
       });
 
-      if (res.success) {
+      if (res.success && res.data) {
+        const { status } = res.data;
         toast.success(`Turno #${shiftToClose.shiftNumber} cerrado exitosamente`, {
-          description: `Arqueo conciliado (${difference === 0 ? "Cuadrado exacto" : difference > 0 ? "Sobrante" : "Faltante"}).`,
+          description: `Arqueo conciliado (${status === "balanced" ? "Cuadrado exacto" : status === "surplus" ? "Sobrante" : "Faltante"}).`,
         });
         setCloseShiftModalOpen(false);
         setShiftToClose(null);
@@ -346,16 +343,12 @@ export default function CajasPage() {
       {/* =========================================================================
           1. HEADER CON BOTÓN DE NUEVA CAJA Y ARQUEO
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Control de Cajas & Arqueos
-            </h1>
+            <h1 className="admin-page-title">Cajas y turnos</h1>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Gestión de turnos de cobro, conciliación de efectivo en gaveta y auditoría de arqueos.
-          </p>
+          <p className="admin-page-description">Abre turnos, registra arqueos y consulta cierres.</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -367,7 +360,7 @@ export default function CajasPage() {
               setNewRegisterCode(`POS-0${registers.length + 1}`);
               setCreateRegisterModalOpen(true);
             }}
-            className="h-10 px-3.5 rounded-xl border-slate-200 dark:border-slate-700 text-xs font-bold gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+            className="h-10 px-3.5 rounded-xl border-admin-card-border text-xs font-bold gap-1.5 hover:bg-admin-raised cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             <span>Nueva Caja Física</span>
@@ -382,7 +375,7 @@ export default function CajasPage() {
               if (activeTab === "history") loadHistoryData();
             }}
             disabled={isLoadingRegisters}
-            className="h-10 px-3 rounded-xl border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-900 cursor-pointer"
+            className="h-10 px-3 rounded-xl border-admin-card-border text-slate-600 hover:text-slate-900 cursor-pointer"
           >
             <RefreshCw className={cn("h-4 w-4", isLoadingRegisters && "animate-spin")} />
           </Button>
@@ -392,17 +385,17 @@ export default function CajasPage() {
       {/* =========================================================================
           2. KPIS FINANCIEROS DE CONTROL DE CAJAS
           ========================================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="admin-kpi-grid">
         {/* Card 1: Fondo Inicial Activo */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
             <span>Fondo Inicial en Gavetas</span>
-            <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+            <div className="p-2 rounded-xl bg-admin-raised text-admin-secondary">
               <Banknote className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-semibold text-admin-text">
               {formatCurrency(kpis.activeInitialCash)}
             </span>
             <p className="text-[11px] text-slate-400 mt-0.5">
@@ -412,7 +405,7 @@ export default function CajasPage() {
         </div>
 
         {/* Card 2: Ventas Efectivo Hoy */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
             <span>Ventas Efectivo Hoy</span>
             <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
@@ -420,7 +413,7 @@ export default function CajasPage() {
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-semibold text-admin-text">
               {formatCurrency(kpis.todayCashSales)}
             </span>
             <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
@@ -430,25 +423,25 @@ export default function CajasPage() {
         </div>
 
         {/* Card 3: Ventas Tarjeta / QR */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
             <span>Ventas Tarjeta / QR</span>
-            <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-[var(--admin-brand)]">
+            <div className="p-2 rounded-xl bg-admin-brand-subtle text-admin-brand-text">
               <CreditCard className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-semibold text-admin-text">
               {formatCurrency(kpis.todayCardTransferSales)}
             </span>
-            <p className="text-[11px] text-[var(--admin-brand)] font-bold mt-0.5">
+            <p className="text-[11px] text-admin-brand-text font-bold mt-0.5">
               Cobros electrónicos conciliados
             </p>
           </div>
         </div>
 
         {/* Card 4: Precisión de Arqueos */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
             <span>Precisión de Arqueos</span>
             <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600">
@@ -456,7 +449,7 @@ export default function CajasPage() {
             </div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-semibold text-admin-text">
               {kpis.auditPrecisionPercent}%
             </span>
             <p className="text-[11px] text-blue-600 font-bold mt-0.5">
@@ -469,14 +462,14 @@ export default function CajasPage() {
       {/* =========================================================================
           3. SELECTOR DE PESTAÑAS (TERMINALES vs HISTORIAL)
           ========================================================================= */}
-      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-200/60 dark:bg-slate-800/60 w-fit">
+      <div className="flex items-center gap-2 p-1.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/60 w-fit">
         <button
           onClick={() => setActiveTab("registers")}
           className={cn(
-            "px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5",
+            "px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5",
             activeTab === "registers"
-              ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              ? "bg-admin-card-bg text-admin-brand-text"
+              : "text-admin-secondary hover:text-slate-900"
           )}
         >
           <Store className="h-3.5 w-3.5" />
@@ -485,10 +478,10 @@ export default function CajasPage() {
         <button
           onClick={() => setActiveTab("history")}
           className={cn(
-            "px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5",
+            "px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5",
             activeTab === "history"
-              ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              ? "bg-admin-card-bg text-admin-brand-text"
+              : "text-admin-secondary hover:text-slate-900"
           )}
         >
           <Receipt className="h-3.5 w-3.5" />
@@ -501,16 +494,16 @@ export default function CajasPage() {
           ========================================================================= */}
       {activeTab === "registers" ? (
         isLoadingRegisters ? (
-          <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800">
-            <RefreshCw className="h-8 w-8 text-[var(--admin-brand)] animate-spin mx-auto mb-3" />
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+          <div className="p-16 text-center bg-admin-card-bg rounded-xl border border-admin-card-border">
+            <RefreshCw className="h-8 w-8 text-admin-brand-text animate-spin mx-auto mb-3" />
+            <p className="text-sm font-bold text-admin-secondary">
               Cargando terminales y balances en vivo...
             </p>
           </div>
         ) : registers.length === 0 ? (
-          <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+          <div className="p-12 text-center bg-admin-card-bg rounded-xl border border-dashed border-admin-card-border space-y-3">
             <Store className="h-10 w-10 text-slate-300 mx-auto" />
-            <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+            <h3 className="text-sm font-bold text-admin-text">
               No hay cajas registradoras configuradas
             </h3>
             <Button
@@ -518,7 +511,7 @@ export default function CajasPage() {
                 setNewRegisterCode("POS-01");
                 setCreateRegisterModalOpen(true);
               }}
-              className="bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white rounded-xl text-xs font-bold"
+              className="bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid rounded-xl text-xs font-bold"
             >
               Crear Primera Caja Física
             </Button>
@@ -533,17 +526,17 @@ export default function CajasPage() {
                 return (
                   <div
                     key={reg.id}
-                    className="rounded-3xl p-6 bg-[#11162b] border border-[#1e2648] text-white shadow-xl relative overflow-hidden flex flex-col justify-between"
+                    className="rounded-xl p-6 bg-admin-inverse border border-admin-inverse-border text-white relative overflow-hidden flex flex-col justify-between"
                   >
                     <div className="space-y-4">
                       {/* Cabecera de la Caja */}
                       <div className="flex items-center justify-between border-b border-slate-700/60 pb-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-2xl bg-[var(--admin-brand)] flex items-center justify-center text-white shadow-lg shadow-[var(--admin-brand)]/30">
+                          <div className="h-10 w-10 rounded-xl bg-admin-brand flex items-center justify-center text-white">
                             <Store className="h-5 w-5" />
                           </div>
                           <div>
-                            <h3 className="font-black text-base text-white">{reg.name}</h3>
+                            <h3 className="font-semibold text-base text-white">{reg.name}</h3>
                             <p className="text-[11px] text-slate-400">
                               Terminal {reg.code} {reg.location && `• ${reg.location}`}
                             </p>
@@ -556,9 +549,9 @@ export default function CajasPage() {
                       </div>
 
                       {/* Info del Cajero */}
-                      <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/50 border border-slate-700/50 text-xs">
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-xs">
                         <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 rounded-full bg-sky-900/60 text-sky-200 flex items-center justify-center font-black">
+                          <div className="h-8 w-8 rounded-full bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center font-semibold">
                             {active.cashierName.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
@@ -575,35 +568,35 @@ export default function CajasPage() {
 
                       {/* Métricas del turno activo */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                        <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800">
+                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Fondo
                           </span>
-                          <p className="text-sm font-black text-slate-200 mt-0.5 truncate">
+                          <p className="text-sm font-semibold text-slate-200 mt-0.5 truncate">
                             {formatCurrency(active.initialCash)}
                           </p>
                         </div>
-                        <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800">
+                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Efectivo
                           </span>
-                          <p className="text-sm font-black text-emerald-400 mt-0.5 truncate">
+                          <p className="text-sm font-semibold text-emerald-400 mt-0.5 truncate">
                             +{formatCurrency(active.cashSales)}
                           </p>
                         </div>
-                        <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800">
+                        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Tarjetas/QR
                           </span>
-                          <p className="text-sm font-black text-sky-300 mt-0.5 truncate">
+                          <p className="text-sm font-semibold text-admin-brand-text mt-0.5 truncate">
                             {formatCurrency(active.cardSales + active.transferSales)}
                           </p>
                         </div>
-                        <div className="p-3 rounded-2xl bg-sky-950/60 border border-sky-800/80">
-                          <span className="text-[10px] font-bold text-sky-300 uppercase tracking-wider block">
+                        <div className="p-3 rounded-xl bg-admin-brand-subtle border border-admin-brand-light">
+                          <span className="text-[10px] font-bold text-admin-brand-text uppercase tracking-wider block">
                             Esperado
                           </span>
-                          <p className="text-sm font-black text-white mt-0.5 truncate">
+                          <p className="text-sm font-semibold text-white mt-0.5 truncate">
                             {formatCurrency(active.expectedCash)}
                           </p>
                         </div>
@@ -618,9 +611,9 @@ export default function CajasPage() {
                         onClick={() =>
                           handleViewShiftSales(active.id, active.shiftNumber, reg.name)
                         }
-                        className="h-11 rounded-2xl border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-100 text-xs font-bold gap-2 cursor-pointer transition-all"
+                        className="h-11 rounded-xl border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-100 text-xs font-bold gap-2 cursor-pointer transition-all"
                       >
-                        <Receipt className="h-4 w-4 text-sky-400" />
+                        <Receipt className="h-4 w-4 text-admin-brand-text" />
                         <span>Ver Tickets ({formatCurrency(active.cashSales + active.cardSales + active.transferSales)})</span>
                       </Button>
 
@@ -628,10 +621,10 @@ export default function CajasPage() {
                         type="button"
                         onClick={() => {
                           setShiftToClose(active);
-                          setActualCashCounted(active.expectedCash.toFixed(2));
+                          setActualCashCounted("");
                           setCloseShiftModalOpen(true);
                         }}
-                        className="h-11 rounded-2xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white font-black text-xs gap-2 shadow-lg shadow-[var(--admin-brand)]/30 cursor-pointer active:scale-98 transition-all"
+                        className="h-11 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid font-semibold text-xs gap-2 cursor-pointer active:scale-98 transition-all"
                       >
                         <Banknote className="h-4 w-4" />
                         <span>Cerrar Turno & Arqueo</span>
@@ -645,16 +638,16 @@ export default function CajasPage() {
               return (
                 <div
                   key={reg.id}
-                  className="rounded-3xl p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between"
+                  className="rounded-xl p-6 bg-admin-card-bg border border-admin-card-border flex flex-col justify-between"
                 >
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <div className="flex items-center justify-between border-b border-admin-card-border pb-4">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                        <div className="h-10 w-10 rounded-xl bg-admin-raised flex items-center justify-center text-slate-400">
                           <Store className="h-5 w-5" />
                         </div>
                         <div>
-                          <h3 className="font-black text-base text-slate-900 dark:text-white">
+                          <h3 className="font-semibold text-base text-admin-text">
                             {reg.name}
                           </h3>
                           <p className="text-[11px] text-slate-500">
@@ -669,10 +662,10 @@ export default function CajasPage() {
                     </div>
 
                     <div className="py-8 text-center space-y-2">
-                      <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center">
+                      <div className="h-12 w-12 rounded-full bg-admin-raised text-slate-400 mx-auto flex items-center justify-center">
                         <Clock className="h-6 w-6" />
                       </div>
-                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                      <p className="text-sm font-bold text-admin-secondary">
                         Terminal lista para nueva jornada
                       </p>
                     </div>
@@ -685,7 +678,7 @@ export default function CajasPage() {
                       setInitialCashInput("150.00");
                       setOpenShiftModalOpen(true);
                     }}
-                    className="w-full h-11 rounded-2xl font-bold text-xs gap-2 border-[var(--admin-brand)]/30 text-[var(--admin-brand)] hover:bg-[var(--admin-brand-light)] cursor-pointer"
+                    className="w-full h-11 rounded-xl font-bold text-xs gap-2 border-admin-brand/30 text-admin-brand-text hover:bg-[var(--admin-brand-light)] cursor-pointer"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Abrir Turno en {reg.code}</span>
@@ -701,14 +694,14 @@ export default function CajasPage() {
             ========================================================================= */
         <div className="space-y-4">
           {/* Barra de Filtros */}
-          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs flex flex-col sm:flex-row items-center gap-3">
+          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 flex flex-col sm:flex-row items-center gap-3">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 value={historySearch}
                 onChange={(e) => setHistorySearch(e.target.value)}
                 placeholder="Buscar por turno, caja, cajero o supervisor..."
-                className="pl-9 h-10 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                className="pl-9 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border"
               />
             </div>
 
@@ -716,7 +709,7 @@ export default function CajasPage() {
               <select
                 value={historyStatusFilter}
                 onChange={(e) => setHistoryStatusFilter(e.target.value)}
-                className="h-10 px-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium"
+                className="h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-admin-secondary font-medium"
               >
                 <option value="all">Todos los Resultados</option>
                 <option value="balanced">Cierres Cuadrados</option>
@@ -729,7 +722,7 @@ export default function CajasPage() {
                 size="sm"
                 onClick={loadHistoryData}
                 disabled={isLoadingHistory}
-                className="h-10 px-3 rounded-xl border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-900 cursor-pointer"
+                className="h-10 px-3 rounded-xl border-admin-card-border text-slate-600 hover:text-slate-900 cursor-pointer"
               >
                 <RefreshCw className={cn("h-4 w-4", isLoadingHistory && "animate-spin")} />
               </Button>
@@ -737,11 +730,11 @@ export default function CajasPage() {
           </div>
 
           {/* Tabla de Arqueos Auditados */}
-          <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
+                  <tr className="border-b border-admin-card-border bg-admin-raised text-slate-500 font-bold uppercase tracking-wider text-[11px]">
                     <th className="py-3 px-4">Turno / Caja</th>
                     <th className="py-3 px-4">Cajero</th>
                     <th className="py-3 px-4">Supervisor</th>
@@ -753,11 +746,11 @@ export default function CajasPage() {
                     <th className="py-3 px-4 text-right">Acción</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                <tbody className="divide-y divide-admin-card-border text-admin-secondary">
                   {isLoadingHistory ? (
                     <tr>
                       <td colSpan={9} className="text-center py-12 text-slate-400">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-[var(--admin-brand)]" />
+                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-admin-brand-text" />
                         Cargando historial de arqueos conciliados...
                       </td>
                     </tr>
@@ -771,10 +764,10 @@ export default function CajasPage() {
                     filteredClosedShifts.map((shift) => (
                       <tr
                         key={shift.id}
-                        className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
+                        className="hover:bg-admin-raised transition-colors"
                       >
                         <td className="py-3.5 px-4">
-                          <span className="font-black text-slate-900 dark:text-white">
+                          <span className="font-semibold text-admin-text">
                             {shift.shiftNumber}
                           </span>
                           <p className="text-[10px] text-slate-400">
@@ -793,7 +786,7 @@ export default function CajasPage() {
                         <td className="py-3.5 px-4 text-right font-mono font-bold">
                           {formatCurrency(shift.actualCash)}
                         </td>
-                        <td className="py-3.5 px-4 text-right font-mono font-black">
+                        <td className="py-3.5 px-4 text-right font-mono font-semibold">
                           <span
                             className={
                               shift.difference === 0
@@ -845,7 +838,7 @@ export default function CajasPage() {
                               setSelectedClosedShift(shift);
                               setDetailModalOpen(true);
                             }}
-                            className="h-8 rounded-lg text-xs gap-1 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer"
+                            className="h-8 rounded-lg text-xs gap-1 border-admin-card-border text-admin-secondary cursor-pointer"
                           >
                             <Eye className="h-3 w-3" />
                             <span>Acta</span>
@@ -865,10 +858,10 @@ export default function CajasPage() {
           6. MODAL: ARQUEO CIEGO & CIERRE DE TURNO
           ========================================================================= */}
       <Dialog open={closeShiftModalOpen} onOpenChange={setCloseShiftModalOpen}>
-        <DialogContent className="sm:max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
-          <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
-            <DialogTitle className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-[var(--admin-brand)]" />
+        <DialogContent className="sm:max-w-lg rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+          <DialogHeader className="pb-3 border-b border-admin-card-border">
+            <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-admin-brand-text" />
               Arqueo Ciego & Cierre de Caja
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -879,10 +872,10 @@ export default function CajasPage() {
           {shiftToClose && (
             <div className="space-y-4 py-3 text-xs">
               {/* Desglose Financiero del Turno */}
-              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
                 <div>
                   <span className="text-slate-400 font-medium">Fondo Inicial:</span>
-                  <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">
+                  <p className="font-bold text-admin-text text-sm">
                     {formatCurrency(shiftToClose.initialCash)}
                   </p>
                 </div>
@@ -894,13 +887,13 @@ export default function CajasPage() {
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium">Ventas Tarjeta / QR:</span>
-                  <p className="font-bold text-[var(--admin-brand)] text-sm">
+                  <p className="font-bold text-admin-brand-text text-sm">
                     {formatCurrency(shiftToClose.cardSales + shiftToClose.transferSales)}
                   </p>
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium">Efectivo Esperado en Gaveta:</span>
-                  <p className="font-black text-slate-900 dark:text-white text-base">
+                  <p className="font-semibold text-admin-text text-base">
                     {formatCurrency(shiftToClose.expectedCash)}
                   </p>
                 </div>
@@ -908,7 +901,7 @@ export default function CajasPage() {
 
               {/* Input de Conteo Físico Real */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="text-xs font-bold text-admin-secondary">
                   Dinero Físico en Gaveta (Contado por el cajero):
                 </label>
                 <div className="relative">
@@ -920,7 +913,7 @@ export default function CajasPage() {
                     step="0.01"
                     min="0"
                     placeholder="0.00"
-                    className="pl-9 h-11 text-base font-black rounded-xl border-slate-200 dark:border-slate-700 focus:border-[var(--admin-brand)]"
+                    className="pl-9 h-11 text-base font-semibold rounded-xl border-admin-card-border focus:border-admin-brand"
                     value={actualCashCounted}
                     onChange={(e) => setActualCashCounted(e.target.value)}
                   />
@@ -930,7 +923,7 @@ export default function CajasPage() {
               {/* Verificación de Cuadre en Vivo */}
               <div
                 className={cn(
-                  "p-3 rounded-2xl border flex items-center justify-between font-bold transition-colors",
+                  "p-3 rounded-xl border flex items-center justify-between font-bold transition-colors",
                   Math.abs(difference) < 0.01
                     ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                     : difference > 0
@@ -952,37 +945,19 @@ export default function CajasPage() {
                       : `Faltante de dinero: -${formatCurrency(Math.abs(difference))}`}
                   </span>
                 </div>
-                <span className="text-sm font-black">
+                <span className="text-sm font-semibold">
                   {difference === 0 ? formatCurrency(0) : `${difference > 0 ? "+" : ""}${formatCurrency(difference)}`}
                 </span>
               </div>
 
-              {/* Selector de Supervisor que autoriza el cierre */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Supervisor que autoriza el arqueo:
-                </label>
-                <select
-                  value={selectedSupervisorId}
-                  onChange={(e) => setSelectedSupervisorId(Number(e.target.value))}
-                  className="w-full h-10 px-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-medium"
-                >
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role.toUpperCase()})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {/* Observación / Justificación del Arqueo */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Firma / Observación del Supervisor:
+                <label className="text-xs font-bold text-admin-secondary">
+                  Observación del cierre:
                 </label>
                 <Input
                   placeholder="Ej. Conforme con el recuento sin discrepancias..."
-                  className="h-10 text-xs rounded-xl border-slate-200 dark:border-slate-700"
+                  className="h-10 text-xs rounded-xl border-admin-card-border"
                   value={supervisorNote}
                   onChange={(e) => setSupervisorNote(e.target.value)}
                 />
@@ -990,7 +965,7 @@ export default function CajasPage() {
             </div>
           )}
 
-          <DialogFooter className="pt-2 border-t border-slate-100 dark:border-slate-800 gap-2">
+          <DialogFooter className="pt-2 border-t border-admin-card-border gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -1004,7 +979,7 @@ export default function CajasPage() {
               size="sm"
               disabled={isClosingShift}
               onClick={handleCloseShift}
-              className="rounded-xl h-10 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-1.5 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
+              className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
             >
               {isClosingShift ? (
                 <>
@@ -1026,10 +1001,10 @@ export default function CajasPage() {
           7. MODAL: APERTURA DE TURNO DE CAJA
           ========================================================================= */}
       <Dialog open={openShiftModalOpen} onOpenChange={setOpenShiftModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
-          <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
-            <DialogTitle className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Store className="h-5 w-5 text-[var(--admin-brand)]" />
+        <DialogContent className="sm:max-w-md rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+          <DialogHeader className="pb-3 border-b border-admin-card-border">
+            <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
+              <Store className="h-5 w-5 text-admin-brand-text" />
               Apertura de Turno en {selectedRegisterToOpen?.code}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -1040,11 +1015,11 @@ export default function CajasPage() {
           <div className="space-y-4 py-3 text-xs">
             {/* Asignar Cajero */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-admin-secondary">
                 Cajero Responsable del Turno:
               </label>
               {user?.role === "cashier" ? (
-                <div className="w-full h-10 px-3 flex items-center justify-between rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200">
+                <div className="w-full h-10 px-3 flex items-center justify-between rounded-xl bg-admin-raised border border-admin-card-border font-bold text-slate-800 dark:text-slate-200">
                   <span>{user.name}</span>
                   <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-bold">
                     Cajero Activo (Tú)
@@ -1054,7 +1029,7 @@ export default function CajasPage() {
                 <select
                   value={selectedCashierId}
                   onChange={(e) => setSelectedCashierId(Number(e.target.value))}
-                  className="w-full h-10 px-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-medium"
+                  className="w-full h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border font-medium"
                 >
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
@@ -1067,7 +1042,7 @@ export default function CajasPage() {
 
             {/* Fondo Inicial */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-admin-secondary">
                 Fondo de Caja Inicial en Gaveta ({CURRENCY_SYMBOL}):
               </label>
               <div className="relative">
@@ -1081,7 +1056,7 @@ export default function CajasPage() {
                   value={initialCashInput}
                   onChange={(e) => setInitialCashInput(e.target.value)}
                   placeholder="150.00"
-                  className="pl-9 h-11 text-base font-black rounded-xl border-slate-200 dark:border-slate-700 focus:border-[var(--admin-brand)]"
+                  className="pl-9 h-11 text-base font-semibold rounded-xl border-admin-card-border focus:border-admin-brand"
                 />
               </div>
               <p className="text-[11px] text-slate-400">
@@ -1091,19 +1066,19 @@ export default function CajasPage() {
 
             {/* Observaciones de Apertura */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-admin-secondary">
                 Notas / Observaciones de apertura (Opcional):
               </label>
               <Input
                 value={openNotes}
                 onChange={(e) => setOpenNotes(e.target.value)}
                 placeholder="Ej. Billetes de corte chico recibidos en orden..."
-                className="h-10 text-xs rounded-xl border-slate-200 dark:border-slate-700"
+                className="h-10 text-xs rounded-xl border-admin-card-border"
               />
             </div>
           </div>
 
-          <DialogFooter className="pt-2 border-t border-slate-100 dark:border-slate-800 gap-2">
+          <DialogFooter className="pt-2 border-t border-admin-card-border gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -1117,7 +1092,7 @@ export default function CajasPage() {
               size="sm"
               disabled={isOpeningShift}
               onClick={handleOpenShift}
-              className="rounded-xl h-10 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-1.5 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
+              className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
             >
               {isOpeningShift ? (
                 <>
@@ -1139,10 +1114,10 @@ export default function CajasPage() {
           8. MODAL: CREAR NUEVA CAJA FÍSICA
           ========================================================================= */}
       <Dialog open={createRegisterModalOpen} onOpenChange={setCreateRegisterModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
-          <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
-            <DialogTitle className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Plus className="h-5 w-5 text-[var(--admin-brand)]" />
+        <DialogContent className="sm:max-w-md rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+          <DialogHeader className="pb-3 border-b border-admin-card-border">
+            <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
+              <Plus className="h-5 w-5 text-admin-brand-text" />
               Nueva Caja Física Registradora
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -1152,45 +1127,45 @@ export default function CajasPage() {
 
           <div className="space-y-3.5 py-3 text-xs">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-admin-secondary">
                 Nombre de la Caja:
               </label>
               <Input
                 value={newRegisterName}
                 onChange={(e) => setNewRegisterName(e.target.value)}
                 placeholder="Ej. Caja 3 - Planta Alta / Mostrador Rápido"
-                className="h-10 text-xs rounded-xl border-slate-200 dark:border-slate-700"
+                className="h-10 text-xs rounded-xl border-admin-card-border"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="text-xs font-bold text-admin-secondary">
                   Código Identificador:
                 </label>
                 <Input
                   value={newRegisterCode}
                   onChange={(e) => setNewRegisterCode(e.target.value.toUpperCase())}
                   placeholder="POS-03"
-                  className="h-10 text-xs font-mono font-bold rounded-xl border-slate-200 dark:border-slate-700 uppercase"
+                  className="h-10 text-xs font-mono font-bold rounded-xl border-admin-card-border uppercase"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="text-xs font-bold text-admin-secondary">
                   Ubicación física:
                 </label>
                 <Input
                   value={newRegisterLocation}
                   onChange={(e) => setNewRegisterLocation(e.target.value)}
                   placeholder="Ej. Salón Principal"
-                  className="h-10 text-xs rounded-xl border-slate-200 dark:border-slate-700"
+                  className="h-10 text-xs rounded-xl border-admin-card-border"
                 />
               </div>
             </div>
           </div>
 
-          <DialogFooter className="pt-2 border-t border-slate-100 dark:border-slate-800 gap-2">
+          <DialogFooter className="pt-2 border-t border-admin-card-border gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -1204,7 +1179,7 @@ export default function CajasPage() {
               size="sm"
               disabled={isCreatingRegister}
               onClick={handleCreateRegister}
-              className="rounded-xl h-10 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-1.5 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
+              className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
             >
               {isCreatingRegister ? (
                 <>
@@ -1226,10 +1201,10 @@ export default function CajasPage() {
           9. MODAL: VER ACTA DE ARQUEO HISTÓRICO
           ========================================================================= */}
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
-          <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
-            <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-[var(--admin-brand)]" />
+        <DialogContent className="sm:max-w-md rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+          <DialogHeader className="pb-3 border-b border-admin-card-border">
+            <DialogTitle className="text-base font-semibold text-admin-text flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-admin-brand-text" />
               Acta de Arqueo #{selectedClosedShift?.shiftNumber}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
@@ -1239,7 +1214,7 @@ export default function CajasPage() {
 
           {selectedClosedShift && (
             <div className="space-y-3.5 py-2 text-xs">
-              <div className="grid grid-cols-2 gap-2.5 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+              <div className="grid grid-cols-2 gap-2.5 p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                 <div>
                   <span className="text-slate-400 font-medium">Cajero:</span>
                   <p className="font-bold text-slate-800 dark:text-slate-200">{selectedClosedShift.cashierName}</p>
@@ -1250,16 +1225,16 @@ export default function CajasPage() {
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium">Apertura:</span>
-                  <p className="font-semibold text-slate-600 dark:text-slate-400">{selectedClosedShift.openedAt}</p>
+                  <p className="font-semibold text-admin-secondary">{selectedClosedShift.openedAt}</p>
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium">Cierre:</span>
-                  <p className="font-semibold text-slate-600 dark:text-slate-400">{selectedClosedShift.closedAt}</p>
+                  <p className="font-semibold text-admin-secondary">{selectedClosedShift.closedAt}</p>
                 </div>
               </div>
 
               {/* Desglose de Dinero */}
-              <div className="space-y-2 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-750">
+              <div className="space-y-2 p-3.5 rounded-xl bg-admin-raised border border-slate-100 dark:border-slate-750">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Fondo Inicial:</span>
                   <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
@@ -1274,19 +1249,19 @@ export default function CajasPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Ventas Tarjeta / QR:</span>
-                  <span className="font-mono font-bold text-[var(--admin-brand)]">
+                  <span className="font-mono font-bold text-admin-brand-text">
                     {formatCurrency(selectedClosedShift.cardSales + selectedClosedShift.transferSales)}
                   </span>
                 </div>
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between font-bold">
+                <div className="pt-2 border-t border-admin-card-border flex justify-between font-bold">
                   <span>Efectivo Esperado:</span>
                   <span className="font-mono text-sm">{formatCurrency(selectedClosedShift.expectedCash)}</span>
                 </div>
-                <div className="flex justify-between font-black text-sm">
+                <div className="flex justify-between font-semibold text-sm">
                   <span>Efectivo Contado:</span>
                   <span className="font-mono">{formatCurrency(selectedClosedShift.actualCash)}</span>
                 </div>
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between font-black text-sm">
+                <div className="pt-2 border-t border-admin-card-border flex justify-between font-semibold text-sm">
                   <span>Diferencia de Caja:</span>
                   <span
                     className={
@@ -1305,8 +1280,8 @@ export default function CajasPage() {
               </div>
 
               {selectedClosedShift.notes && (
-                <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300">
-                  <span className="font-bold block text-slate-700 dark:text-slate-200">Observaciones:</span>
+                <div className="p-3 rounded-xl bg-admin-raised text-[11px] text-admin-secondary">
+                  <span className="font-bold block text-admin-secondary">Observaciones:</span>
                   {selectedClosedShift.notes}
                 </div>
               )}
@@ -1322,7 +1297,7 @@ export default function CajasPage() {
                     selectedClosedShift.registerName
                   );
                 }}
-                className="w-full h-10 rounded-xl border-[var(--admin-brand)]/30 text-[var(--admin-brand)] hover:bg-[var(--admin-brand-light)] text-xs font-bold gap-2 cursor-pointer"
+                className="w-full h-10 rounded-xl border-admin-brand/30 text-admin-brand-text hover:bg-[var(--admin-brand-light)] text-xs font-bold gap-2 cursor-pointer"
               >
                 <Receipt className="h-4 w-4" />
                 <span>Ver Todos los Tickets y Productos Vendidos</span>
@@ -1347,19 +1322,19 @@ export default function CajasPage() {
           10. MODAL: TICKETS Y PRODUCTOS VENDIDOS EN LA CAJA (DRILL-DOWN)
           ========================================================================= */}
       <Dialog open={shiftSalesModalOpen} onOpenChange={setShiftSalesModalOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-2xl">
-          <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+          <DialogHeader className="pb-3 border-b border-admin-card-border">
             <div className="flex items-center justify-between">
               <div>
-                <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Receipt className="h-4 w-4 text-sky-600" />
+                <DialogTitle className="text-base font-semibold text-admin-text flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-admin-brand-text" />
                   Ventas de la Caja: {shiftSalesData?.registerName}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 mt-0.5">
                   Turno #{shiftSalesData?.shiftNumber} • {shiftSalesData?.ticketsCount || 0} tickets emitidos
                 </DialogDescription>
               </div>
-              <div className="text-sm font-black text-[var(--admin-brand)]">
+              <div className="text-sm font-semibold text-admin-brand-text">
                 Total: {formatCurrency(shiftSalesData?.totalRevenue || 0)}
               </div>
             </div>
@@ -1367,13 +1342,13 @@ export default function CajasPage() {
 
           {isLoadingShiftSales ? (
             <div className="py-12 text-center text-slate-400">
-              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-[var(--admin-brand)]" />
+              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-admin-brand-text" />
               <p className="text-xs font-medium">Cargando tickets y productos vendidos...</p>
             </div>
           ) : !shiftSalesData || shiftSalesData.sales.length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-2">
               <Receipt className="h-10 w-10 mx-auto opacity-30" />
-              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              <p className="text-sm font-bold text-admin-secondary">
                 Aún no hay tickets cobrados en este turno
               </p>
               <p className="text-xs text-slate-400">
@@ -1383,22 +1358,22 @@ export default function CajasPage() {
           ) : (
             <div className="space-y-3 py-2">
               {/* Desglose rápido por medio de pago */}
-              <div className="grid grid-cols-2 gap-2 text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700">
+              <div className="grid grid-cols-2 gap-2 text-xs p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 flex items-center gap-1.5 font-medium">
                     <Banknote className="h-3.5 w-3.5 text-emerald-600" />
                     Efectivo:
                   </span>
-                  <span className="font-bold text-slate-900 dark:text-white">
+                  <span className="font-bold text-admin-text">
                     {formatCurrency(shiftSalesData.cashSalesTotal)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 flex items-center gap-1.5 font-medium">
-                    <CreditCard className="h-3.5 w-3.5 text-[var(--admin-brand)]" />
+                    <CreditCard className="h-3.5 w-3.5 text-admin-brand-text" />
                     Tarjeta / QR:
                   </span>
-                  <span className="font-bold text-slate-900 dark:text-white">
+                  <span className="font-bold text-admin-text">
                     {formatCurrency(shiftSalesData.electronicSalesTotal)}
                   </span>
                 </div>
@@ -1409,38 +1384,38 @@ export default function CajasPage() {
                 {shiftSalesData.sales.map((sale) => (
                   <div
                     key={sale.id}
-                    className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-2"
+                    className="p-3.5 rounded-xl border border-admin-card-border bg-admin-card-bg space-y-2"
                   >
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-black text-slate-900 dark:text-white">
+                        <span className="font-mono font-semibold text-admin-text">
                           #{sale.saleNumber}
                         </span>
                         <span className="text-[10px] text-slate-400">· {sale.createdAt}</span>
-                        <span className="text-slate-600 dark:text-slate-300 font-bold">
+                        <span className="text-admin-secondary font-bold">
                           {sale.customerName}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-admin-raised text-admin-secondary capitalize">
                           {sale.paymentMethod === "cash"
                             ? "Efectivo"
                             : sale.paymentMethod === "card"
                             ? "Tarjeta"
                             : "QR / Transf."}
                         </span>
-                        <span className="font-black text-sm text-slate-900 dark:text-white">
+                        <span className="font-semibold text-sm text-admin-text">
                           {formatCurrency(sale.totalAmount)}
                         </span>
                       </div>
                     </div>
 
                     {/* Desglose de productos vendidos en este ticket */}
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60 space-y-1">
+                    <div className="pt-2 border-t border-admin-card-border space-y-1">
                       {sale.items.map((it) => (
                         <div
                           key={it.id}
-                          className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400"
+                          className="flex items-center justify-between text-[11px] text-admin-secondary"
                         >
                           <span className="truncate pr-2">
                             <span className="font-bold text-slate-800 dark:text-slate-200">
@@ -1460,7 +1435,7 @@ export default function CajasPage() {
             </div>
           )}
 
-          <DialogFooter className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <DialogFooter className="pt-2 border-t border-admin-card-border">
             <Button
               variant="outline"
               size="sm"

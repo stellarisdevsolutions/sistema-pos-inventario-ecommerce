@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Users,
   UserPlus,
   ShieldCheck,
   Search,
@@ -167,7 +166,7 @@ export default function UsuariosPage() {
       role: user.role,
       phone: user.phone || "",
       password: "",
-      pin: user.pin || "",
+      pin: "",
       isActive: user.isActive,
     });
     setEditModalOpen(true);
@@ -185,7 +184,7 @@ export default function UsuariosPage() {
         email: editForm.email,
         role: editForm.role,
         phone: editForm.phone,
-        pin: editForm.pin,
+        pin: editForm.pin || undefined,
         password: editForm.password ? editForm.password : undefined,
         isActive: editForm.isActive,
       });
@@ -227,22 +226,17 @@ export default function UsuariosPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* 1. Header Principal */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <Users className="h-6 w-6 text-[var(--admin-brand)]" />
-              Gestión de Usuarios & Roles
-            </h1>
+            <h1 className="admin-page-title">Usuarios y roles</h1>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Administra cajeros, supervisores y administradores con control de roles y PINs.
-          </p>
+          <p className="admin-page-description">Administra las cuentas y los permisos del panel.</p>
         </div>
 
         <Button
           onClick={() => setCreateModalOpen(true)}
-          className="h-10 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-md shadow-[var(--admin-brand)]/20 cursor-pointer self-start sm:self-auto"
+          className="h-10 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold gap-2 cursor-pointer self-start sm:self-auto"
         >
           <UserPlus className="h-4 w-4" />
           <span>Nuevo Usuario</span>
@@ -250,42 +244,42 @@ export default function UsuariosPage() {
       </div>
 
       {/* 2. Tarjetas Bento de Resumen */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
+      <div className="admin-kpi-grid">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
             Total Usuarios
           </span>
-          <p className="text-xl font-black text-slate-900 dark:text-white mt-1">
+          <p className="text-xl font-semibold text-admin-text mt-1">
             {kpis.totalUsers}
           </p>
           <span className="text-[10px] text-slate-400">Registrados en la plataforma</span>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
-          <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
+          <span className="text-[10px] font-bold text-admin-brand-text uppercase tracking-wider block">
             Supervisores & Admins
           </span>
-          <p className="text-xl font-black text-purple-600 dark:text-purple-400 mt-1">
+          <p className="text-xl font-semibold text-admin-brand-text mt-1">
             {kpis.adminsCount}
           </p>
           <span className="text-[10px] text-slate-400">Con autorización de arqueo y PIN</span>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
           <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
             Cajeros de Mostrador
           </span>
-          <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+          <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
             {kpis.cashiersCount}
           </p>
           <span className="text-[10px] text-slate-400">Habilitados para operar turnos</span>
         </div>
 
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs">
-          <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider block">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4">
+          <span className="text-[10px] font-bold text-admin-brand-text uppercase tracking-wider block">
             Usuarios Activos
           </span>
-          <p className="text-xl font-black text-sky-600 dark:text-sky-400 mt-1">
+          <p className="text-xl font-semibold text-admin-brand-text mt-1">
             {kpis.activeUsersCount}
           </p>
           <span className="text-[10px] text-slate-400">Con acceso habilitado al sistema</span>
@@ -293,14 +287,14 @@ export default function UsuariosPage() {
       </div>
 
       {/* 3. Filtros y Búsqueda */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs flex flex-col sm:flex-row items-center gap-3">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar por nombre, correo o teléfono..."
-            className="pl-9 h-10 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+            className="pl-9 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border"
           />
         </div>
 
@@ -308,7 +302,7 @@ export default function UsuariosPage() {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="h-10 px-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium cursor-pointer"
+            className="h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-admin-secondary font-medium cursor-pointer"
           >
             <option value="all">Todos los Roles</option>
             <option value="admin">Administrador General</option>
@@ -322,7 +316,7 @@ export default function UsuariosPage() {
             size="sm"
             onClick={loadUsersData}
             disabled={isLoading}
-            className="h-10 px-3 rounded-xl border-slate-200 dark:border-slate-700 text-slate-600 hover:text-slate-900 cursor-pointer"
+            className="h-10 px-3 rounded-xl border-admin-card-border text-slate-600 hover:text-slate-900 cursor-pointer"
           >
             <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
           </Button>
@@ -330,10 +324,10 @@ export default function UsuariosPage() {
       </div>
 
       {/* 4. Tabla de Usuarios */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               <tr>
                 <th className="py-3 px-4">Usuario</th>
                 <th className="py-3 px-4">Rol & Permisos</th>
@@ -343,7 +337,7 @@ export default function UsuariosPage() {
                 <th className="py-3 px-4 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
+            <tbody className="divide-y divide-admin-card-border font-medium text-admin-secondary">
               {isLoading ? (
                 <tr>
                   <td colSpan={6} className="text-center py-10 text-slate-400">
@@ -359,14 +353,14 @@ export default function UsuariosPage() {
                 </tr>
               ) : (
                 filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                  <tr key={user.id} className="hover:bg-admin-raised transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-slate-700 dark:text-slate-200 text-xs shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-admin-raised flex items-center justify-center font-semibold text-admin-secondary text-xs shrink-0">
                           {user.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 dark:text-white leading-tight">
+                          <p className="font-bold text-admin-text leading-tight">
                             {user.name}
                           </p>
                           <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
@@ -383,9 +377,9 @@ export default function UsuariosPage() {
                           className={cn(
                             "h-1.5 w-1.5 rounded-full",
                             user.role === "admin"
-                              ? "bg-purple-500"
+                              ? "bg-admin-brand"
                               : user.role === "manager"
-                              ? "bg-sky-500"
+                              ? "bg-admin-brand"
                               : user.role === "cashier"
                               ? "bg-emerald-500"
                               : "bg-amber-500"
@@ -394,9 +388,9 @@ export default function UsuariosPage() {
                         <span
                           className={cn(
                             user.role === "admin"
-                              ? "text-purple-700 dark:text-purple-300"
+                              ? "text-admin-brand-text"
                               : user.role === "manager"
-                              ? "text-sky-700 dark:text-sky-300"
+                              ? "text-admin-brand-text"
                               : user.role === "cashier"
                               ? "text-emerald-700 dark:text-emerald-300"
                               : "text-amber-700 dark:text-amber-300"
@@ -413,7 +407,7 @@ export default function UsuariosPage() {
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
+                    <td className="py-3.5 px-4 text-admin-muted">
                       {user.phone ? (
                         <span className="flex items-center gap-1">
                           <Phone className="h-3 w-3 text-slate-400" />
@@ -427,7 +421,7 @@ export default function UsuariosPage() {
                     <td className="py-3.5 px-4 text-center">
                       {user.role === "admin" || user.role === "manager" ? (
                         user.hasPin ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-admin-raised text-slate-800 dark:text-slate-200 border border-admin-card-border">
                             <KeyRound className="h-3 w-3 text-emerald-600" />
                             Configurado (●●●●)
                           </span>
@@ -456,7 +450,7 @@ export default function UsuariosPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => openEditModal(user)}
-                          className="h-8 rounded-lg text-xs gap-1 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 cursor-pointer"
+                          className="h-8 rounded-lg text-xs gap-1 border-admin-card-border text-admin-secondary hover:text-slate-900 cursor-pointer"
                         >
                           <Edit2 className="h-3 w-3" />
                           <span>Editar</span>
@@ -493,15 +487,15 @@ export default function UsuariosPage() {
 
       {/* 5. Modal Crear Nuevo Usuario */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="sm:max-w-md p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
+        <DialogContent className="sm:max-w-md p-6 rounded-xl bg-admin-card-bg border border-admin-card-border">
           <DialogHeader>
-            <div className="h-10 w-10 rounded-xl bg-sky-50 dark:bg-sky-950 text-sky-600 flex items-center justify-center mb-2">
+            <div className="h-10 w-10 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center mb-2">
               <UserPlus className="h-5 w-5" />
             </div>
-            <DialogTitle className="text-base font-black text-slate-900 dark:text-white">
+            <DialogTitle className="text-base font-semibold text-admin-text">
               Registrar Nuevo Usuario
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+            <DialogDescription className="text-xs text-admin-muted">
               Crea un nuevo miembro del equipo y asígnale su rol dentro del negocio.
             </DialogDescription>
           </DialogHeader>
@@ -516,7 +510,7 @@ export default function UsuariosPage() {
                 value={createForm.name}
                 onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                 placeholder="Ej: Carmen Gómez"
-                className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800"
+                className="h-9 text-xs rounded-xl bg-admin-raised"
               />
             </div>
 
@@ -530,7 +524,7 @@ export default function UsuariosPage() {
                 value={createForm.email}
                 onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                 placeholder="carmen@auracommerce.com"
-                className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800"
+                className="h-9 text-xs rounded-xl bg-admin-raised"
               />
             </div>
 
@@ -542,7 +536,7 @@ export default function UsuariosPage() {
                 <select
                   value={createForm.role}
                   onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as any })}
-                  className="w-full h-9 px-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold"
+                  className="w-full h-9 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-slate-800 dark:text-slate-200 font-bold"
                 >
                   <option value="cashier">Cajero de Mostrador</option>
                   <option value="manager">Supervisor de Tienda</option>
@@ -559,7 +553,7 @@ export default function UsuariosPage() {
                   value={createForm.phone || ""}
                   onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
                   placeholder="+591 70000000"
-                  className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800"
+                  className="h-9 text-xs rounded-xl bg-admin-raised"
                 />
               </div>
             </div>
@@ -573,18 +567,18 @@ export default function UsuariosPage() {
                 value={createForm.password}
                 onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
                 placeholder="Por defecto: aura123456"
-                className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800"
+                className="h-9 text-xs rounded-xl bg-admin-raised"
               />
             </div>
 
             {/* Si es Admin o Supervisor: PIN de autorización */}
             {(createForm.role === "admin" || createForm.role === "manager") && (
-              <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 space-y-1.5">
-                <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-200 font-bold text-xs">
-                  <KeyRound className="h-3.5 w-3.5 text-purple-600" />
+              <div className="p-3 rounded-xl bg-admin-brand-subtle border border-admin-brand-light space-y-1.5">
+                <div className="flex items-center gap-1.5 text-admin-brand-text font-bold text-xs">
+                  <KeyRound className="h-3.5 w-3.5 text-admin-brand-text" />
                   <span>PIN de Autorización en Mostrador (4-6 dígitos)</span>
                 </div>
-                <p className="text-[10px] text-purple-700 dark:text-purple-300">
+                <p className="text-[10px] text-admin-brand-text">
                   Este PIN permite al supervisor autorizar devoluciones de clientes y validar arqueos de caja rápidamente.
                 </p>
                 <Input
@@ -593,7 +587,7 @@ export default function UsuariosPage() {
                   value={createForm.pin || ""}
                   onChange={(e) => setCreateForm({ ...createForm, pin: e.target.value })}
                   placeholder="Ej: 1234"
-                  className="h-8 text-xs font-mono font-bold tracking-widest bg-white dark:bg-slate-900 border-purple-300 w-32"
+                  className="h-8 text-xs font-mono font-bold tracking-widest bg-admin-card-bg border-admin-brand-light w-32"
                 />
               </div>
             )}
@@ -612,7 +606,7 @@ export default function UsuariosPage() {
                 type="submit"
                 size="sm"
                 disabled={isSubmittingCreate}
-                className="h-9 text-xs rounded-xl bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold"
+                className="h-9 text-xs rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid font-bold"
               >
                 {isSubmittingCreate ? (
                   <>
@@ -630,15 +624,15 @@ export default function UsuariosPage() {
 
       {/* 6. Modal Editar Usuario */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="sm:max-w-md p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
+        <DialogContent className="sm:max-w-md p-6 rounded-xl bg-admin-card-bg border border-admin-card-border">
           <DialogHeader>
-            <div className="h-10 w-10 rounded-xl bg-sky-50 dark:bg-sky-950 text-sky-600 flex items-center justify-center mb-2">
+            <div className="h-10 w-10 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center mb-2">
               <Edit2 className="h-5 w-5" />
             </div>
-            <DialogTitle className="text-base font-black text-slate-900 dark:text-white">
+            <DialogTitle className="text-base font-semibold text-admin-text">
               Editar Usuario: {userToEdit?.name}
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+            <DialogDescription className="text-xs text-admin-muted">
               Modifica el rol, teléfono, contraseña o PIN de autorización.
             </DialogDescription>
           </DialogHeader>
@@ -652,7 +646,7 @@ export default function UsuariosPage() {
                 required
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800"
+                className="h-9 text-xs rounded-xl bg-admin-raised"
               />
             </div>
 
@@ -665,7 +659,7 @@ export default function UsuariosPage() {
                 type="email"
                 value={editForm.email}
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800"
+                className="h-9 text-xs rounded-xl bg-admin-raised"
               />
             </div>
 
@@ -677,7 +671,7 @@ export default function UsuariosPage() {
                 <select
                   value={editForm.role}
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value as any })}
-                  className="w-full h-9 px-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold"
+                  className="w-full h-9 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-slate-800 dark:text-slate-200 font-bold"
                 >
                   <option value="cashier">Cajero de Mostrador</option>
                   <option value="manager">Supervisor de Tienda</option>
@@ -694,7 +688,7 @@ export default function UsuariosPage() {
                   value={editForm.phone}
                   onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                   placeholder="+591 70000000"
-                  className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800"
+                  className="h-9 text-xs rounded-xl bg-admin-raised"
                 />
               </div>
             </div>
@@ -708,18 +702,18 @@ export default function UsuariosPage() {
                 value={editForm.password}
                 onChange={(e) => setEditForm({ ...editForm, password: e.target.value as any })}
                 placeholder="Nueva contraseña..."
-                className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-800"
+                className="h-9 text-xs rounded-xl bg-admin-raised"
               />
             </div>
 
             {/* PIN de autorización */}
             {(editForm.role === "admin" || editForm.role === "manager") && (
-              <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 space-y-1.5">
-                <div className="flex items-center gap-1.5 text-purple-900 dark:text-purple-200 font-bold text-xs">
-                  <KeyRound className="h-3.5 w-3.5 text-purple-600" />
+              <div className="p-3 rounded-xl bg-admin-brand-subtle border border-admin-brand-light space-y-1.5">
+                <div className="flex items-center gap-1.5 text-admin-brand-text font-bold text-xs">
+                  <KeyRound className="h-3.5 w-3.5 text-admin-brand-text" />
                   <span>PIN de Autorización (4-6 dígitos)</span>
                 </div>
-                <p className="text-[10px] text-purple-700 dark:text-purple-300">
+                <p className="text-[10px] text-admin-brand-text">
                   PIN numérico para validar devoluciones y autorizar operaciones restringidas.
                 </p>
                 <Input
@@ -728,7 +722,7 @@ export default function UsuariosPage() {
                   value={editForm.pin}
                   onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })}
                   placeholder="Ej: 1234"
-                  className="h-8 text-xs font-mono font-bold tracking-widest bg-white dark:bg-slate-900 border-purple-300 w-32"
+                  className="h-8 text-xs font-mono font-bold tracking-widest bg-admin-card-bg border-admin-brand-light w-32"
                 />
               </div>
             )}
@@ -747,7 +741,7 @@ export default function UsuariosPage() {
                 type="submit"
                 size="sm"
                 disabled={isSubmittingEdit}
-                className="h-9 text-xs rounded-xl bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold"
+                className="h-9 text-xs rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid font-bold"
               >
                 {isSubmittingEdit ? (
                   <>

@@ -1,5 +1,7 @@
 "use client";
 
+import { ProductThumbnail } from "@/components/admin/product-thumbnail";
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -262,29 +264,25 @@ export default function NuevaCompraPage() {
       {/* =========================================================================
           1. HEADER CON RETORNO Y TÍTULO
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
         <div className="space-y-1">
           <Link
             href="/admin/compras"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[var(--admin-brand)] dark:text-slate-400 dark:hover:text-[var(--admin-brand)] transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-admin-brand-text dark:text-slate-400 dark:hover:text-admin-brand-text transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>Volver a Compras & Entradas</span>
           </Link>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Registrar Compra / Ingreso de Mercadería
-            </h1>
+            <h1 className="admin-page-title">Registrar compra</h1>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Ingreso de existencias a almacén y actualización de Costo Promedio Ponderado (CPP).
-          </p>
+          <p className="admin-page-description">Selecciona un proveedor y agrega los productos recibidos.</p>
         </div>
       </div>
 
       {isLoadingCatalogs ? (
-        <div className="py-24 text-center space-y-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800">
-          <RefreshCw className="h-8 w-8 text-[var(--admin-brand)] animate-spin mx-auto" />
+        <div className="py-24 text-center space-y-3 bg-admin-card-bg rounded-xl border border-admin-card-border">
+          <RefreshCw className="h-8 w-8 text-admin-brand-text animate-spin mx-auto" />
           <p className="text-xs text-slate-500 font-medium">
             Cargando proveedores y productos disponibles...
           </p>
@@ -297,10 +295,10 @@ export default function NuevaCompraPage() {
                 =================================================================== */}
             <div className="lg:col-span-8 space-y-6">
               {/* Tarjeta 1: Datos de Factura y Proveedor */}
-              <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs space-y-4">
-                <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <Building2 className="h-4 w-4 text-[var(--admin-brand)]" />
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b border-admin-card-border">
+                  <Building2 className="h-4 w-4 text-admin-brand-text" />
+                  <h2 className="text-sm font-bold text-admin-text">
                     Datos del Proveedor & Factura
                   </h2>
                 </div>
@@ -308,7 +306,7 @@ export default function NuevaCompraPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   {/* Proveedor */}
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <label className="font-semibold text-admin-secondary flex items-center justify-between">
                       <span>Empresa Proveedora *</span>
                       {selectedSupplier?.taxId && (
                         <span className="font-mono text-slate-400 font-normal">
@@ -320,7 +318,7 @@ export default function NuevaCompraPage() {
                       value={supplierId}
                       onChange={(e) => setSupplierId(Number(e.target.value))}
                       required
-                      className="h-10 w-full rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 text-xs text-slate-800 dark:text-slate-200 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[var(--admin-brand)]/20"
+                      className="h-10 w-full rounded-xl border border-admin-card-border bg-admin-card-bg px-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20"
                     >
                       {availableSuppliers.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -332,26 +330,26 @@ export default function NuevaCompraPage() {
 
                   {/* Número de Factura */}
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    <label className="font-semibold text-admin-secondary">
                       N° de Factura / Guía de Remisión
                     </label>
                     <Input
                       value={invoiceNumber}
                       onChange={(e) => setInvoiceNumber(e.target.value)}
                       placeholder="Ej. FAC-9842 o Guía #1024"
-                      className="h-10 text-xs rounded-xl border-slate-200/90 dark:border-slate-700 font-medium placeholder:font-normal"
+                      className="h-10 text-xs rounded-xl border-admin-card-border font-medium placeholder:font-normal"
                     />
                   </div>
 
                   {/* Método de Pago */}
                   <div className="space-y-1.5">
-                    <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    <label className="font-semibold text-admin-secondary">
                       Medio de Pago Utilizado
                     </label>
                     <select
                       value={paymentMethod}
                       onChange={(e) => setPaymentMethod(e.target.value as any)}
-                      className="h-10 w-full rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 text-xs text-slate-800 dark:text-slate-200 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-[var(--admin-brand)]/20"
+                      className="h-10 w-full rounded-xl border border-admin-card-border bg-admin-card-bg px-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20"
                     >
                       <option value="transfer">Transferencia Bancaria</option>
                       <option value="cash">Efectivo de Caja</option>
@@ -362,26 +360,26 @@ export default function NuevaCompraPage() {
 
                   {/* Notas */}
                   <div className="space-y-1.5 sm:col-span-2">
-                    <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    <label className="font-semibold text-admin-secondary">
                       Notas u Observaciones de la Compra
                     </label>
                     <Input
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Condiciones de entrega, garantía del lote, detalles del transportista..."
-                      className="h-10 text-xs rounded-xl border-slate-200/90 dark:border-slate-700 font-medium placeholder:font-normal"
+                      className="h-10 text-xs rounded-xl border-admin-card-border font-medium placeholder:font-normal"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Tarjeta 2: Detalle de Productos a Ingresar */}
-              <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs overflow-hidden">
-                <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+                <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-admin-card-border">
                   <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-[var(--admin-brand)]" />
+                    <Package className="h-4 w-4 text-admin-brand-text" />
                     <div>
-                      <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                      <h2 className="text-sm font-bold text-admin-text">
                         Artículos a Ingresar
                       </h2>
                       <span className="text-[11px] text-slate-400">
@@ -398,7 +396,7 @@ export default function NuevaCompraPage() {
                       setModalCurrentPage(1);
                       setIsProductModalOpen(true);
                     }}
-                    className="h-10 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-sm shadow-[var(--admin-brand)]/20 cursor-pointer w-full sm:w-auto"
+                    className="h-10 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold gap-2 cursor-pointer w-full sm:w-auto"
                   >
                     <Plus className="h-4 w-4 stroke-[2.5]" />
                     <span>Seleccionar Productos</span>
@@ -407,10 +405,10 @@ export default function NuevaCompraPage() {
 
                 {/* Listado dinámico de renglones a ancho completo */}
                 {items.length === 0 ? (
-                  <div className="py-16 px-5 text-center space-y-3 bg-slate-50/40 dark:bg-slate-800/20">
+                  <div className="py-16 px-5 text-center space-y-3 bg-admin-raised">
                     <Package className="h-9 w-9 text-slate-400 mx-auto" />
                     <div className="space-y-1">
-                      <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <h3 className="text-xs font-bold text-admin-secondary">
                         No has agregado ningún artículo a la compra
                       </h3>
                       <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
@@ -424,7 +422,7 @@ export default function NuevaCompraPage() {
                         setModalCurrentPage(1);
                         setIsProductModalOpen(true);
                       }}
-                      className="h-9 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-1.5 shadow-sm shadow-[var(--admin-brand)]/20 cursor-pointer"
+                      className="h-9 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold gap-1.5 cursor-pointer"
                     >
                       <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                       <span>Abrir Catálogo de Productos</span>
@@ -437,7 +435,7 @@ export default function NuevaCompraPage() {
                       return (
                         <div
                           key={it.tempId}
-                          className="p-4 sm:px-5 bg-white dark:bg-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
+                          className="p-4 sm:px-5 bg-admin-card-bg flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs hover:bg-admin-raised transition-colors"
                         >
                           {/* Info del producto con Imagen */}
                           <div className="flex items-center gap-3.5 flex-1 min-w-0">
@@ -447,24 +445,24 @@ export default function NuevaCompraPage() {
 
                             {it.productImage ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img
+                              <ProductThumbnail
                                 src={it.productImage}
                                 alt={it.productName}
-                                className="h-11 w-11 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
+                                className="h-11 w-11 rounded-lg object-cover border border-admin-card-border shrink-0"
                               />
                             ) : (
-                              <div className="h-11 w-11 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center text-slate-400 shrink-0">
+                              <div className="h-11 w-11 rounded-lg bg-admin-raised border border-admin-card-border flex items-center justify-center text-slate-400 shrink-0">
                                 <Package className="h-5 w-5" />
                               </div>
                             )}
 
                             <div className="min-w-0 flex-1">
-                              <h4 className="font-bold text-slate-900 dark:text-white truncate">
+                              <h4 className="font-bold text-admin-text truncate">
                                 {it.productName}
                               </h4>
                               <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
                                 <span>
-                                  Stock actual: <strong className="text-slate-600 dark:text-slate-300 font-mono">{it.currentStock}</strong> u.
+                                  Stock actual: <strong className="text-admin-secondary font-mono">{it.currentStock}</strong> u.
                                 </span>
                                 <span>•</span>
                                 <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
@@ -488,7 +486,7 @@ export default function NuevaCompraPage() {
                                 onChange={(e) =>
                                   handleUpdateItem(it.tempId, "quantity", parseInt(e.target.value) || 0)
                                 }
-                                className="h-9 w-24 text-xs rounded-lg border-slate-200 dark:border-slate-700 text-center font-bold font-mono"
+                                className="h-9 w-24 text-xs rounded-lg border-admin-card-border text-center font-bold font-mono"
                               />
                             </div>
 
@@ -509,7 +507,7 @@ export default function NuevaCompraPage() {
                                     parseFloat(e.target.value) || 0
                                   )
                                 }
-                                className="h-9 w-32 text-xs rounded-lg border-slate-200 dark:border-slate-700 text-right font-bold font-mono"
+                                className="h-9 w-32 text-xs rounded-lg border-admin-card-border text-right font-bold font-mono"
                               />
                             </div>
 
@@ -518,7 +516,7 @@ export default function NuevaCompraPage() {
                               <label className="text-[10px] font-semibold text-slate-400 block">
                                 Subtotal
                               </label>
-                              <span className="text-xs font-mono font-black text-slate-900 dark:text-white block pt-1.5">
+                              <span className="text-xs font-mono font-semibold text-admin-text block pt-1.5">
                                 {CURRENCY_SYMBOL} {lineSubtotal.toFixed(2)}
                               </span>
                             </div>
@@ -546,10 +544,10 @@ export default function NuevaCompraPage() {
                 =================================================================== */}
             <div className="lg:col-span-4 space-y-4">
               {/* Tarjeta de Resumen Financiero */}
-              <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs space-y-4 sticky top-6">
-                <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <Receipt className="h-4 w-4 text-[var(--admin-brand)]" />
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 space-y-4 sticky top-6">
+                <div className="flex items-center gap-2 pb-3 border-b border-admin-card-border">
+                  <Receipt className="h-4 w-4 text-admin-brand-text" />
+                  <h3 className="text-sm font-bold text-admin-text">
                     Resumen de Liquidación
                   </h3>
                 </div>
@@ -557,30 +555,30 @@ export default function NuevaCompraPage() {
                 <div className="space-y-2.5 text-xs">
                   <div className="flex justify-between items-center text-slate-500">
                     <span>Artículos distintos:</span>
-                    <span className="font-bold text-slate-900 dark:text-white font-mono">
+                    <span className="font-bold text-admin-text font-mono">
                       {items.length}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center text-slate-500">
                     <span>Unidades físicas a ingresar:</span>
-                    <span className="font-bold text-[var(--admin-brand)] font-mono">
+                    <span className="font-bold text-admin-brand-text font-mono">
                       {totalUnits} piezas
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center text-slate-500">
                     <span>Moneda de compra:</span>
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    <span className="font-semibold text-admin-secondary">
                       {CURRENCY_NAME} ({CURRENCY_SYMBOL})
                     </span>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-baseline">
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                  <div className="pt-3 border-t border-admin-card-border flex justify-between items-baseline">
+                    <span className="text-xs font-bold text-admin-text">
                       Total de la Factura:
                     </span>
-                    <span className="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight">
+                    <span className="text-2xl font-semibold text-admin-text font-mono tracking-tight">
                       {CURRENCY_SYMBOL}{" "}
                       {totalAmount.toLocaleString("es-BO", {
                         minimumFractionDigits: 2,
@@ -595,7 +593,7 @@ export default function NuevaCompraPage() {
                   <Button
                     type="submit"
                     disabled={isSubmitting || items.length === 0}
-                    className="h-11 w-full rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-md shadow-[var(--admin-brand)]/25 active:scale-95 transition-all cursor-pointer"
+                    className="h-11 w-full rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold gap-2 active:scale-95 transition-all cursor-pointer"
                   >
                     {isSubmitting ? (
                       <>
@@ -615,16 +613,16 @@ export default function NuevaCompraPage() {
                     variant="outline"
                     onClick={() => router.push("/admin/compras")}
                     disabled={isSubmitting}
-                    className="h-10 w-full rounded-xl border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                    className="h-10 w-full rounded-xl border-admin-card-border text-xs text-admin-secondary hover:bg-admin-raised cursor-pointer"
                   >
                     Cancelar y Regresar
                   </Button>
                 </div>
 
                 {/* Nota de Auditoría de Almacén */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                  <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
-                    <Info className="h-3.5 w-3.5 text-[var(--admin-brand)] shrink-0" />
+                <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border space-y-1.5 text-[11px] text-admin-secondary leading-relaxed">
+                  <div className="flex items-center gap-1.5 font-bold text-admin-text">
+                    <Info className="h-3.5 w-3.5 text-admin-brand-text shrink-0" />
                     <span>Impacto en Almacén & Kardex</span>
                   </div>
                   <p>
@@ -641,16 +639,16 @@ export default function NuevaCompraPage() {
           MODAL: LISTADO DE PRODUCTOS CON BUSCADOR, PAGINACIÓN Y BOTÓN AGREGAR
           ========================================================================= */}
       <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
-        <DialogContent className="sm:max-w-3xl h-[85vh] sm:h-[620px] max-h-[90vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-0 shadow-2xl overflow-hidden">
+        <DialogContent className="sm:max-w-3xl h-[85vh] sm:h-[620px] max-h-[90vh] flex flex-col rounded-xl bg-admin-card-bg border border-admin-card-border p-0 overflow-hidden">
           {/* Header del Modal */}
-          <DialogHeader className="p-5 pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+          <DialogHeader className="p-5 pb-4 border-b border-admin-card-border shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <DialogTitle className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <Package className="h-5 w-5 text-[var(--admin-brand)]" />
+                <DialogTitle className="text-base font-semibold text-admin-text flex items-center gap-2">
+                  <Package className="h-5 w-5 text-admin-brand-text" />
                   <span>Catálogo de Productos para Compra</span>
                 </DialogTitle>
-                <DialogDescription className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <DialogDescription className="text-xs text-admin-muted mt-0.5">
                   Selecciona los artículos que deseas ingresar a la orden de compra.
                 </DialogDescription>
               </div>
@@ -669,7 +667,7 @@ export default function NuevaCompraPage() {
                   setModalCurrentPage(1);
                 }}
                 placeholder="Buscar por nombre de producto..."
-                className="pl-9 h-10 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/80 focus:bg-white dark:focus:bg-slate-900"
+                className="pl-9 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-white dark:focus:bg-slate-900"
               />
               {modalSearchTerm && (
                 <button
@@ -691,7 +689,7 @@ export default function NuevaCompraPage() {
             {paginatedModalProducts.length === 0 ? (
               <div className="py-16 text-center space-y-2">
                 <Package className="h-8 w-8 text-slate-400 mx-auto" />
-                <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <p className="text-xs font-bold text-admin-secondary">
                   No se encontraron productos
                 </p>
                 <p className="text-[11px] text-slate-400">
@@ -700,7 +698,7 @@ export default function NuevaCompraPage() {
               </div>
             ) : (
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider sticky top-0 z-10 backdrop-blur-xs">
+                <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider sticky top-0 z-10 backdrop-blur-xs">
                   <tr>
                     <th className="py-3 px-5">Producto</th>
                     <th className="py-3 px-4 text-center">Stock Actual</th>
@@ -709,31 +707,31 @@ export default function NuevaCompraPage() {
                     <th className="py-3 px-5 text-right">Acción</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                <tbody className="divide-y divide-admin-card-border font-medium text-admin-secondary">
                   {paginatedModalProducts.map((p) => {
                     const inOrderQty = getItemQuantityInOrder(p.id);
                     return (
                       <tr
                         key={p.id}
-                        className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                        className="hover:bg-admin-raised transition-colors"
                       >
                         {/* 1. Producto con Imagen y Nombre */}
                         <td className="py-3 px-5">
                           <div className="flex items-center gap-3">
                             {p.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img
+                              <ProductThumbnail
                                 src={p.imageUrl}
                                 alt={p.name}
-                                className="h-10 w-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
+                                className="h-10 w-10 rounded-lg object-cover border border-admin-card-border shrink-0"
                               />
                             ) : (
-                              <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center text-slate-400 shrink-0">
+                              <div className="h-10 w-10 rounded-lg bg-admin-raised border border-admin-card-border flex items-center justify-center text-slate-400 shrink-0">
                                 <Package className="h-5 w-5" />
                               </div>
                             )}
                             <div className="min-w-0">
-                              <div className="font-bold text-slate-900 dark:text-white truncate max-w-[200px] sm:max-w-[260px]">
+                              <div className="font-bold text-admin-text truncate max-w-[200px] sm:max-w-[260px]">
                                 {p.name}
                               </div>
                             </div>
@@ -742,14 +740,14 @@ export default function NuevaCompraPage() {
 
                         {/* 2. Stock Actual */}
                         <td className="py-3 px-4 text-center">
-                          <span className="font-mono font-bold text-slate-900 dark:text-white">
+                          <span className="font-mono font-bold text-admin-text">
                             {p.stock}
                           </span>{" "}
                           <span className="text-[10px] text-slate-400">u.</span>
                         </td>
 
                         {/* 3. Costo Catálogo */}
-                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 dark:text-white">
+                        <td className="py-3 px-4 text-right font-mono font-bold text-admin-text">
                           {CURRENCY_SYMBOL} {p.costPrice.toFixed(2)}
                         </td>
 
@@ -776,7 +774,7 @@ export default function NuevaCompraPage() {
                                 "h-8 px-3 rounded-lg text-xs font-bold gap-1 cursor-pointer transition-all active:scale-95",
                                 inOrderQty > 0
                                   ? "bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
-                                  : "bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white shadow-xs"
+                                  : "bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid"
                               )}
                             >
                               <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -793,10 +791,10 @@ export default function NuevaCompraPage() {
           </div>
 
           {/* Footer del Modal con Paginación Cómoda y Separada */}
-          <DialogFooter className="p-4 px-6 pb-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Mostrando página <span className="font-bold text-slate-900 dark:text-white">{modalCurrentPage}</span> de{" "}
-              <span className="font-bold text-slate-900 dark:text-white">{modalTotalPages}</span> ({filteredModalProducts.length} productos)
+          <DialogFooter className="p-4 px-6 pb-6 border-t border-admin-card-border bg-admin-raised shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-admin-muted font-medium">
+              Mostrando página <span className="font-bold text-admin-text">{modalCurrentPage}</span> de{" "}
+              <span className="font-bold text-admin-text">{modalTotalPages}</span> ({filteredModalProducts.length} productos)
             </div>
 
             <div className="flex items-center gap-2">
@@ -805,7 +803,7 @@ export default function NuevaCompraPage() {
                   type="button"
                   disabled={modalCurrentPage <= 1}
                   onClick={() => setModalCurrentPage((prev) => Math.max(1, prev - 1))}
-                  className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                  className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-admin-secondary disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   title="Página anterior"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -827,8 +825,8 @@ export default function NuevaCompraPage() {
                       className={cn(
                         "h-8 w-8 rounded-lg text-xs font-bold flex items-center justify-center cursor-pointer transition-all",
                         modalCurrentPage === item
-                          ? "bg-[var(--admin-brand)] text-white border border-[var(--admin-brand)] shadow-sm"
-                          : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                          ? "bg-admin-brand text-white border border-admin-brand"
+                          : "border border-admin-card-border bg-admin-card-bg text-admin-secondary hover:bg-admin-raised"
                       )}
                     >
                       {item}
@@ -840,7 +838,7 @@ export default function NuevaCompraPage() {
                   type="button"
                   disabled={modalCurrentPage >= modalTotalPages}
                   onClick={() => setModalCurrentPage((prev) => Math.min(modalTotalPages, prev + 1))}
-                  className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                  className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-admin-secondary disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   title="Página siguiente"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -850,7 +848,7 @@ export default function NuevaCompraPage() {
               <Button
                 type="button"
                 onClick={() => setIsProductModalOpen(false)}
-                className="h-8 px-4 rounded-lg bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold cursor-pointer"
+                className="h-8 px-4 rounded-lg bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold cursor-pointer"
               >
                 Listo ({items.length} en orden)
               </Button>

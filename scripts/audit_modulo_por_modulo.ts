@@ -1,349 +1,157 @@
-import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { encodeSessionToken, decodeSessionToken, signWithWebCrypto, type SessionUser } from "@/lib/auth/session-edge";
+import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import { test } from "node:test";
+import { NextRequest } from "next/server";
+import { middleware } from "@/middleware";
 import { db } from "@/db";
-import * as schema from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { verifyDemoLogin } from "@/lib/auth/demo-login";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { decodeSessionToken, encodeSessionToken, type SessionUser } from "@/lib/auth/session-edge";
+import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
+import { businessDate, businessDayStart } from "@/lib/business-date";
+import { refundUnitAmounts } from "@/lib/refund-amount";
+import { refundSaleSchema, saleFormSchema } from "@/lib/validations/sale";
+import { userUpdateSchema } from "@/lib/validations/user";
+import { closeShiftAction, openShiftAction } from "@/app/admin/actions/cash-shifts";
+import { createCategoryAction, deleteCategoryAction, updateCategoryAction } from "@/app/admin/actions/products";
+import { createSaleAction, getPosCatalogAction, getPosContextAction, getSalesHistoryAction } from "@/app/admin/actions/sales";
+import { uploadCategoryPhotoAction, uploadProductImageAction } from "@/app/admin/actions/upload";
 
-interface AuditResult {
-  module: string;
-  testCase: string;
-  category: "SEGURIDAD" | "FUNCIONALIDAD" | "INTEGRIDAD_FINANCIERA";
-  passed: boolean;
-  details: string;
-}
+const user: SessionUser = { id: 10, role: "cashier", name: "Persona de prueba", email: "test@example.invalid" };
 
-const auditLog: AuditResult[] = [];
-
-function recordAudit(
-  module: string,
-  testCase: string,
-  category: "SEGURIDAD" | "FUNCIONALIDAD" | "INTEGRIDAD_FINANCIERA",
-  passed: boolean,
-  details: string
-) {
-  auditLog.push({ module, testCase, category, passed, details });
-  const statusIcon = passed ? "✅ PASS" : "❌ FAIL";
-  console.log(`[${statusIcon}] [${module}] [${category}] ${testCase}`);
-  if (!passed) console.error(`   DETALLE: ${details}`);
-}
-
-async function runAudit() {
-  console.log("================================================================================");
-  console.log("🔍 AUDITORÍA DE SEGURIDAD Y FUNCIONALIDAD MÓDULO POR MÓDULO (AURA COMMERCE ERP)");
-  console.log("================================================================================\n");
-
-  // ============================================================================
-  // MÓDULO 1: AUTENTICACIÓN Y CONTROL DE SESIÓN
-  // ============================================================================
-  console.log("--- MÓDULO 1: AUTENTICACIÓN Y SESIÓN ---");
-
-  // Test 1.1: Password Hashing PBKDF2 con sal única
-  const plainPass = "Aura2026SecurePass!";
-  const hash1 = hashPassword(plainPass);
-  const hash2 = hashPassword(plainPass);
-  const hashesDifferent = hash1 !== hash2;
-  const valids1 = verifyPassword(plainPass, hash1);
-  const valids2 = verifyPassword(plainPass, hash2);
-  const invalidPass = verifyPassword("ClaveErronea123", hash1);
-  recordAudit(
-    "1. Autenticación",
-    "Hashing PBKDF2 con sales únicas aleatorias por usuario",
-    "SEGURIDAD",
-    hashesDifferent && valids1 && valids2 && !invalidPass,
-    `Sales distintas: ${hashesDifferent}, Verificación exitosa: ${valids1}, Rechazo contraseña inválida: ${!invalidPass}`
-  );
-
-  // Test 1.2: Detección y rechazo de tokens de sesión alterados (Tamper Resistance)
-  const sampleUser: SessionUser = { id: 3, name: "Sofía Cajera", email: "cajera@aurastudio.com", role: "cashier" };
-  const validToken = await encodeSessionToken(sampleUser);
-  const [b64Part, sigPart] = validToken.split(".");
-  const tamperedJson = Buffer.from(b64Part, "base64url").toString("utf-8").replace('"role":"cashier"', '"role":"admin"');
-  const forgedB64 = Buffer.from(tamperedJson, "utf-8").toString("base64url");
-  const forgedToken = `${forgedB64}.${sigPart}`;
-  const decodedForged = await decodeSessionToken(forgedToken);
-  recordAudit(
-    "1. Autenticación",
-    "Firma criptográfica HMAC-SHA256 previene alteración de privilegios en cookie",
-    "SEGURIDAD",
-    decodedForged === null,
-    decodedForged === null ? "Token alterado rechazado correctamente por firma inválida" : "FALLO: Token alterado fue aceptado"
-  );
-
-  // Test 1.3: Detección de token expirado
-  const expiredJson = JSON.stringify({ ...sampleUser, iat: 1000, exp: 2000 });
-  const expiredB64 = Buffer.from(expiredJson, "utf-8").toString("base64url");
-  const expiredSig = await signWithWebCrypto(expiredB64);
-  const expiredToken = `${expiredB64}.${expiredSig}`;
-  const decodedExpired = await decodeSessionToken(expiredToken);
-  recordAudit(
-    "1. Autenticación",
-    "Rechazo estricto de tokens de sesión expirados",
-    "SEGURIDAD",
-    decodedExpired === null,
-    decodedExpired === null ? "Token expirado rechazado" : "FALLO: Token expirado fue aceptado"
-  );
-
-  // ============================================================================
-  // MÓDULO 2: PANEL GENERAL Y MÉTRICAS FINANCIERAS
-  // ============================================================================
-  console.log("\n--- MÓDULO 2: PANEL GENERAL (DASHBOARD) ---");
-
-  // Test 2.1: Verificar que los datos provienen de Neon DB y no son mock
-  const totalDbSales = await db.query.sales.findMany();
-  const totalDbProducts = await db.query.products.findMany();
-  const totalDbRegisters = await db.query.cashRegisters.findMany();
-  recordAudit(
-    "2. Panel General",
-    "Conexión activa a tablas reales en Neon PostgreSQL (sales, products, registers)",
-    "FUNCIONALIDAD",
-    totalDbSales.length >= 0 && totalDbProducts.length > 0 && totalDbRegisters.length > 0,
-    `Productos en BD: ${totalDbProducts.length}, Terminales físicas: ${totalDbRegisters.length}`
-  );
-
-  // Test 2.2: Verificación de consistencia de montos contables (Ventas Netas = Bruto - Devoluciones)
-  let salesConsistent = true;
-  for (const s of totalDbSales) {
-    const total = parseFloat(s.totalAmount) || 0;
-    const refunded = parseFloat(s.refundedAmount || "0") || 0;
-    const net = parseFloat(s.netAmount || "0") || total - refunded;
-    if (net < 0 || Math.abs(net - (total - refunded)) > 0.05) {
-      salesConsistent = false;
-      break;
-    }
-  }
-  recordAudit(
-    "2. Panel General",
-    "Integridad de montos netos y fórmulas contables en tickets",
-    "INTEGRIDAD_FINANCIERA",
-    salesConsistent,
-    salesConsistent ? "Todas las ventas cumplen total_amount - refunded_amount = net_amount" : "Discrepancia contable detectada"
-  );
-
-  // ============================================================================
-  // MÓDULO 3: PUNTO DE VENTA (POS)
-  // ============================================================================
-  console.log("\n--- MÓDULO 3: PUNTO DE VENTA (POS) ---");
-
-  // Test 3.1: Anti Cross-Cashier Selling (Un cajero no puede vender en la gaveta de otro)
-  const openShiftsList = await db.query.cashShifts.findMany({
-    where: eq(schema.cashShifts.status, "open"),
-    with: { user: true },
+test("la sesión exige una clave, expira y conserva solo identificador y rol", async (t) => {
+  t.mock.method(Date, "now", () => 1_800_000_000_000);
+  const oldSecret = process.env.SESSION_SECRET;
+  t.after(() => {
+    if (oldSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = oldSecret;
   });
 
-  const testShift = openShiftsList[0];
-  if (testShift) {
-    const shiftOwnerId = testShift.userId;
-    const unauthorizedUserId = shiftOwnerId === 3 ? 4 : 3;
-    const isOwner = shiftOwnerId === unauthorizedUserId;
-    recordAudit(
-      "3. Punto de Venta POS",
-      "Regla de aislamiento de caja: Caja 1 bloqueada para Cajero 2",
-      "SEGURIDAD",
-      !isOwner,
-      `Gaveta ${testShift.shiftNumber} protegida para el operador ID ${shiftOwnerId}`
-    );
-  } else {
-    recordAudit(
-      "3. Punto de Venta POS",
-      "Regla de aislamiento de caja",
-      "SEGURIDAD",
-      true,
-      "Sin turnos abiertos actualmente en el test, regla validada en código de createSaleAction"
-    );
+  delete process.env.SESSION_SECRET;
+  await assert.rejects(encodeSessionToken(user), /SESSION_SECRET/);
+  process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+  const token = await encodeSessionToken(user);
+  assert.deepEqual(await decodeSessionToken(token), { id: 10, role: "cashier" });
+  assert.equal(await decodeSessionToken("invalid-token"), null);
+  t.mock.restoreAll();
+  t.mock.method(Date, "now", () => 1_800_000_000_000 + 7 * 86_400_000);
+  assert.equal(await decodeSessionToken(token), null);
+});
+
+test("la matriz de rutas concede a cada rol su módulo y restringe usuarios", async (t) => {
+  const oldSecret = process.env.SESSION_SECRET;
+  process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+  t.after(() => {
+    if (oldSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = oldSecret;
+  });
+
+  const routes = [
+    { role: "admin", path: "/admin/usuarios" },
+    { role: "manager", path: "/admin/reportes" },
+    { role: "cashier", path: "/admin/ventas" },
+    { role: "warehouse", path: "/admin/inventario" },
+  ] as const;
+  for (const { role, path } of routes) {
+    const token = await encodeSessionToken({ ...user, role });
+    const headers = { cookie: `aura_session=${token}` };
+    assert.equal((await middleware(new NextRequest(`http://localhost${path}`, { headers }))).status, 200);
+    if (role !== "admin") {
+      const denied = await middleware(new NextRequest("http://localhost/admin/usuarios", { headers }));
+      assert.equal(denied.status, 307);
+      assert.equal(new URL(denied.headers.get("location")!).searchParams.get("denied"), "1");
+    }
   }
+});
 
-  // Test 3.2: Prevención de Venta con Stock Físico Negativo o Insuficiente
-  const sampleProduct = totalDbProducts[0];
-  const stockAvailable = sampleProduct ? sampleProduct.stock : 0;
-  const requestedStockTooHigh = stockAvailable + 9999;
-  const stockBlockedProperly = requestedStockTooHigh > stockAvailable;
-  recordAudit(
-    "3. Punto de Venta POS",
-    "Bloqueo de sobreventa / stock insuficiente en tiempo real",
-    "INTEGRIDAD_FINANCIERA",
-    stockBlockedProperly,
-    `Stock disponible: ${stockAvailable}, intento de venta: ${requestedStockTooHigh} -> Bloqueado en createSaleAction`
-  );
+test("PBKDF2 verifica contraseñas válidas y rechaza registros sin hash", () => {
+  const password = "Una clave de prueba";
+  const first = hashPassword(password);
+  assert.notEqual(first, hashPassword(password));
+  assert.equal(verifyPassword(password, first), true);
+  assert.equal(verifyPassword("otra clave", first), false);
+  assert.equal(verifyPassword(password, password), false);
+});
 
-  // Test 3.3: Doble Custodia en Devoluciones (Requiere PIN de Supervisor)
-  const allUsersList = await db.query.users.findMany();
-  const adminOrManagerWithPin = allUsersList.find((u) => (u.role === "admin" || u.role === "manager") && u.pin);
-  const cashierUser = allUsersList.find((u) => u.role === "cashier");
-  
-  const pinValid = adminOrManagerWithPin && adminOrManagerWithPin.pin === "1234";
-  const cashierCannotAuthorizeWithoutPin = cashierUser ? cashierUser.pin === null : true;
-  recordAudit(
-    "3. Punto de Venta POS",
-    "Doble custodia antifraude: Devoluciones exigen PIN de Administrador/Supervisor",
-    "SEGURIDAD",
-    Boolean(pinValid && cashierCannotAuthorizeWithoutPin),
-    `Supervisores con PIN activo: ${adminOrManagerWithPin?.name}. Cajeros sin permiso de auto-devolución.`
-  );
+test("las credenciales de demostración requieren desarrollo explícito y un registro de semilla", (t) => {
+  const previous = { nodeEnv: process.env.NODE_ENV, enabled: process.env.ENABLE_DEMO_LOGIN };
+  t.after(() => {
+    if (previous.nodeEnv === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
+    else Reflect.set(process.env, "NODE_ENV", previous.nodeEnv);
+    if (previous.enabled === undefined) delete process.env.ENABLE_DEMO_LOGIN;
+    else process.env.ENABLE_DEMO_LOGIN = previous.enabled;
+  });
 
-  // ============================================================================
-  // MÓDULO 4: CONTROL DE CAJAS & TURNOS
-  // ============================================================================
-  console.log("\n--- MÓDULO 4: CONTROL DE CAJAS Y TURNOS ---");
+  const demo = ["cajera@aurastudio.com", "password123", "$2b$10$hashedpasswordforcashier"] as const;
+  process.env.ENABLE_DEMO_LOGIN = "1";
+  Reflect.set(process.env, "NODE_ENV", "production");
+  assert.equal(verifyDemoLogin(...demo), false);
+  Reflect.set(process.env, "NODE_ENV", "development");
+  assert.equal(verifyDemoLogin(...demo), true);
+  assert.equal(verifyDemoLogin(demo[0], demo[1], "different-hash"), false);
+  delete process.env.ENABLE_DEMO_LOGIN;
+  assert.equal(verifyDemoLogin(...demo), false);
+});
 
-  // Test 4.1: Prevención de múltiples turnos abiertos por el mismo cajero
-  recordAudit(
-    "4. Cajas y Turnos",
-    "Restricción de turno único por operador (Anti multi-caja simultánea)",
-    "SEGURIDAD",
-    true,
-    "Validado en openShiftAction (filtro userActiveShift bloquea apertura simultánea)"
-  );
+test("el PIN se almacena como HMAC y la edición parcial conserva rol y estado", (t) => {
+  const oldSecret = process.env.SUPERVISOR_PIN_SECRET;
+  process.env.SUPERVISOR_PIN_SECRET = randomBytes(32).toString("hex");
+  t.after(() => {
+    if (oldSecret === undefined) delete process.env.SUPERVISOR_PIN_SECRET;
+    else process.env.SUPERVISOR_PIN_SECRET = oldSecret;
+  });
+  assert.match(encodeSupervisorPin("1234"), /^hmac:[0-9a-f]{64}$/);
+  assert.notEqual(encodeSupervisorPin("1234"), encodeSupervisorPin("1235"));
+  assert.deepEqual(userUpdateSchema.parse({ name: "  Nuevo nombre  " }), { name: "Nuevo nombre" });
+});
 
-  // Test 4.2: Integridad de Arqueo Ciego (Diferencia = Contado - Esperado)
-  const sampleExpected = 500.0;
-  const sampleActualSurplus = 520.0;
-  const diffSurplus = sampleActualSurplus - sampleExpected;
-  const sampleActualShortage = 480.0;
-  const diffShortage = sampleActualShortage - sampleExpected;
-  recordAudit(
-    "4. Cajas y Turnos",
-    "Cálculo preciso de sobrantes y faltantes en arqueo ciego",
-    "INTEGRIDAD_FINANCIERA",
-    diffSurplus === 20 && diffShortage === -20,
-    `Sobrante: +${diffSurplus} Bs, Faltante: ${diffShortage} Bs calculados con precisión decimal`
-  );
+test("venta y devolución rechazan renglones duplicados", () => {
+  const item = { productId: 1, quantity: 1, unitPrice: 12.5 };
+  assert.equal(saleFormSchema.safeParse({ items: [item] }).success, true);
+  assert.equal(saleFormSchema.safeParse({ items: [item, item] }).success, false);
 
-  // ============================================================================
-  // MÓDULO 5: INVENTARIO & KÁRDEX
-  // ============================================================================
-  console.log("\n--- MÓDULO 5: INVENTARIO Y KÁRDEX ---");
+  const line = { saleItemId: 1, quantityToRefund: 1 };
+  const refund = { saleId: 1, items: [line], reason: "Cambio", supervisorPin: "1234", refundMethod: "card" };
+  assert.equal(refundSaleSchema.safeParse(refund).success, true);
+  assert.equal(refundSaleSchema.safeParse({ ...refund, items: [line, line] }).success, false);
+  assert.equal(refundSaleSchema.safeParse({ ...refund, items: [{ ...line, quantityToRefund: 0.5 }] }).success, false);
+});
 
-  // Test 5.1: Protección de Stock y CPP en Edición Directa de Producto
-  recordAudit(
-    "5. Inventario & Kardex",
-    "Protección inmutable de existencias y Costo Promedio (CPP) en edición directa",
-    "INTEGRIDAD_FINANCIERA",
-    true,
-    "Validado en updateProductAction: solo compras y ventas alteran stock y costo en Kardex"
-  );
+test("el prorrateo devuelve exactamente el importe cobrado tras descuento", () => {
+  const amounts = refundUnitAmounts([
+    { id: 1, unitPrice: 1, quantity: 2 },
+    { id: 2, unitPrice: 1, quantity: 1 },
+  ], 2);
+  const first = amounts.get(1)!;
+  const second = amounts.get(2)!;
+  assert.equal(first(0, 1) + first(1, 1), first(0, 2));
+  assert.equal(first(0, 2) + second(0, 1), 200);
+});
 
-  // Test 5.2: Correlativo formal de Actas de Baja (BAJA-YYYY-XXX)
-  const currentYear = new Date().getFullYear();
-  const regexBaja = new RegExp(`^BAJA-${currentYear}-\\d{3}$`);
-  const sampleBajaNumber = `BAJA-${currentYear}-001`;
-  recordAudit(
-    "5. Inventario & Kardex",
-    "Formato formal e inmutable de actas de merma/baja",
-    "FUNCIONALIDAD",
-    regexBaja.test(sampleBajaNumber),
-    `Correlativo verificado: ${sampleBajaNumber}`
-  );
+test("reporte local incluye ventas de la noche boliviana y rechaza fechas inválidas", () => {
+  assert.equal(businessDate(new Date("2026-11-20T02:59:00Z")), "2026-11-19");
+  assert.equal(businessDayStart("2026-11-20").toISOString(), "2026-11-20T04:00:00.000Z");
+  assert.throws(() => businessDayStart("2026-02-30"), /Fecha inválida/);
+});
 
-  // ============================================================================
-  // MÓDULO 6: COMPRAS Y PROVEEDORES
-  // ============================================================================
-  console.log("\n--- MÓDULO 6: COMPRAS Y PROVEEDORES ---");
-
-  // Test 6.1: Recálculo de Costo Promedio Ponderado (CPP)
-  const prevStockCPP = 10;
-  const prevCostCPP = 50.0;
-  const buyQtyCPP = 10;
-  const buyCostCPP = 70.0;
-  const newStockCPP = prevStockCPP + buyQtyCPP;
-  const expectedCPP = (prevStockCPP * prevCostCPP + buyQtyCPP * buyCostCPP) / newStockCPP;
-  recordAudit(
-    "6. Compras & Proveedores",
-    "Fórmula matemática del Costo Promedio Ponderado (CPP) en recepción de compras",
-    "INTEGRIDAD_FINANCIERA",
-    expectedCPP === 60.0,
-    `Costo previo 50 Bs + Compra 70 Bs (10 uds c/u) = CPP resultante: ${expectedCPP.toFixed(2)} Bs`
-  );
-
-  // Test 6.2: Protección referencial de proveedores (Bloqueo de eliminación con compras)
-  recordAudit(
-    "6. Compras & Proveedores",
-    "Protección referencial: Bloqueo de eliminación de proveedores con compras activas",
-    "SEGURIDAD",
-    true,
-    "Validado en deleteSupplierAction: verifica purchasesCount antes de permitir borrado"
-  );
-
-  // ============================================================================
-  // MÓDULO 7: REPORTE Z DIARIO
-  // ============================================================================
-  console.log("\n--- MÓDULO 7: REPORTE Z DIARIO ---");
-
-  recordAudit(
-    "7. Reporte Z Diario",
-    "Control de Acceso RBAC: Exclusivo para Administrador y Supervisor",
-    "SEGURIDAD",
-    true,
-    "getReporteZAction ejecuta requireRole(['admin', 'manager'])"
-  );
-
-  recordAudit(
-    "7. Reporte Z Diario",
-    "Auditoría de Gavetas & Tira Térmica 80mm con líneas de firma",
-    "FUNCIONALIDAD",
-    true,
-    "Generador térmico incluye firmas de cajero y supervisor en ReportesPage"
-  );
-
-  // ============================================================================
-  // MÓDULO 8: REPORTES POR PERIODO Y ANALÍTICA
-  // ============================================================================
-  console.log("\n--- MÓDULO 8: ANALÍTICA POR PERIODO ---");
-
-  recordAudit(
-    "8. Reportes por Periodo",
-    "Soporte de rangos flexibles (Semana, Mes, Año y Personalizado)",
-    "FUNCIONALIDAD",
-    true,
-    "getPeriodAnalyticsAction admite cualquier startDateStr y endDateStr"
-  );
-
-  recordAudit(
-    "8. Reportes por Periodo",
-    "Paginación de 15 filas por página en tablas de ventas y top productos",
-    "FUNCIONALIDAD",
-    true,
-    "Componente PaginationBar integrado en pestañas de ventas y ranking"
-  );
-
-  // ============================================================================
-  // MÓDULO 9: GESTIÓN DE USUARIOS
-  // ============================================================================
-  console.log("\n--- MÓDULO 9: GESTIÓN DE USUARIOS ---");
-
-  // Test 9.1: Protección del Administrador Principal #1
-  const user1 = allUsersList.find((u) => u.id === 1);
-  recordAudit(
-    "9. Gestión de Usuarios",
-    "Protección del Administrador Principal #1 contra desactivación accidental",
-    "SEGURIDAD",
-    Boolean(user1 && user1.role === "admin"),
-    "toggleUserStatusAction prohíbe explícitamente desactivar al usuario ID #1"
-  );
-
-  // Test 9.2: Bloqueo de Acceso a Módulo Usuarios para no-admins
-  const rolesNotAllowedForUsers = ["manager", "cashier", "warehouse"];
-  const usersRouteRegex = /^\/admin\/usuarios(\/.*)?$/;
-  const isMatch = usersRouteRegex.test("/admin/usuarios");
-  recordAudit(
-    "9. Gestión de Usuarios",
-    "Aislamiento absoluto del módulo usuarios frente a Supervisores, Cajeros y Almaceneros",
-    "SEGURIDAD",
-    isMatch && rolesNotAllowedForUsers.every((r) => r !== "admin"),
-    "Ruta /admin/usuarios filtrada en Middleware y Server Actions solo para role === 'admin'"
-  );
-
-  console.log("\n================================================================================");
-  console.log(`TOTAL CASOS DE AUDITORÍA EJECUTADOS: ${auditLog.length}`);
-  const passedCount = auditLog.filter((a) => a.passed).length;
-  console.log(`CASOS EXITOSOS: ${passedCount} / ${auditLog.length}`);
-  console.log("================================================================================\n");
-
-  if (passedCount !== auditLog.length) {
-    process.exit(1);
-  }
-}
-
-runAudit().catch((e) => {
-  console.error("Error fatal durante la auditoría:", e);
-  process.exit(1);
+test("las Server Actions rechazan la llamada sin sesión antes de leer o escribir", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const guarded = () => { throw new Error("Acceso a base de datos sin sesión"); };
+  const operations = [
+    t.mock.method(db, "insert", guarded), t.mock.method(db, "update", guarded),
+    t.mock.method(db, "delete", guarded), t.mock.method(db, "batch", guarded),
+    t.mock.method(db.query.products, "findMany", guarded),
+    t.mock.method(db.query.users, "findMany", guarded), t.mock.method(db.query.sales, "findMany", guarded),
+  ];
+  const sale = saleFormSchema.parse({ items: [{ productId: 1, quantity: 1, unitPrice: 20 }] });
+  const actions = [
+    getPosCatalogAction(), getPosContextAction(), getSalesHistoryAction(), createSaleAction(sale),
+    createCategoryAction("Categoría"), updateCategoryAction(1, "Categoría"), deleteCategoryAction(1),
+    openShiftAction({ cashRegisterId: 1, userId: 1, initialCash: 0 }),
+    closeShiftAction({ shiftId: 1, actualCash: 0 }),
+    uploadCategoryPhotoAction(new FormData()), uploadProductImageAction(new FormData()),
+  ];
+  const results = await Promise.all(actions);
+  for (const result of results) assert.equal(result.success, false);
+  for (const operation of operations) assert.equal(operation.mock.callCount(), 0);
 });

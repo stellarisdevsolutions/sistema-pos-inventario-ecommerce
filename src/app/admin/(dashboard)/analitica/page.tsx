@@ -1,5 +1,7 @@
 "use client";
 
+import { addBusinessDays, businessDate } from "@/lib/business-date";
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +25,6 @@ import {
   Building2,
   SlidersHorizontal,
   BarChart2,
-  CalendarRange,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -43,13 +44,8 @@ export default function AnaliticaPage() {
   const [preset, setPreset] = useState<PresetType>("month");
 
   // Rango de fechas por defecto: Mes en curso
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
-  });
-  const [endDate, setEndDate] = useState(() => {
-    return new Date().toISOString().split("T")[0];
-  });
+  const [startDate, setStartDate] = useState(() => businessDate().slice(0, 7) + "-01");
+  const [endDate, setEndDate] = useState(() => businessDate());
 
   const [data, setData] = useState<PeriodAnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,24 +80,15 @@ export default function AnaliticaPage() {
     setPreset(type);
     const now = new Date();
     let s = "";
-    let e = now.toISOString().split("T")[0];
-
+    const e = businessDate(now);
     if (type === "week") {
-      // Últimos 7 días
-      const d = new Date();
-      d.setDate(d.getDate() - 6);
-      s = d.toISOString().split("T")[0];
+      s = businessDate(addBusinessDays(now, -6));
     } else if (type === "month") {
-      // 1 del mes actual al día de hoy
-      s = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      s = e.slice(0, 7) + "-01";
     } else if (type === "last30") {
-      // Últimos 30 días
-      const d = new Date();
-      d.setDate(d.getDate() - 29);
-      s = d.toISOString().split("T")[0];
+      s = businessDate(addBusinessDays(now, -29));
     } else if (type === "year") {
-      // 1 de enero al día de hoy
-      s = new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0];
+      s = e.slice(0, 4) + "-01-01";
     } else {
       return; // custom
     }
@@ -226,31 +213,26 @@ export default function AnaliticaPage() {
       {/* =========================================================================
           1. HEADER CON SELECTOR DE RANGO (SEMANA / MES / AÑO / PERSONALIZADO)
           ========================================================================= */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-slate-200/80 dark:border-slate-800">
+      <div className="admin-page-header flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-admin-card-border">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <CalendarRange className="h-6 w-6 text-[var(--admin-brand)]" />
-              Analítica & Reportes Periódicos
-            </h1>
+            <h1 className="admin-page-title">Analítica</h1>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Rendimiento consolidado por rango de fechas: ingresos, costos, utilidades y top productos.
-          </p>
+          <p className="admin-page-description">Ventas, costos y margen para el período elegido.</p>
         </div>
 
         {/* Acciones de exportación y presets */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Botones Presets Rápidos */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center bg-admin-raised p-0.5 rounded-xl border border-admin-card-border">
             <button
               type="button"
               onClick={() => handlePresetChange("week")}
               className={cn(
                 "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
                 preset === "week"
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                  ? "bg-admin-card-bg text-admin-text"
+                  : "text-admin-secondary hover:text-slate-900"
               )}
             >
               Semana
@@ -261,8 +243,8 @@ export default function AnaliticaPage() {
               className={cn(
                 "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
                 preset === "month"
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                  ? "bg-admin-card-bg text-admin-text"
+                  : "text-admin-secondary hover:text-slate-900"
               )}
             >
               Este Mes
@@ -273,8 +255,8 @@ export default function AnaliticaPage() {
               className={cn(
                 "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
                 preset === "last30"
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                  ? "bg-admin-card-bg text-admin-text"
+                  : "text-admin-secondary hover:text-slate-900"
               )}
             >
               30 Días
@@ -285,8 +267,8 @@ export default function AnaliticaPage() {
               className={cn(
                 "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
                 preset === "year"
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                  ? "bg-admin-card-bg text-admin-text"
+                  : "text-admin-secondary hover:text-slate-900"
               )}
             >
               Año
@@ -294,8 +276,8 @@ export default function AnaliticaPage() {
           </div>
 
           {/* Rango Personalizado: Desde - Hasta */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1 shadow-xs text-xs">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Del:</span>
+          <div className="flex items-center gap-1 bg-admin-card-bg border border-admin-card-border rounded-xl px-2.5 py-1 text-xs">
+            <span className="text-[10px] font-bold text-admin-muted uppercase">Del:</span>
             <input
               type="date"
               value={startDate}
@@ -303,9 +285,9 @@ export default function AnaliticaPage() {
                 setPreset("custom");
                 setStartDate(e.target.value);
               }}
-              className="font-bold text-slate-900 dark:text-white bg-transparent border-none p-0 focus:outline-none cursor-pointer"
+              className="font-bold text-admin-text bg-transparent border-none p-0 focus:outline-none cursor-pointer"
             />
-            <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">Al:</span>
+            <span className="text-[10px] font-bold text-admin-muted uppercase ml-1">Al:</span>
             <input
               type="date"
               value={endDate}
@@ -313,7 +295,7 @@ export default function AnaliticaPage() {
                 setPreset("custom");
                 setEndDate(e.target.value);
               }}
-              className="font-bold text-slate-900 dark:text-white bg-transparent border-none p-0 focus:outline-none cursor-pointer"
+              className="font-bold text-admin-text bg-transparent border-none p-0 focus:outline-none cursor-pointer"
             />
           </div>
 
@@ -322,7 +304,7 @@ export default function AnaliticaPage() {
             size="sm"
             onClick={() => loadAnalytics(startDate, endDate)}
             disabled={isLoading}
-            className="h-9 px-2.5 rounded-xl border-slate-200 dark:border-slate-700"
+            className="h-9 px-2.5 rounded-xl border-admin-card-border"
             title="Refrescar datos"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
@@ -333,7 +315,7 @@ export default function AnaliticaPage() {
             size="sm"
             onClick={handleExportCsv}
             disabled={!data || isLoading}
-            className="h-9 rounded-xl text-xs font-bold gap-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white shadow-md shadow-[#0284c7]/20 cursor-pointer"
+            className="h-9 rounded-xl text-xs font-bold gap-1.5 bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid cursor-pointer"
           >
             <FileSpreadsheet className="h-3.5 w-3.5" />
             <span>Exportar Excel</span>
@@ -344,34 +326,34 @@ export default function AnaliticaPage() {
       {/* =========================================================================
           2. TARJETAS BENTO KPI DEL PERIODO CONSOLIDADO
           ========================================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="admin-kpi-grid">
         {/* Card 1: Ingresos Netos */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs relative overflow-hidden">
+        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Venta Neta del Periodo
             </span>
-            <div className="h-8 w-8 rounded-xl bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center">
               <DollarSign className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-semibold text-admin-text">
               {formatCurrency(data?.summary.netSales || 0)}
             </span>
           </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+          <div className="mt-2 pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-admin-muted">
             <span>Promedio Diario:</span>
-            <span className="font-bold text-slate-700 dark:text-slate-300">
+            <span className="font-bold text-admin-secondary">
               {formatCurrency(data?.summary.averageDailySales || 0)}/día
             </span>
           </div>
         </div>
 
         {/* Card 2: Ganancia Bruta Real */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs relative overflow-hidden">
+        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Ganancia Bruta Real
             </span>
             <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -379,68 +361,68 @@ export default function AnaliticaPage() {
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+            <span className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
               {formatCurrency(data?.summary.grossProfit || 0)}
             </span>
             <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
               ({data?.summary.profitMargin.toFixed(1)}% margen)
             </span>
           </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+          <div className="mt-2 pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-admin-muted">
             <span>Costo Total Mercancía:</span>
             <span className="font-bold">{formatCurrency(data?.summary.totalCost || 0)}</span>
           </div>
         </div>
 
         {/* Card 3: Tickets y Volumen */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs relative overflow-hidden">
+        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Volumen de Operación
             </span>
-            <div className="h-8 w-8 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-[var(--admin-brand)] flex items-center justify-center">
+            <div className="h-8 w-8 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center">
               <Receipt className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900 dark:text-white">
+            <span className="text-2xl font-semibold text-admin-text">
               {data?.summary.totalSalesCount || 0}
             </span>
-            <span className="text-xs text-slate-500">tickets emitidos</span>
+            <span className="text-xs text-admin-muted">tickets emitidos</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+          <div className="mt-2 pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-admin-muted">
             <span>Ticket Promedio:</span>
-            <span className="font-bold text-slate-700 dark:text-slate-300">
+            <span className="font-bold text-admin-secondary">
               {formatCurrency(data?.summary.averageTicket || 0)}
             </span>
           </div>
         </div>
 
         {/* Card 4: Efectivo vs QR */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs relative overflow-hidden">
+        <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
               Distribución de Medios
             </span>
-            <div className="h-8 w-8 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center">
               <Wallet className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2 space-y-1 text-xs">
             <div className="flex justify-between">
-              <span className="text-slate-500">Efectivo ({data?.payments.cashCount || 0}):</span>
-              <span className="font-black text-slate-900 dark:text-white">
+              <span className="text-admin-muted">Efectivo ({data?.payments.cashCount || 0}):</span>
+              <span className="font-semibold text-admin-text">
                 {formatCurrency(data?.payments.cashAmount || 0)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">QR Bancario ({data?.payments.transferCount || 0}):</span>
-              <span className="font-black text-[#0284c7]">
+              <span className="text-admin-muted">QR Bancario ({data?.payments.transferCount || 0}):</span>
+              <span className="font-semibold text-admin-brand-text">
                 {formatCurrency(data?.payments.transferAmount || 0)}
               </span>
             </div>
           </div>
-          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+          <div className="mt-2 pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-admin-muted">
             <span>Devoluciones:</span>
             <span className="font-bold text-amber-600">
               -{formatCurrency(data?.summary.refunds || 0)} ({data?.summary.refundedSalesCount || 0})
@@ -453,18 +435,18 @@ export default function AnaliticaPage() {
           3. HISTOGRAMA / EVOLUCIÓN VISUAL POR DÍA
           ========================================================================= */}
       {data && data.dailyTrend.length > 0 && data.dailyTrend.length <= 60 && (
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
+        <div className="p-5 rounded-xl bg-admin-card-bg border border-admin-card-border space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                <BarChart2 className="h-4 w-4 text-[#0284c7]" />
+              <h3 className="font-bold text-sm text-admin-text flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-admin-brand-text" />
                 Tendencia Diaria de Ventas en el Periodo
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-admin-muted">
                 Picos de facturación día por día en {data.periodLabel}
               </p>
             </div>
-            <span className="text-xs text-slate-500 font-mono">
+            <span className="text-xs text-admin-muted font-mono">
               Pico Máximo: <strong>{formatCurrency(maxDaySales)}</strong>
             </span>
           </div>
@@ -477,21 +459,21 @@ export default function AnaliticaPage() {
               return (
                 <div key={d.date} className="flex-1 min-w-[28px] max-w-[50px] flex flex-col items-center gap-1 group">
                   {/* Tooltip flotante al pasar el mouse */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-slate-900 text-white py-0.5 px-1.5 rounded pointer-events-none whitespace-nowrap mb-1 shadow-md">
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold bg-slate-900 text-white py-0.5 px-1.5 rounded pointer-events-none whitespace-nowrap mb-1">
                     {formatCurrency(d.netSales)}
                   </div>
 
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-t-lg h-28 flex items-end overflow-hidden">
+                  <div className="w-full bg-admin-raised rounded-t-lg h-28 flex items-end overflow-hidden">
                     <div
                       style={{ height: `${heightPercent}%` }}
                       className={cn(
                         "w-full rounded-t-md transition-all duration-300 group-hover:brightness-110",
-                        d.netSales > 0 ? "bg-[#0284c7]" : "bg-transparent"
+                        d.netSales > 0 ? "bg-admin-brand" : "bg-transparent"
                       )}
                     />
                   </div>
 
-                  <span className="text-[10px] text-slate-400 font-bold truncate">
+                  <span className="text-[10px] text-admin-muted font-bold truncate">
                     {d.formattedDate}
                   </span>
                 </div>
@@ -505,15 +487,15 @@ export default function AnaliticaPage() {
           4. PESTAÑAS DE TABLAS DE DETALLE
           ========================================================================= */}
       <div className="space-y-4">
-        <div className="flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-1 overflow-x-auto">
+        <div className="flex items-center gap-1.5 border-b border-admin-card-border pb-1 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab("evolucion")}
             className={cn(
               "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "evolucion"
-                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                ? "bg-admin-brand text-admin-on-solid"
+                : "text-admin-secondary hover:bg-admin-raised"
             )}
           >
             <Calendar className="h-3.5 w-3.5" />
@@ -526,8 +508,8 @@ export default function AnaliticaPage() {
             className={cn(
               "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "productos"
-                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                ? "bg-admin-brand text-admin-on-solid"
+                : "text-admin-secondary hover:bg-admin-raised"
             )}
           >
             <Package className="h-3.5 w-3.5" />
@@ -540,8 +522,8 @@ export default function AnaliticaPage() {
             className={cn(
               "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "cajeros"
-                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                ? "bg-admin-brand text-admin-on-solid"
+                : "text-admin-secondary hover:bg-admin-raised"
             )}
           >
             <Users className="h-3.5 w-3.5" />
@@ -554,8 +536,8 @@ export default function AnaliticaPage() {
             className={cn(
               "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "ventas"
-                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                ? "bg-admin-brand text-admin-on-solid"
+                : "text-admin-secondary hover:bg-admin-raised"
             )}
           >
             <Receipt className="h-3.5 w-3.5" />
@@ -565,10 +547,10 @@ export default function AnaliticaPage() {
 
         {/* TAB 1: EVOLUCIÓN DÍA POR DÍA */}
         {activeTab === "evolucion" && (
-          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
+          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Fecha</th>
                     <th className="py-3 px-4">Día</th>
@@ -583,7 +565,7 @@ export default function AnaliticaPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {data?.dailyTrend.filter((d) => d.salesCount > 0).length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-slate-400">
+                      <td colSpan={8} className="text-center py-8 text-admin-muted">
                         No hay ventas registradas en el rango de fechas seleccionado.
                       </td>
                     </tr>
@@ -592,7 +574,7 @@ export default function AnaliticaPage() {
                       .filter((d) => d.salesCount > 0)
                       .map((d) => (
                         <tr key={d.date} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">
+                          <td className="py-3 px-4 font-mono font-bold text-admin-text">
                             {d.date}
                           </td>
                           <td className="py-3 px-4 text-slate-600 font-semibold">
@@ -607,13 +589,13 @@ export default function AnaliticaPage() {
                           <td className="py-3 px-4 text-right text-amber-600">
                             {d.refunds > 0 ? `-${formatCurrency(d.refunds)}` : "0.00 Bs"}
                           </td>
-                          <td className="py-3 px-4 text-right font-black text-slate-900 dark:text-white">
+                          <td className="py-3 px-4 text-right font-semibold text-admin-text">
                             {formatCurrency(d.netSales)}
                           </td>
-                          <td className="py-3 px-4 text-right text-slate-500">
+                          <td className="py-3 px-4 text-right text-admin-muted">
                             {formatCurrency(d.cost)}
                           </td>
-                          <td className="py-3 px-4 text-right font-black text-emerald-600">
+                          <td className="py-3 px-4 text-right font-semibold text-emerald-600">
                             {formatCurrency(d.profit)}
                           </td>
                         </tr>
@@ -627,10 +609,10 @@ export default function AnaliticaPage() {
 
         {/* TAB 2: TOP PRODUCTOS */}
         {activeTab === "productos" && (
-          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
+          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Producto</th>
                     <th className="py-3 px-4">Categoría</th>
@@ -646,7 +628,7 @@ export default function AnaliticaPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {paginatedProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-slate-400">
+                      <td colSpan={9} className="text-center py-8 text-admin-muted">
                         No hay productos vendidos en este periodo.
                       </td>
                     </tr>
@@ -655,15 +637,15 @@ export default function AnaliticaPage() {
                       <tr key={p.productId} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-slate-400 font-bold w-4">
+                            <span className="font-mono text-admin-muted font-bold w-4">
                               #{(productsPage - 1) * PAGE_SIZE + idx + 1}
                             </span>
-                            <span className="font-bold text-slate-900 dark:text-white truncate max-w-xs">
+                            <span className="font-bold text-admin-text truncate max-w-xs">
                               {p.productName}
                             </span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-slate-500">
+                        <td className="py-3 px-4 text-admin-muted">
                           {p.categoryName}
                         </td>
                         <td className="py-3 px-4 text-center font-bold">
@@ -672,16 +654,16 @@ export default function AnaliticaPage() {
                         <td className="py-3 px-4 text-center font-bold text-amber-600">
                           {p.unitsReturned > 0 ? `-${p.unitsReturned}` : "0"}
                         </td>
-                        <td className="py-3 px-4 text-center font-black text-slate-900 dark:text-white">
+                        <td className="py-3 px-4 text-center font-semibold text-admin-text">
                           {p.netUnits}
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-slate-900 dark:text-white">
+                        <td className="py-3 px-4 text-right font-semibold text-admin-text">
                           {formatCurrency(p.revenue)}
                         </td>
-                        <td className="py-3 px-4 text-right text-slate-500">
+                        <td className="py-3 px-4 text-right text-admin-muted">
                           {formatCurrency(p.cost)}
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-emerald-600">
+                        <td className="py-3 px-4 text-right font-semibold text-emerald-600">
                           {formatCurrency(p.profit)}
                         </td>
                         <td className="py-3 px-4 text-center">
@@ -709,10 +691,10 @@ export default function AnaliticaPage() {
 
         {/* TAB 3: RENDIMIENTO POR CAJERO / OPERADOR */}
         {activeTab === "cajeros" && (
-          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
+          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Operador / Empleado</th>
                     <th className="py-3 px-4">Rol en el Sistema</th>
@@ -724,18 +706,18 @@ export default function AnaliticaPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {data?.cashiers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400">
+                      <td colSpan={5} className="text-center py-8 text-admin-muted">
                         No hay ventas registradas por operadores en este periodo.
                       </td>
                     </tr>
                   ) : (
                     data?.cashiers.map((c) => (
                       <tr key={c.userId} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                        <td className="py-3 px-4 font-bold text-admin-text">
                           {c.userName}
                         </td>
                         <td className="py-3 px-4">
-                          <span className="capitalize text-slate-500 font-medium">
+                          <span className="capitalize text-admin-muted font-medium">
                             {c.role === "admin"
                               ? "Administrador"
                               : c.role === "manager"
@@ -746,10 +728,10 @@ export default function AnaliticaPage() {
                         <td className="py-3 px-4 text-center font-bold">
                           {c.salesCount}
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-slate-900 dark:text-white">
+                        <td className="py-3 px-4 text-right font-semibold text-admin-text">
                           {formatCurrency(c.netRevenue)}
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-emerald-600">
+                        <td className="py-3 px-4 text-right font-semibold text-emerald-600">
                           {formatCurrency(c.profitGenerated)}
                         </td>
                       </tr>
@@ -763,15 +745,15 @@ export default function AnaliticaPage() {
 
         {/* TAB 4: TODAS LAS VENTAS */}
         {activeTab === "ventas" && (
-          <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs space-y-3">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden space-y-3">
+            <div className="p-4 border-b border-admin-card-border flex flex-wrap items-center justify-between gap-3">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-admin-muted" />
                 <Input
                   value={salesSearch}
                   onChange={(e) => setSalesSearch(e.target.value)}
                   placeholder="Buscar ticket, cliente o cajero..."
-                  className="h-9 pl-8 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200"
+                  className="h-9 pl-8 text-xs rounded-xl bg-admin-raised border-slate-200"
                 />
               </div>
 
@@ -779,7 +761,7 @@ export default function AnaliticaPage() {
                 <select
                   value={salesFilterMethod}
                   onChange={(e) => setSalesFilterMethod(e.target.value)}
-                  className="h-9 px-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 font-medium text-slate-700"
+                  className="h-9 px-3 text-xs rounded-xl bg-admin-raised border border-slate-200 font-medium text-slate-700"
                 >
                   <option value="all">Todos los Métodos</option>
                   <option value="cash">Efectivo</option>
@@ -790,7 +772,7 @@ export default function AnaliticaPage() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Ticket</th>
                     <th className="py-3 px-4">Fecha</th>
@@ -805,17 +787,17 @@ export default function AnaliticaPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {paginatedSales.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-slate-400">
+                      <td colSpan={8} className="text-center py-8 text-admin-muted">
                         No se encontraron tickets con los filtros aplicados.
                       </td>
                     </tr>
                   ) : (
                     paginatedSales.map((s) => (
                       <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">
+                        <td className="py-3 px-4 font-mono font-bold text-admin-text">
                           #{s.saleNumber}
                         </td>
-                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
+                        <td className="py-3 px-4 text-admin-muted whitespace-nowrap">
                           {s.date} {s.time}
                         </td>
                         <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">
@@ -827,7 +809,7 @@ export default function AnaliticaPage() {
                         <td className="py-3 px-4 font-medium text-slate-700">
                           {s.paymentMethod === "cash" ? "Efectivo" : "QR / Transf."}
                         </td>
-                        <td className="py-3 px-4 text-right font-black text-slate-900 dark:text-white">
+                        <td className="py-3 px-4 text-right font-semibold text-admin-text">
                           {formatCurrency(s.netTotal)}
                         </td>
                         <td className="py-3 px-4 text-right font-bold text-emerald-600">

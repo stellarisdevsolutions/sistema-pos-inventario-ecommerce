@@ -3,7 +3,7 @@ import { z } from "zod";
 export const purchaseItemSchema = z.object({
   productId: z.number().int().positive("Debes seleccionar un producto valido"),
   quantity: z.number().int().positive("La cantidad debe ser al menos 1 unidad"),
-  unitCost: z.number().min(0, "El costo unitario no puede ser negativo"),
+  unitCost: z.number().min(0, "El costo unitario no puede ser negativo").max(99999999.99),
 });
 
 export const purchaseFormSchema = z.object({
@@ -25,7 +25,10 @@ export const purchaseFormSchema = z.object({
     .nullable(),
   items: z
     .array(purchaseItemSchema)
-    .min(1, "Debes agregar al menos un producto a la orden de compra"),
+    .min(1, "Debes agregar al menos un producto a la orden de compra")
+    .max(200)
+    .refine((items) => new Set(items.map((item) => item.productId)).size === items.length,
+      "Cada producto debe aparecer una sola vez en la compra."),
 });
 
 export type PurchaseItemInput = z.infer<typeof purchaseItemSchema>;

@@ -32,21 +32,6 @@ export async function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const user = sessionCookie ? await decodeSessionToken(sessionCookie) : null;
 
-  // 1. Manejo de la página de Login (/portal)
-  if (pathname === "/portal") {
-    if (user) {
-      // Si ya está autenticado, redirigir a su área de trabajo según rol
-      if (user.role === "cashier") {
-        return NextResponse.redirect(new URL("/admin/ventas", request.url));
-      }
-      if (user.role === "warehouse") {
-        return NextResponse.redirect(new URL("/admin/inventario", request.url));
-      }
-      return NextResponse.redirect(new URL("/admin", request.url));
-    }
-    return NextResponse.next();
-  }
-
   // 2. Protección de todas las rutas /admin
   if (pathname.startsWith("/admin")) {
     if (!user) {
@@ -83,6 +68,5 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/admin/:path*",
-    "/portal",
   ],
 };

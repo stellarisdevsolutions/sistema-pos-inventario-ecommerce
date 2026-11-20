@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-const ITERATIONS = 100000;
+const ITERATIONS = 210000;
 const KEYLEN = 64;
 const DIGEST = "sha512";
 
@@ -15,7 +15,7 @@ export function hashPassword(password: string): string {
 
 /**
  * Valida una contraseña contra el hash almacenado.
- * Soporta formato seguro PBKDF2, compatibilidad con semillas de desarrollo y texto plano previo.
+ * Acepta hashes PBKDF2 existentes y los generados con el costo actual.
  */
 export function verifyPassword(password: string, storedHash: string): boolean {
   if (!password || !storedHash) return false;
@@ -24,9 +24,12 @@ export function verifyPassword(password: string, storedHash: string): boolean {
   if (storedHash.startsWith("pbkdf2:")) {
     const parts = storedHash.split(":");
     if (parts.length !== 4) return false;
-    const iterations = parseInt(parts[1], 10);
+    const iterations = Number(parts[1]);
     const salt = parts[2];
     const key = parts[3];
+
+    if (!Number.isSafeInteger(iterations) || iterations < 100000 || iterations > ITERATIONS ||
+        !/^[a-f0-9]{32}$/.test(salt) || !/^[a-f0-9]{128}$/.test(key)) return false;
 
     try {
       const derivedKey = crypto.pbkdf2Sync(password, salt, iterations, KEYLEN, DIGEST);
@@ -38,11 +41,5 @@ export function verifyPassword(password: string, storedHash: string): boolean {
     }
   }
 
-  // 2. Compatibilidad con hashes de semilla de desarrollo ($2b$10$hashedpassword...)
-  if (storedHash.startsWith("$2b$10$hashedpassword")) {
-    return password === "password123";
-  }
-
-  // 3. Compatibilidad con texto plano si se insertó sin encriptar
-  return password === storedHash;
+  return false;
 }

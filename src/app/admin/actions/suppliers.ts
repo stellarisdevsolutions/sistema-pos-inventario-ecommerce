@@ -1,5 +1,6 @@
 "use server";
 
+import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
@@ -103,9 +104,8 @@ export async function getSuppliersAction(): Promise<{
     });
 
     return { success: true, data: formatted };
-  } catch (error: any) {
-    console.error("Error al obtener proveedores:", error);
-    return { success: false, data: [], error: error.message || "Error al leer proveedores." };
+  } catch (error) {
+    return { success: false, data: [], error: adminActionError(error, "Error al leer proveedores.") };
   }
 }
 
@@ -147,9 +147,8 @@ export async function createSupplierAction(
     safeRevalidatePath("/admin/inventario/nuevo");
 
     return { success: true, data: created };
-  } catch (error: any) {
-    console.error("Error al crear proveedor:", error);
-    return { success: false, error: error.message || "Error al registrar el proveedor." };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al registrar el proveedor.") };
   }
 }
 
@@ -195,7 +194,7 @@ export async function updateSupplierAction(
     return { success: true, data: updated };
   } catch (error: any) {
     console.error(`Error al actualizar proveedor #${id}:`, error);
-    return { success: false, error: error.message || "Error al actualizar el proveedor." };
+    return { success: false, error: adminActionError(error, "Error al actualizar el proveedor.") };
   }
 }
 
@@ -221,7 +220,7 @@ export async function toggleSupplierActiveAction(
     return { success: true, data: updated };
   } catch (error: any) {
     console.error(`Error al cambiar estado de proveedor #${id}:`, error);
-    return { success: false, error: error.message || "Error al cambiar estado del proveedor." };
+    return { success: false, error: adminActionError(error, "Error al cambiar estado del proveedor.") };
   }
 }
 
@@ -248,14 +247,10 @@ export async function deleteSupplierAction(
       };
     }
 
-    // 2. Desvincular productos asociados (supplierId = null) para no romper productos
-    await db
-      .update(schema.products)
-      .set({ supplierId: null })
-      .where(eq(schema.products.supplierId, id));
-
-    // 3. Eliminar proveedor
-    await db.delete(schema.suppliers).where(eq(schema.suppliers.id, id));
+    await db.batch([
+      db.update(schema.products).set({ supplierId: null }).where(eq(schema.products.supplierId, id)),
+      db.delete(schema.suppliers).where(eq(schema.suppliers.id, id)),
+    ]);
 
     safeRevalidatePath("/admin/proveedores");
     safeRevalidatePath("/admin/inventario");
@@ -263,6 +258,6 @@ export async function deleteSupplierAction(
     return { success: true };
   } catch (error: any) {
     console.error(`Error al eliminar proveedor #${id}:`, error);
-    return { success: false, error: error.message || "Error al eliminar el proveedor." };
+    return { success: false, error: adminActionError(error, "Error al eliminar el proveedor.") };
   }
 }

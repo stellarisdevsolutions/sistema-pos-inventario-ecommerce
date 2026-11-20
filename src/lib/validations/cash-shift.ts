@@ -20,10 +20,6 @@ export const closeShiftSchema = z.object({
   actualCash: z
     .number()
     .min(0, "El conteo físico de dinero en gaveta no puede ser negativo"),
-  closedByUserId: z
-    .number()
-    .int()
-    .positive("Debe especificarse el supervisor que autoriza el cierre"),
   notes: z
     .string()
     .trim()

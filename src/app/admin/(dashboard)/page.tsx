@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { CURRENCY_SYMBOL } from "@/lib/currency";
-import { useAuth } from "@/context/auth-context";
 import DashboardLoading from "./loading";
 import {
   getDashboardSummaryAction,
@@ -36,8 +35,14 @@ import {
   type DashboardSalesItem,
 } from "@/app/admin/actions/dashboard";
 
+function formatMetric(value: number) {
+  return `${CURRENCY_SYMBOL} ${value.toLocaleString("es-BO", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export default function AdminDashboardPage() {
-  const { user } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSaleId, setSelectedSaleId] = useState<string>("");
@@ -181,32 +186,28 @@ export default function AdminDashboardPage() {
       {/* =========================================================================
           1. HERO GREETING: LIMPIO & AL GRANO (ESTILO QUIXOTIC / DRIBBLE)
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-            Hola, {user?.name?.split(" ")[0] || "Administrador"} 👋
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
-            Resumen comercial y control de caja
-          </p>
+          <h1 className="admin-page-title">Resumen del negocio</h1>
+          <p className="admin-page-description">Ventas, inventario y efectivo en caja.</p>
         </div>
 
         {/* Acciones Rápidas */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
             onClick={loadData}
             title="Refrescar métricas"
-            className="h-10 px-3.5 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs"
+            className="h-10 px-3.5 rounded-xl border-admin-card-border bg-admin-card-bg text-xs font-bold gap-1.5 hover:bg-admin-raised"
           >
             <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
             <span>Actualizar</span>
           </Button>
 
           <Link href="/admin/cajas">
-            <button className="h-10 px-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-2 transition-all shadow-2xs cursor-pointer">
-              <Clock className="h-4 w-4 text-[var(--admin-brand)]" />
+            <button className="h-10 px-4 rounded-xl border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised text-admin-secondary text-xs font-bold flex items-center gap-2 transition-all cursor-pointer">
+              <Clock className="h-4 w-4 text-admin-brand-text" />
               <span>Turnos & Arqueos</span>
             </button>
           </Link>
@@ -214,145 +215,36 @@ export default function AdminDashboardPage() {
           <Link href="/admin/ventas">
             <Button
               size="sm"
-              className="h-10 px-5 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-black gap-2 shadow-md shadow-[var(--admin-brand)]/25 transition-all active:scale-95 cursor-pointer"
+              className="h-10 px-5 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-semibold gap-2 transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="h-4 w-4 stroke-[2.5]" />
-              <span>+ Cobrar en POS</span>
+              <span>Cobrar en POS</span>
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* =========================================================================
-          2. LAS 4 TARJETAS KPI BENTO (VALORES EN BS - TEXTO CONCISO)
-          ========================================================================= */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: VENTAS TOTALES DEL MES */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[190px]">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Ventas del Mes</span>
-              <div className="h-8 w-8 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
-                <TrendingUp className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-3">
-              {CURRENCY_SYMBOL} {kpis.monthSalesTotal.toLocaleString("es-BO", { minimumFractionDigits: 2 })}
-            </div>
-
-            <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--admin-brand)] mt-1">
-              <span>{kpis.monthSalesCount} tickets cobrados</span>
-            </div>
-          </div>
-
-          <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
-            <span>Canales</span>
-            <span className="font-bold text-slate-700 dark:text-slate-200">
-              {kpis.posPercentage}% POS • {kpis.adminPercentage}% Adm
-            </span>
-          </div>
+      <section className="admin-metrics" aria-label="Indicadores del negocio">
+        <div className="admin-metric admin-metric-lead">
+          <div className="admin-metric-label">Ventas del mes <TrendingUp size={17} aria-hidden /></div>
+          <div className="admin-metric-value">{formatMetric(kpis.monthSalesTotal)}</div>
+          <div className="admin-metric-detail">{kpis.monthSalesCount} tickets · {kpis.posPercentage}% POS · {kpis.adminPercentage}% administración</div>
         </div>
-
-        {/* KPI 2: GANANCIA BRUTA REAL */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[190px]">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                Ganancia Bruta
-              </span>
-              <div className="h-8 w-8 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600">
-                <DollarSign className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-3">
-              {CURRENCY_SYMBOL} {kpis.grossProfit.toLocaleString("es-BO", { minimumFractionDigits: 2 })}
-            </div>
-
-            <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 mt-1">
-              <span>{kpis.profitMargin.toFixed(1)}% margen neto</span>
-            </div>
-          </div>
-
-          <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
-            <span>Base</span>
-            <span className="font-bold text-slate-700 dark:text-slate-200">PVP vs Costo Kardex</span>
-          </div>
+        <div className="admin-metric">
+          <div className="admin-metric-label">Ganancia bruta <DollarSign size={17} aria-hidden /></div>
+          <div className="admin-metric-value">{formatMetric(kpis.grossProfit)}</div>
+          <div className="admin-metric-detail">{kpis.profitMargin.toFixed(1)}% de margen</div>
         </div>
-
-        {/* KPI 3: TICKET PROMEDIO */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[190px]">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                Ticket Promedio
-              </span>
-              <div className="h-8 w-8 rounded-full bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 flex items-center justify-center text-purple-600">
-                <Receipt className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-3">
-              {CURRENCY_SYMBOL} {kpis.averageTicket.toLocaleString("es-BO", { minimumFractionDigits: 2 })}
-            </div>
-
-            <div className="flex items-center gap-1 text-xs font-bold text-purple-600 mt-1">
-              <span>Por transacción</span>
-            </div>
-          </div>
-
-          <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
-            <span>Muestra</span>
-            <span className="font-bold text-slate-700 dark:text-slate-200">
-              {kpis.monthSalesCount} ventas
-            </span>
-          </div>
+        <div className="admin-metric">
+          <div className="admin-metric-label">Ticket promedio <Receipt size={17} aria-hidden /></div>
+          <div className="admin-metric-value">{formatMetric(kpis.averageTicket)}</div>
+          <div className="admin-metric-detail">Importe medio por venta</div>
         </div>
-
-        {/* KPI 4: EFECTIVO EN CAJAS */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[190px]">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                Efectivo en Gavetas
-              </span>
-              <div className="h-8 w-8 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
-                <Wallet className="h-4 w-4" />
-              </div>
-            </div>
-
-            <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-3">
-              {CURRENCY_SYMBOL} {kpis.cashInDrawers.toLocaleString("es-BO", { minimumFractionDigits: 2 })}
-            </div>
-
-            <span className="text-xs text-[var(--admin-brand)] font-bold mt-1 block">
-              {kpis.activeDrawersCount} de {kpis.totalDrawersCount} terminales activas
-            </span>
-          </div>
-
-          {/* Desglose: Efectivo y QR */}
-          <div className="pt-3 flex items-center gap-2 justify-between">
-            <div className="flex-1 py-1.5 px-2 rounded-2xl bg-[var(--admin-brand)] text-white text-center shadow-2xs">
-              <span className="block text-[8px] font-mono opacity-80 uppercase tracking-wider">Efectivo</span>
-              <span className="block text-xs font-black">
-                {CURRENCY_SYMBOL} {kpis.cashAmount.toFixed(0)}
-              </span>
-            </div>
-
-            <div className="flex-1 py-1.5 px-2 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
-              <span className="block text-[8px] font-mono text-slate-400 uppercase tracking-wider">QR Simple</span>
-              <span className="block text-xs font-bold text-slate-700 dark:text-slate-200">
-                {CURRENCY_SYMBOL} {kpis.qrAmount.toFixed(0)}
-              </span>
-            </div>
-
-            <Link href="/admin/cajas">
-              <button className="h-9 px-3 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-bold shrink-0 hover:bg-black transition-colors cursor-pointer">
-                Arqueo
-              </button>
-            </Link>
-          </div>
+        <div className="admin-metric">
+          <div className="admin-metric-label">Efectivo en cajas <Wallet size={17} aria-hidden /></div>
+          <div className="admin-metric-value">{formatMetric(kpis.cashInDrawers)}</div>
+          <div className="admin-metric-detail">{kpis.activeDrawersCount} de {kpis.totalDrawersCount} terminales activas</div>
+          <div className="admin-metric-detail">Efectivo {formatMetric(kpis.cashAmount)} · QR {formatMetric(kpis.qrAmount)}</div>
         </div>
       </section>
 
@@ -360,14 +252,14 @@ export default function AdminDashboardPage() {
           3. BARRA DE FILTROS SEGMENTADA (ESTILO MODERNO BENTO)
           ========================================================================= */}
       <section className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-admin-raised border border-admin-card-border">
           <button
             onClick={() => setActiveChannelTab("all")}
             className={cn(
               "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
               activeChannelTab === "all"
-                ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-2xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                ? "bg-admin-card-bg text-admin-brand-text"
+                : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
             )}
           >
             Todos ({recentSales.length})
@@ -378,8 +270,8 @@ export default function AdminDashboardPage() {
             className={cn(
               "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
               activeChannelTab === "pos"
-                ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-2xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                ? "bg-admin-card-bg text-admin-brand-text"
+                : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
             )}
           >
             Mostrador POS
@@ -390,8 +282,8 @@ export default function AdminDashboardPage() {
             className={cn(
               "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer",
               activeChannelTab === "administrative"
-                ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-2xs"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                ? "bg-admin-card-bg text-admin-brand-text"
+                : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
             )}
           >
             Venta Administrativa
@@ -405,32 +297,22 @@ export default function AdminDashboardPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por ticket, cliente..."
-            className="w-full h-9 pl-9 pr-4 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 focus:outline-hidden focus:ring-2 focus:ring-[var(--admin-brand)]/20 focus:border-[var(--admin-brand)] shadow-2xs"
+            className="w-full h-9 pl-9 pr-4 text-xs rounded-xl bg-admin-card-bg border border-admin-card-border focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20 focus:border-admin-brand"
           />
         </div>
       </section>
 
-      {/* =========================================================================
-          4. CONTENEDOR BENTO - TICKETS EN TIEMPO REAL CON CELESTE/AZUL
-          ========================================================================= */}
-      <section className="rounded-3xl bg-slate-900 dark:bg-slate-950 border border-slate-800 p-6 lg:p-7 text-white shadow-xl space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-          <div>
-            <h2 className="text-base font-black text-white tracking-tight">
-              Últimas Transacciones
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Auditoría directa de tickets y comprobantes
-            </p>
-          </div>
+      <section className="rounded-xl bg-admin-raised border border-admin-card-border p-4 sm:p-5 space-y-4">
+        <div className="border-b border-admin-card-border pb-3">
+          <h2 className="text-base font-semibold text-admin-text">Últimas transacciones</h2>
         </div>
 
         {filteredSales.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 space-y-3">
-            <Receipt className="h-10 w-10 mx-auto text-slate-600 stroke-[1.5]" />
+          <div className="text-center py-12 text-admin-muted space-y-3">
+            <Receipt className="h-10 w-10 mx-auto text-admin-muted stroke-[1.5]" />
             <p className="text-sm font-medium">No se encontraron ventas para el filtro seleccionado.</p>
             <Link href="/admin/ventas">
-              <Button size="sm" className="bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold rounded-xl">
+              <Button size="sm" className="bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold rounded-xl">
                 + Realizar Venta en POS
               </Button>
             </Link>
@@ -439,7 +321,7 @@ export default function AdminDashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* COLUMNA IZQUIERDA: LISTA INTERACTIVA DE TICKETS */}
             <div className="lg:col-span-5 space-y-2.5">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2">
+              <div className="text-xs font-bold text-admin-muted uppercase tracking-wider px-2">
                 Últimos Tickets ({filteredSales.length})
               </div>
 
@@ -448,25 +330,27 @@ export default function AdminDashboardPage() {
                   const isSelected = sale.id === selectedSaleId;
 
                   return (
-                    <div
+                    <button
+                      type="button"
+                      aria-pressed={isSelected}
                       key={sale.id}
                       onClick={() => setSelectedSaleId(sale.id)}
                       className={cn(
-                        "flex items-center justify-between p-3.5 rounded-2xl transition-all cursor-pointer",
+                        "flex w-full items-center justify-between text-left p-3.5 rounded-xl transition-colors cursor-pointer",
                         isSelected
-                          ? "bg-sky-950/80 border border-sky-400/60 shadow-md scale-[1.01]"
-                          : "bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 text-slate-300"
+                          ? "bg-admin-brand-subtle border border-admin-brand"
+                          : "bg-admin-card-bg hover:bg-admin-card-bg border border-admin-card-border text-admin-muted"
                       )}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-10 w-10 rounded-full bg-sky-900/60 border border-sky-400/30 flex items-center justify-center font-black text-sky-200 text-xs shrink-0">
+                        <div className="h-10 w-10 rounded-full bg-admin-brand-subtle border border-admin-brand flex items-center justify-center font-semibold text-admin-brand-text text-xs shrink-0">
                           {sale.customer.substring(0, 2).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <span className="text-xs font-bold text-white block truncate">
+                          <span className="text-xs font-bold text-admin-text block truncate">
                             #{sale.saleNumber}
                           </span>
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-[10px] text-admin-muted">
                             {sale.time} • {sale.cashier}
                           </span>
                         </div>
@@ -477,18 +361,18 @@ export default function AdminDashboardPage() {
                           <span
                             className={cn(
                               "h-1.5 w-1.5 rounded-full",
-                              sale.channel === "pos" ? "bg-sky-400" : "bg-emerald-400"
+                              sale.channel === "pos" ? "bg-admin-brand" : "bg-emerald-400"
                             )}
                           />
-                          <span className={sale.channel === "pos" ? "text-sky-300" : "text-emerald-300"}>
+                          <span className={sale.channel === "pos" ? "text-admin-brand-text" : "text-admin-success"}>
                             {sale.channel === "pos" ? "POS" : "Adm"}
                           </span>
                         </div>
-                        <span className="text-sm font-black text-white">
+                        <span className="text-sm font-semibold text-admin-text">
                           {CURRENCY_SYMBOL} {sale.total.toFixed(2)}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -497,18 +381,18 @@ export default function AdminDashboardPage() {
             {/* COLUMNA DERECHA: TARJETA DE DETALLE AUDITADO */}
             {selectedSale && (
               <div className="lg:col-span-7">
-                <div className="rounded-3xl bg-slate-800/90 border border-slate-700/80 p-6 lg:p-7 shadow-2xl space-y-6">
+                <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 lg:p-7 space-y-6">
                   {/* Encabezado del Detalle */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-700">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-admin-card-border">
                     <div>
-                      <span className="text-[11px] font-bold text-sky-400 uppercase tracking-wider block">
+                      <span className="text-[11px] font-bold text-admin-brand-text uppercase tracking-wider block">
                         Detalle del Comprobante
                       </span>
                       <div className="flex items-center gap-3 mt-1">
-                        <h3 className="text-2xl font-black text-white tracking-tight">
+                        <h3 className="text-2xl font-semibold text-admin-text tracking-tight">
                           #{selectedSale.saleNumber}
                         </h3>
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
+                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-admin-success">
                           <span className="h-2 w-2 rounded-full bg-emerald-400" />
                           <span>{selectedSale.status}</span>
                         </div>
@@ -516,14 +400,14 @@ export default function AdminDashboardPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-sky-900/60 border border-sky-400/40 flex items-center justify-center font-bold text-sky-200 text-xs">
+                      <div className="h-10 w-10 rounded-full bg-admin-brand-subtle border border-admin-brand flex items-center justify-center font-bold text-admin-brand-text text-xs">
                         {selectedSale.customer.substring(0, 2).toUpperCase()}
                       </div>
                       <div className="text-left">
-                        <span className="text-xs font-bold text-white block">
+                        <span className="text-xs font-bold text-admin-text block">
                           {selectedSale.customer}
                         </span>
-                        <span className="text-[10px] text-sky-300">
+                        <span className="text-[10px] text-admin-brand-text">
                           {selectedSale.channelLabel} • {selectedSale.cashier}
                         </span>
                       </div>
@@ -532,7 +416,7 @@ export default function AdminDashboardPage() {
 
                   {/* Grid de Ítems Vendidos */}
                   <div className="space-y-3">
-                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    <div className="text-xs font-bold text-admin-muted uppercase tracking-wider">
                       Productos ({selectedSale.items.length})
                     </div>
 
@@ -540,20 +424,20 @@ export default function AdminDashboardPage() {
                       {selectedSale.items.map((item, idx) => (
                         <div
                           key={idx}
-                          className="p-3.5 rounded-2xl bg-slate-900/70 border border-slate-700/60 flex items-center justify-between"
+                          className="p-3.5 rounded-xl bg-admin-card-bg border border-admin-card-border flex items-center justify-between"
                         >
                           <div>
-                            <p className="font-bold text-white text-xs">{item.name}</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">
+                            <p className="font-bold text-admin-text text-xs">{item.name}</p>
+                            <p className="text-[11px] text-admin-muted mt-0.5">
                               {item.quantity} ud x {CURRENCY_SYMBOL} {item.unitPrice.toFixed(2)} (Costo: {CURRENCY_SYMBOL} {item.unitCost.toFixed(2)})
                             </p>
                           </div>
 
                           <div className="text-right">
-                            <span className="text-sm font-black text-white block">
+                            <span className="text-sm font-semibold text-admin-text block">
                               {CURRENCY_SYMBOL} {item.subtotal.toFixed(2)}
                             </span>
-                            <span className="text-[10px] font-bold text-emerald-400">
+                            <span className="text-[10px] font-bold text-admin-success">
                               +{CURRENCY_SYMBOL} {(item.unitPrice - item.unitCost).toFixed(2)} margen
                             </span>
                           </div>
@@ -563,28 +447,28 @@ export default function AdminDashboardPage() {
                   </div>
 
                   {/* Resumen Financiero */}
-                  <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-700 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="p-4 rounded-xl bg-admin-card-bg border border-admin-card-border grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Subtotal</span>
-                      <span className="text-sm font-bold text-slate-200">
+                      <span className="text-[10px] text-admin-muted block font-medium">Subtotal</span>
+                      <span className="text-sm font-bold text-admin-muted">
                         {CURRENCY_SYMBOL} {selectedSale.subtotal.toFixed(2)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Costo Total</span>
-                      <span className="text-sm font-bold text-slate-200">
+                      <span className="text-[10px] text-admin-muted block font-medium">Costo Total</span>
+                      <span className="text-sm font-bold text-admin-muted">
                         {CURRENCY_SYMBOL} {selectedSale.costTotal.toFixed(2)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Utilidad</span>
-                      <span className="text-sm font-black text-emerald-400">
+                      <span className="text-[10px] text-admin-muted block font-medium">Utilidad</span>
+                      <span className="text-sm font-semibold text-admin-success">
                         +{CURRENCY_SYMBOL} {selectedSale.grossProfit.toFixed(2)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-sky-400 block font-medium">Total Cobrado</span>
-                      <span className="text-base font-black text-white">
+                      <span className="text-[10px] text-admin-brand-text block font-medium">Total Cobrado</span>
+                      <span className="text-base font-semibold text-admin-text">
                         {CURRENCY_SYMBOL} {selectedSale.total.toFixed(2)}
                       </span>
                     </div>
@@ -592,11 +476,11 @@ export default function AdminDashboardPage() {
 
                   {/* Pie de Acción: Vuelto e Impresión */}
                   <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="text-xs text-slate-300">
-                      <span className="text-slate-400">Medio: </span>
-                      <span className="font-bold text-white">{selectedSale.paymentMethod}</span>
+                    <div className="text-xs text-admin-muted">
+                      <span className="text-admin-muted">Medio: </span>
+                      <span className="font-bold text-admin-text">{selectedSale.paymentMethod}</span>
                       {selectedSale.changeGiven > 0 && (
-                        <span className="ml-2 text-emerald-400 font-bold">
+                        <span className="ml-2 text-admin-success font-bold">
                           (Cambio: {CURRENCY_SYMBOL} {selectedSale.changeGiven.toFixed(2)})
                         </span>
                       )}
@@ -604,7 +488,7 @@ export default function AdminDashboardPage() {
 
                     <div className="flex items-center gap-2">
                       <Link href="/admin/inventario">
-                        <button className="h-10 px-4 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-sky-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer">
+                        <button className="h-10 px-4 rounded-xl bg-admin-card-bg hover:bg-admin-card-bg text-admin-brand-text text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer">
                           <Boxes className="h-4 w-4" />
                           <span>Kardex</span>
                         </button>
@@ -612,7 +496,7 @@ export default function AdminDashboardPage() {
 
                       <button
                         onClick={() => handlePrintTicket(selectedSale)}
-                        className="h-10 px-5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 text-xs font-black transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
+                        className="h-10 px-5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 text-xs font-semibold transition-all active:scale-95 cursor-pointer flex items-center gap-2"
                       >
                         <Printer className="h-4 w-4" />
                         <span>Imprimir Ticket</span>
@@ -631,18 +515,18 @@ export default function AdminDashboardPage() {
           ========================================================================= */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Bento A: Stock Crítico */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 flex flex-col justify-between">
           <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center">
                   <AlertCircle className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="font-black text-sm text-slate-900 dark:text-white">
+                  <h3 className="font-semibold text-sm text-admin-text">
                     Stock Crítico
                   </h3>
-                  <p className="text-[11px] text-slate-400">Por debajo del stock mínimo</p>
+                  <p className="text-[11px] text-admin-muted">Por debajo del stock mínimo</p>
                 </div>
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
@@ -652,7 +536,7 @@ export default function AdminDashboardPage() {
             </div>
 
             {criticalStockProducts.length === 0 ? (
-              <div className="text-center py-6 text-slate-400 text-xs">
+              <div className="text-center py-6 text-admin-muted text-xs">
                 ✓ Todo el inventario se encuentra en nivel óptimo.
               </div>
             ) : (
@@ -660,19 +544,19 @@ export default function AdminDashboardPage() {
                 {criticalStockProducts.map((p) => (
                   <div
                     key={p.id}
-                    className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between text-xs"
+                    className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border flex items-center justify-between text-xs"
                   >
                     <div>
-                      <p className="font-bold text-slate-900 dark:text-white">{p.name}</p>
-                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      <p className="font-bold text-admin-text">{p.name}</p>
+                      <p className="text-[10px] text-admin-muted font-mono mt-0.5">
                         SKU: {p.sku} • {p.supplier}
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="font-black text-amber-600 text-sm">
+                      <span className="font-semibold text-amber-600 text-sm">
                         {p.stock} uds restantes
                       </span>
-                      <span className="block text-[10px] text-slate-400">mín. {p.minStock}</span>
+                      <span className="block text-[10px] text-admin-muted">mín. {p.minStock}</span>
                     </div>
                   </div>
                 ))}
@@ -680,12 +564,12 @@ export default function AdminDashboardPage() {
             )}
           </div>
 
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">
+          <div className="pt-4 border-t border-admin-card-border flex items-center justify-between">
+            <span className="text-xs text-admin-muted font-medium">
               Valor almacén: {CURRENCY_SYMBOL} {totalInventoryValue.toLocaleString("es-BO", { minimumFractionDigits: 2 })}
             </span>
             <Link href="/admin/compras">
-              <Button size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5 border-[var(--admin-brand)]/30 text-[var(--admin-brand)]">
+              <Button size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5 border-admin-brand/30 text-admin-brand-text">
                 <Truck className="h-3.5 w-3.5" />
                 <span>Orden de Compra</span>
               </Button>
@@ -694,18 +578,18 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Bento B: Mermas & Bajas */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 flex flex-col justify-between">
           <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center">
                   <ShieldAlert className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="font-black text-sm text-slate-900 dark:text-white">
+                  <h3 className="font-semibold text-sm text-admin-text">
                     Mermas & Bajas
                   </h3>
-                  <p className="text-[11px] text-slate-400">Pérdidas registradas por merma o daño</p>
+                  <p className="text-[11px] text-admin-muted">Pérdidas registradas por merma o daño</p>
                 </div>
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
@@ -715,7 +599,7 @@ export default function AdminDashboardPage() {
             </div>
 
             {recentAdjustments.length === 0 ? (
-              <div className="text-center py-6 text-slate-400 text-xs">
+              <div className="text-center py-6 text-admin-muted text-xs">
                 ✓ No hay actas de baja este mes.
               </div>
             ) : (
@@ -723,17 +607,17 @@ export default function AdminDashboardPage() {
                 {recentAdjustments.map((a) => (
                   <div
                     key={a.id}
-                    className="p-3.5 rounded-2xl bg-rose-50/50 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-900/40 flex items-center justify-between"
+                    className="p-3.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-900/40 flex items-center justify-between"
                   >
                     <div>
                       <span className="font-bold text-rose-800 dark:text-rose-300 block">
                         Acta #{a.adjustmentNumber}
                       </span>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-admin-muted mt-0.5">
                         {a.quantity}x {a.productName} • {a.reasonLabel}
                       </p>
                     </div>
-                    <span className="font-black text-rose-600 text-sm">
+                    <span className="font-semibold text-rose-600 text-sm">
                       -{CURRENCY_SYMBOL} {a.totalCost.toFixed(2)}
                     </span>
                   </div>
@@ -742,8 +626,8 @@ export default function AdminDashboardPage() {
             )}
           </div>
 
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Control de pérdidas</span>
+          <div className="pt-4 border-t border-admin-card-border flex items-center justify-between">
+            <span className="text-xs text-admin-muted font-medium">Control de pérdidas</span>
             <Link href="/admin/inventario">
               <Button size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5 border-rose-200 text-rose-600 dark:border-rose-800">
                 <ShieldAlert className="h-3.5 w-3.5" />

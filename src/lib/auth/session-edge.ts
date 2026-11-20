@@ -1,101 +1,68 @@
-export type UserRole = "admin" | "manager" | "cashier" | "warehouse";
+export const USER_ROLES = ["admin", "manager", "cashier", "warehouse"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
 
 export interface SessionUser {
   id: number;
   name: string;
   email: string;
   role: UserRole;
-  pin?: string | null;
   phone?: string | null;
 }
 
 export const SESSION_COOKIE_NAME = "aura_session";
-export const SESSION_SECRET = process.env.SESSION_SECRET || "aura-secret-session-key-production-bolivia-2026";
-export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 días
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
-function bufferToHex(buffer: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function hexToBuffer(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+async function signingKey() {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || new TextEncoder().encode(secret).length < 32) {
+    throw new Error("Configura SESSION_SECRET con al menos 32 bytes aleatorios.");
   }
-  return bytes;
-}
 
-/**
- * Firma con Web Crypto HMAC-SHA256 (Compatible con Edge Runtime y Node.js)
- */
-export async function signWithWebCrypto(data: string, secret = SESSION_SECRET): Promise<string> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
+  return crypto.subtle.importKey(
     "raw",
-    encoder.encode(secret),
+    new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign", "verify"]
   );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
-  return bufferToHex(signature);
 }
 
-/**
- * Codifica y firma los datos de sesión en un token seguro
- */
 export async function encodeSessionToken(user: SessionUser): Promise<string> {
-  const json = JSON.stringify({
-    ...user,
-    iat: Math.floor(Date.now() / 1000),
+  const payload = Buffer.from(JSON.stringify({
+    v: 1,
+    id: user.id,
+    role: user.role,
     exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
-  });
-
-  // Codificar base64url compatible con Edge y Node
-  const b64 = Buffer.from(json, "utf-8").toString("base64url");
-  const signature = await signWithWebCrypto(b64);
-  return `${b64}.${signature}`;
+  })).toString("base64url");
+  const signature = await crypto.subtle.sign("HMAC", await signingKey(), Buffer.from(payload));
+  return `${payload}.${Buffer.from(signature).toString("hex")}`;
 }
 
-/**
- * Decodifica y verifica la integridad del token de sesión en Edge Runtime o Node.js
- */
-export async function decodeSessionToken(token: string): Promise<SessionUser | null> {
-  if (!token || !token.includes(".")) return null;
-  const [b64, signature] = token.split(".");
-  if (!b64 || !signature) return null;
+export async function decodeSessionToken(token: string): Promise<Pick<SessionUser, "id" | "role"> | null> {
+  if (typeof token !== "string" || token.length > 512) return null;
+
+  const [payload, signature, extra] = token.split(".");
+  if (extra !== undefined || !/^[\w-]+$/.test(payload) || !/^[0-9a-f]{64}$/.test(signature ?? "")) {
+    return null;
+  }
 
   try {
-    const expectedSignature = await signWithWebCrypto(b64);
-    if (signature.length !== expectedSignature.length) return null;
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      await signingKey(),
+      Buffer.from(signature, "hex"),
+      Buffer.from(payload)
+    );
+    if (!valid) return null;
 
-    // Comparación segura
-    const a = hexToBuffer(signature);
-    const b = hexToBuffer(expectedSignature);
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) {
-      diff |= a[i] ^ b[i];
-    }
-    if (diff !== 0) return null;
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (
+      claims.v !== 1 || !Number.isSafeInteger(claims.id) || claims.id <= 0 ||
+      !USER_ROLES.includes(claims.role) ||
+      !Number.isSafeInteger(claims.exp) || claims.exp <= Math.floor(Date.now() / 1000)
+    ) return null;
 
-    const json = Buffer.from(b64, "base64url").toString("utf-8");
-    const payload = JSON.parse(json);
-
-    // Verificar expiración
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-
-    return {
-      id: Number(payload.id),
-      name: String(payload.name),
-      email: String(payload.email),
-      role: payload.role as UserRole,
-      pin: payload.pin || null,
-      phone: payload.phone || null,
-    };
+    return { id: claims.id, role: claims.role };
   } catch {
     return null;
   }

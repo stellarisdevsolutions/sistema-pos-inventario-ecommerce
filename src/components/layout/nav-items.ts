@@ -24,56 +24,56 @@ export interface NavItem {
 
 export const navigationItems: NavItem[] = [
   {
-    title: "Panel General",
+    title: "Resumen",
     href: "/admin",
     icon: LayoutDashboard,
     section: "general",
     allowedRoles: ["admin", "manager"],
   },
   {
-    title: "Punto de Venta (POS)",
+    title: "Punto de venta",
     href: "/admin/ventas",
     icon: ShoppingCart,
     section: "general",
     allowedRoles: ["admin", "manager", "cashier"],
   },
   {
-    title: "Control de Cajas",
+    title: "Cajas",
     href: "/admin/cajas",
     icon: Banknote,
     section: "general",
     allowedRoles: ["admin", "manager", "cashier"],
   },
   {
-    title: "Cierre & Reporte Z",
+    title: "Reporte Z",
     href: "/admin/reportes",
     icon: BarChart3,
     section: "general",
     allowedRoles: ["admin", "manager"],
   },
   {
-    title: "Reportes por Periodo",
+    title: "Analítica",
     href: "/admin/analitica",
     icon: TrendingUp,
     section: "general",
     allowedRoles: ["admin", "manager"],
   },
   {
-    title: "Usuarios & Permisos",
+    title: "Usuarios",
     href: "/admin/usuarios",
     icon: ShieldCheck,
     section: "general",
     allowedRoles: ["admin"],
   },
   {
-    title: "Inventario & Kárdex",
+    title: "Inventario",
     href: "/admin/inventario",
     icon: Package,
     section: "operaciones",
     allowedRoles: ["admin", "manager", "warehouse"],
   },
   {
-    title: "Compras & Entradas",
+    title: "Compras",
     href: "/admin/compras",
     icon: Truck,
     section: "operaciones",
@@ -87,10 +87,14 @@ export const navigationItems: NavItem[] = [
     allowedRoles: ["admin", "manager", "warehouse"],
   },
   {
-    title: "Tienda Online",
+    title: "Tienda online",
     href: "/",
     icon: Store,
     section: "canales",
     allowedRoles: ["admin", "manager", "cashier", "warehouse"],
   },
 ];
+
+export function isModuleActive(pathname: string, href: string) {
+  return pathname === href || (href !== "/admin" && href !== "/" && pathname.startsWith(href + "/"));
+}

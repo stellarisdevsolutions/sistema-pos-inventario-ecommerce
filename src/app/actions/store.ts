@@ -42,7 +42,7 @@ const DEFAULT_PRODUCT_IMAGE =
 export async function getStoreProducts(): Promise<StoreProduct[]> {
   try {
     const rawProds = await db.query.products.findMany({
-      where: (p, { eq }) => eq(p.isActive, true),
+      where: (p, { and, eq }) => and(eq(p.isActive, true), eq(p.isVisibleWeb, true)),
       with: {
         category: true,
       },
@@ -95,7 +95,7 @@ export async function getStoreCategories(): Promise<StoreCategory[]> {
         orderBy: (c, { asc }) => [asc(c.name)],
       }),
       db.query.products.findMany({
-        where: (p, { eq }) => eq(p.isActive, true),
+        where: (p, { and, eq }) => and(eq(p.isActive, true), eq(p.isVisibleWeb, true)),
         columns: {
           categoryId: true,
         },
@@ -140,7 +140,7 @@ export async function getStoreProductBySlug(slug: string): Promise<StoreProduct 
       },
     });
 
-    if (!p || p.isActive === false) return null;
+    if (!p?.isActive || !p.isVisibleWeb) return null;
 
     const priceNum = typeof p.price === "string" ? parseFloat(p.price) : Number(p.price) || 0;
     const imagesList = Array.isArray(p.images) && p.images.length > 0 ? p.images : [];

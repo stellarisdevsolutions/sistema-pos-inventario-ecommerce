@@ -1,3 +1,4 @@
+import { db } from "@/db";
 import { cookies } from "next/headers";
 import {
   type SessionUser,
@@ -34,7 +35,14 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     if (!token) return null;
-    return await decodeSessionToken(token);
+    const claims = await decodeSessionToken(token);
+    if (!claims) return null;
+
+    const user = await db.query.users.findFirst({
+      where: (users, { and, eq }) => and(eq(users.id, claims.id), eq(users.isActive, true)),
+      columns: { id: true, name: true, email: true, role: true, phone: true },
+    });
+    return user?.role === claims.role ? user : null;
   } catch {
     return null;
   }
@@ -48,13 +56,15 @@ export async function destroySession(): Promise<void> {
   cookieStore.delete(SESSION_COOKIE_NAME);
 }
 
+export class AdminAccessError extends Error {}
+
 /**
  * Guardia de servidor: Requiere sesión activa o lanza un error
  */
 export async function requireAuth(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) {
-    throw new Error("No autorizado: Debes iniciar sesión para continuar.");
+    throw new AdminAccessError("No autorizado: Debes iniciar sesión para continuar.");
   }
   return user;
 }
@@ -65,7 +75,7 @@ export async function requireAuth(): Promise<SessionUser> {
 export async function requireRole(allowedRoles: UserRole[]): Promise<SessionUser> {
   const user = await requireAuth();
   if (!allowedRoles.includes(user.role)) {
-    throw new Error(
+    throw new AdminAccessError(
       `Acceso denegado: Tu rol (${user.role}) no tiene permisos para realizar esta operación.`
     );
   }

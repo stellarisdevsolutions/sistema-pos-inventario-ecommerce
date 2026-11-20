@@ -1,8 +1,10 @@
 "use server";
 
+import { adminActionError } from "@/lib/admin-action-error";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq, desc, and, gte, lte, lte as lessOrEqual, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lt, lte as lessOrEqual, sql } from "drizzle-orm";
+import { businessDate, businessDayStart } from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
 
 export interface DashboardSalesItem {
@@ -84,15 +86,16 @@ export async function getDashboardSummaryAction(): Promise<{
   try {
     await requireRole(["admin", "manager"]);
 
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const [year, month] = businessDate().split("-").map(Number);
+    const monthDate = (offset: number) => new Date(Date.UTC(year, month - 1 + offset, 1)).toISOString().slice(0, 10);
+    const startOfMonth = businessDayStart(monthDate(0));
+    const endOfMonth = businessDayStart(monthDate(1));
 
     // 1. Obtener ventas del mes en curso
     const monthSales = await db.query.sales.findMany({
       where: and(
         gte(schema.sales.createdAt, startOfMonth),
-        lte(schema.sales.createdAt, endOfMonth)
+        lt(schema.sales.createdAt, endOfMonth)
       ),
       with: {
         customer: true,
@@ -120,7 +123,7 @@ export async function getDashboardSummaryAction(): Promise<{
     let qrAmount = 0;
 
     for (const s of monthSales) {
-      if (s.status === "completed") {
+      if (s.status === "completed" || s.status === "refunded") {
         const total = parseFloat(s.totalAmount) || 0;
         const refunded = parseFloat(s.refundedAmount || "0") || 0;
         const net = Math.max(0, total - refunded);
@@ -148,7 +151,7 @@ export async function getDashboardSummaryAction(): Promise<{
       }
     }
 
-    const grossProfit = Math.max(0, monthSalesTotal - monthSalesCost);
+    const grossProfit = monthSalesTotal - monthSalesCost;
     const profitMargin = monthSalesTotal > 0 ? (grossProfit / monthSalesTotal) * 100 : 0;
     const averageTicket = completedCount > 0 ? monthSalesTotal / completedCount : 0;
     const totalCountValid = posCount + adminCount;
@@ -253,7 +256,7 @@ export async function getDashboardSummaryAction(): Promise<{
     const monthAdjustments = await db.query.inventoryAdjustments.findMany({
       where: and(
         gte(schema.inventoryAdjustments.createdAt, startOfMonth),
-        lte(schema.inventoryAdjustments.createdAt, endOfMonth)
+        lt(schema.inventoryAdjustments.createdAt, endOfMonth)
       ),
       with: {
         authorizedByUser: true,
@@ -318,11 +321,10 @@ export async function getDashboardSummaryAction(): Promise<{
         monthLossesTotal,
       },
     };
-  } catch (error: any) {
-    console.error("Error al obtener resumen de dashboard:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Error al cargar las métricas en vivo.",
+      error: adminActionError(error, "Error al cargar las métricas en vivo."),
     };
   }
 }

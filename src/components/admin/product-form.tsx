@@ -273,28 +273,28 @@ export function ProductForm({
       {/* =========================================================================
           BARRA SUPERIOR (HEADER DE ACCIONES)
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200/80 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 admin-page-header">
         <div className="flex items-center gap-3">
           <Link href="/admin/inventario">
             <button
               type="button"
-              className="h-10 w-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all shadow-2xs cursor-pointer"
+              className="h-10 w-10 rounded-xl border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-xl lg:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              <h1 className="admin-page-title">
                 {isEdit ? `Editar Producto` : `Nuevo Producto`}
               </h1>
               {isEdit && initialData?.id && (
-                <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                <span className="text-xs font-mono font-bold text-slate-500 bg-admin-raised px-2 py-0.5 rounded-lg border border-admin-card-border">
                   #{initialData.id}
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-admin-muted mt-0.5">
               Ficha comercial, precios y control de stock
             </p>
           </div>
@@ -308,7 +308,7 @@ export function ProductForm({
               variant="outline"
               size="sm"
               disabled={isSubmitting}
-              className="h-10 px-4 rounded-xl font-bold text-xs cursor-pointer border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shadow-2xs"
+              className="h-10 px-4 rounded-xl font-bold text-xs cursor-pointer border-admin-card-border bg-admin-card-bg text-admin-secondary hover:bg-admin-raised transition-colors"
             >
               Descartar
             </Button>
@@ -317,7 +317,7 @@ export function ProductForm({
             type="submit"
             size="sm"
             disabled={isSubmitting}
-            className="h-10 px-6 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white font-black text-xs shadow-md shadow-[var(--admin-brand)]/25 transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+            className="h-10 px-6 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-white font-semibold text-xs transition-all active:scale-95 cursor-pointer disabled:opacity-60"
           >
             {isSubmitting ? (
               <>
@@ -337,11 +337,11 @@ export function ProductForm({
       {/* =========================================================================
           FILA 1: INFORMACIÓN PRINCIPAL (FOTOS A LA IZQUIERDA + DATOS A LA DERECHA)
           ========================================================================= */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-5">
+        <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[var(--admin-brand)]" />
-            <h2 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+            <span className="h-2 w-2 rounded-full bg-admin-brand" />
+            <h2 className="text-base font-semibold text-admin-text tracking-tight">
               Información General
             </h2>
           </div>
@@ -351,8 +351,8 @@ export function ProductForm({
           {/* LADO IZQUIERDO: IMÁGENES */}
           <div className="md:col-span-5 space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <Camera className="h-3.5 w-3.5 text-[var(--admin-brand)]" />
+              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Camera className="h-3.5 w-3.5 text-admin-brand-text" />
                 Imagen Principal
               </label>
 
@@ -373,7 +373,7 @@ export function ProductForm({
               />
 
               {mainImage ? (
-                <div className="relative group w-full aspect-square rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm bg-slate-100 dark:bg-slate-800">
+                <div className="relative group w-full aspect-square rounded-xl overflow-hidden border border-admin-card-border bg-admin-raised">
                   <img
                     src={mainImage}
                     alt="Foto Principal"
@@ -381,7 +381,7 @@ export function ProductForm({
                   />
                   {isUploadingMain && (
                     <div className="absolute inset-0 bg-black/70 backdrop-blur-xs flex flex-col items-center justify-center text-white gap-2 z-10">
-                      <Loader2 className="h-8 w-8 animate-spin text-sky-400" />
+                      <Loader2 className="h-8 w-8 animate-spin text-admin-brand-text" />
                       <span className="text-xs font-bold">Optimizando...</span>
                     </div>
                   )}
@@ -391,9 +391,9 @@ export function ProductForm({
                         type="button"
                         disabled={isUploadingMain}
                         onClick={() => mainFileInputRef.current?.click()}
-                        className="h-9 px-4 rounded-xl bg-white/95 hover:bg-white text-slate-900 text-xs font-black flex items-center gap-1.5 shadow-lg cursor-pointer transition-all hover:scale-105 active:scale-95"
+                        className="h-9 px-4 rounded-xl bg-white/95 hover:bg-white text-slate-900 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 active:scale-95"
                       >
-                        <Pencil className="h-3.5 w-3.5 text-[var(--admin-brand)]" />
+                        <Pencil className="h-3.5 w-3.5 text-admin-brand-text" />
                         <span>Cambiar</span>
                       </button>
                     </div>
@@ -402,18 +402,18 @@ export function ProductForm({
               ) : (
                 <div
                   onClick={() => !isUploadingMain && mainFileInputRef.current?.click()}
-                  className="w-full aspect-square rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-[var(--admin-brand)] bg-slate-50 dark:bg-slate-800/30 flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all group"
+                  className="w-full aspect-square rounded-xl border-2 border-dashed border-admin-card-border hover:border-admin-brand bg-admin-raised flex flex-col items-center justify-center p-6 text-center cursor-pointer transition-all group"
                 >
                   {isUploadingMain ? (
                     <>
-                      <Loader2 className="h-8 w-8 text-[var(--admin-brand)] animate-spin mb-2" />
-                      <span className="text-xs font-black text-slate-800 dark:text-slate-200">
+                      <Loader2 className="h-8 w-8 text-admin-brand-text animate-spin mb-2" />
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                         Optimizando...
                       </span>
                     </>
                   ) : (
                     <>
-                      <div className="h-12 w-12 rounded-xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-[var(--admin-brand)] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform shadow-2xs">
+                      <div className="h-12 w-12 rounded-xl bg-admin-brand-subtle border border-admin-brand-light text-admin-brand-text flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                         <UploadCloud className="h-6 w-6" />
                       </div>
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
@@ -429,9 +429,9 @@ export function ProductForm({
             </div>
 
             {/* Galería Adicional */}
-            <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+            <div className="space-y-2 pt-1 border-t border-admin-card-border">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <label className="text-xs font-bold text-admin-secondary flex items-center gap-1.5">
                   <ImageIcon className="h-3.5 w-3.5 text-slate-500" />
                   Galería Web
                 </label>
@@ -444,7 +444,7 @@ export function ProductForm({
                 {additionalImages.map((img, idx) => (
                   <div
                     key={idx}
-                    className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 shadow-2xs"
+                    className="relative group aspect-square rounded-xl overflow-hidden border border-admin-card-border bg-admin-raised"
                   >
                     <img
                       src={img}
@@ -467,10 +467,10 @@ export function ProductForm({
                     type="button"
                     disabled={isUploadingAdditional}
                     onClick={() => additionalFileInputRef.current?.click()}
-                    className="aspect-square rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-[var(--admin-brand)] bg-slate-50 dark:bg-slate-800/40 flex flex-col items-center justify-center text-slate-400 hover:text-[var(--admin-brand)] transition-colors cursor-pointer group"
+                    className="aspect-square rounded-xl border-2 border-dashed border-admin-card-border hover:border-admin-brand bg-admin-raised flex flex-col items-center justify-center text-slate-400 hover:text-admin-brand-text transition-colors cursor-pointer group"
                   >
                     {isUploadingAdditional ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-[var(--admin-brand)]" />
+                      <Loader2 className="h-4 w-4 animate-spin text-admin-brand-text" />
                     ) : (
                       <>
                         <Plus className="h-4 w-4 stroke-[2.5]" />
@@ -486,21 +486,21 @@ export function ProductForm({
           {/* LADO DERECHO: NOMBRE, CATEGORÍA Y DESCRIPCIÓN */}
           <div className="md:col-span-7 space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-admin-secondary">
                 Nombre del Producto <span className="text-rose-500">*</span>
               </label>
               <Input
                 placeholder="Ej. Auriculares Inalámbricos Pro"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="h-11 rounded-xl text-xs font-medium bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 focus-visible:border-[var(--admin-brand)] focus-visible:ring-2 focus-visible:ring-[var(--admin-brand)]/20 shadow-2xs"
+                className="h-11 rounded-xl text-xs font-medium bg-admin-card-bg border border-admin-card-border focus-visible:border-admin-brand focus-visible:ring-2 focus-visible:ring-admin-brand/20"
                 required
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Tag className="h-3.5 w-3.5 text-[var(--admin-brand)]" />
+              <label className="text-xs font-bold text-admin-secondary flex items-center gap-1.5">
+                <Tag className="h-3.5 w-3.5 text-admin-brand-text" />
                 Categoría
               </label>
               <select
@@ -509,7 +509,7 @@ export function ProductForm({
                   const val = e.target.value;
                   setSelectedCategoryId(val ? parseInt(val, 10) : null);
                 }}
-                className="w-full h-11 px-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 text-slate-900 dark:text-white font-medium cursor-pointer outline-none focus:border-[var(--admin-brand)] focus:ring-2 focus:ring-[var(--admin-brand)]/20 transition-all shadow-2xs text-xs"
+                className="w-full h-11 px-3.5 rounded-xl border border-admin-card-border bg-admin-card-bg text-admin-text font-medium cursor-pointer outline-none focus:border-admin-brand focus:ring-2 focus:ring-admin-brand/20 transition-all text-xs"
               >
                 <option value="">Sin categoría asignada</option>
                 {categories.map((cat) => (
@@ -522,7 +522,7 @@ export function ProductForm({
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="text-xs font-bold text-admin-secondary">
                   Descripción
                 </label>
                 <span className="text-[10px] text-slate-400 font-mono">
@@ -534,7 +534,7 @@ export function ProductForm({
                 placeholder="Características y especificaciones..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 outline-none focus:border-[var(--admin-brand)] focus:ring-2 focus:ring-[var(--admin-brand)]/20 resize-none transition-all leading-relaxed shadow-2xs"
+                className="w-full p-3 text-xs rounded-xl border border-admin-card-border bg-admin-card-bg text-slate-800 dark:text-slate-200 placeholder:text-slate-400 outline-none focus:border-admin-brand focus:ring-2 focus:ring-admin-brand/20 resize-none transition-all leading-relaxed"
               />
             </div>
           </div>
@@ -544,11 +544,11 @@ export function ProductForm({
       {/* =========================================================================
           FILA 2: PRECIOS Y RENTABILIDAD COMERCIAL
           ========================================================================= */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-4">
+        <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-emerald-600" />
-            <h2 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+            <h2 className="text-base font-semibold text-admin-text tracking-tight">
               Precios & Rentabilidad ({CURRENCY_SYMBOL})
             </h2>
           </div>
@@ -556,7 +556,7 @@ export function ProductForm({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+            <label className="text-xs font-bold text-admin-secondary">
               Precio de Venta al Público <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
@@ -570,7 +570,7 @@ export function ProductForm({
                 placeholder="0.00"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                className="pl-11 h-11 rounded-xl text-base font-black bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white shadow-2xs"
+                className="pl-11 h-11 rounded-xl text-base font-semibold bg-admin-card-bg border border-admin-card-border text-admin-text"
                 required
               />
             </div>
@@ -578,7 +578,7 @@ export function ProductForm({
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <label className="text-xs font-bold text-admin-secondary flex items-center gap-1.5">
                 {isEdit && <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0" />}
                 {isEdit ? "Costo Promedio (CPP)" : "Costo de Adquisición"}{" "}
                 <span className="text-rose-500">*</span>
@@ -597,10 +597,10 @@ export function ProductForm({
                 disabled={isEdit}
                 onChange={(e) => setCost(e.target.value)}
                 className={cn(
-                  "pl-11 h-11 rounded-xl text-base font-bold font-mono border border-slate-200 dark:border-slate-800 shadow-2xs",
+                  "pl-11 h-11 rounded-xl text-base font-bold font-mono border border-admin-card-border",
                   isEdit
-                    ? "bg-slate-100 dark:bg-slate-900/80 text-slate-400 cursor-not-allowed opacity-85"
-                    : "bg-white dark:bg-slate-950/60 text-slate-900 dark:text-white"
+                    ? "bg-admin-raised text-slate-400 cursor-not-allowed opacity-85"
+                    : "bg-admin-card-bg text-admin-text"
                 )}
                 required
               />
@@ -611,12 +611,12 @@ export function ProductForm({
         {/* WIDGET FINANCIERO EN VIVO */}
         <div
           className={cn(
-            "p-4 rounded-2xl border transition-all duration-200 flex flex-col gap-3",
+            "p-4 rounded-xl border transition-all duration-200 flex flex-col gap-3",
             priceNum === 0 && costNum === 0
-              ? "bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800"
+              ? "bg-admin-raised border-admin-card-border"
               : isNegativeProfit
               ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800"
-              : "bg-sky-50/60 dark:bg-sky-950/30 border-sky-200/80 dark:border-sky-800/60"
+              : "bg-admin-brand-subtle border-admin-brand-light"
           )}
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -635,7 +635,7 @@ export function ProductForm({
                     : "Rendimiento Estimado por Unidad"}
                 </span>
                 {isNegativeProfit && (
-                  <Badge className="bg-rose-600 text-white border-0 text-[10px] font-black uppercase">
+                  <Badge className="bg-rose-600 text-white border-0 text-[10px] font-semibold uppercase">
                     Pérdida
                   </Badge>
                 )}
@@ -649,7 +649,7 @@ export function ProductForm({
                 </span>
                 <span
                   className={cn(
-                    "text-base font-black font-mono transition-colors",
+                    "text-base font-semibold font-mono transition-colors",
                     isNegativeProfit
                       ? "text-rose-600 dark:text-rose-400"
                       : "text-emerald-600 dark:text-emerald-400"
@@ -665,7 +665,7 @@ export function ProductForm({
                   "h-8 w-px hidden sm:block",
                   isNegativeProfit
                     ? "bg-rose-200 dark:bg-rose-800"
-                    : "bg-sky-200 dark:bg-sky-800"
+                    : "bg-admin-brand-light"
                 )}
               />
               <div>
@@ -674,10 +674,10 @@ export function ProductForm({
                 </span>
                 <span
                   className={cn(
-                    "text-base font-black font-mono transition-colors",
+                    "text-base font-semibold font-mono transition-colors",
                     isNegativeProfit
                       ? "text-rose-600 dark:text-rose-400"
-                      : "text-[var(--admin-brand)]"
+                      : "text-admin-brand-text"
                   )}
                 >
                   {marginPercentage}%
@@ -693,10 +693,10 @@ export function ProductForm({
           ========================================================================= */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* INVENTARIO */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <Boxes className="h-4 w-4 text-[var(--admin-brand)]" />
-            <h2 className="text-sm font-black text-slate-900 dark:text-white tracking-tight">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-4">
+          <div className="flex items-center gap-2 border-b border-admin-card-border pb-3">
+            <Boxes className="h-4 w-4 text-admin-brand-text" />
+            <h2 className="text-sm font-semibold text-admin-text tracking-tight">
               Existencias & Proveedor
             </h2>
           </div>
@@ -704,7 +704,7 @@ export function ProductForm({
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <label className="font-bold text-admin-secondary flex items-center gap-1">
                   {isEdit && <Lock className="h-3 w-3 text-slate-400 shrink-0" />}
                   {isEdit ? "Stock en Mano" : "Stock Inicial"}
                 </label>
@@ -715,16 +715,16 @@ export function ProductForm({
                   disabled={isEdit}
                   onChange={(e) => setStock(e.target.value)}
                   className={cn(
-                    "h-11 rounded-xl font-bold font-mono border border-slate-200 dark:border-slate-800 shadow-2xs",
+                    "h-11 rounded-xl font-bold font-mono border border-admin-card-border",
                     isEdit
-                      ? "bg-slate-100 dark:bg-slate-900/80 text-slate-400 cursor-not-allowed opacity-85"
-                      : "bg-white dark:bg-slate-950/60 text-slate-900 dark:text-white"
+                      ? "bg-admin-raised text-slate-400 cursor-not-allowed opacity-85"
+                      : "bg-admin-card-bg text-admin-text"
                   )}
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-300">
+                <label className="font-bold text-admin-secondary">
                   Alerta Stock Bajo
                 </label>
                 <div className="flex items-center gap-2">
@@ -733,16 +733,16 @@ export function ProductForm({
                     min="1"
                     value={minStockAlert}
                     onChange={(e) => setMinStockAlert(e.target.value)}
-                    className="h-11 rounded-xl font-bold font-mono text-amber-600 dark:text-amber-400 bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 shadow-2xs"
+                    className="h-11 rounded-xl font-bold font-mono text-amber-600 dark:text-amber-400 bg-admin-card-bg border border-admin-card-border"
                   />
                   <span className="text-xs font-bold text-slate-400">uds</span>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Truck className="h-3.5 w-3.5 text-[var(--admin-brand)]" />
+            <div className="space-y-1.5 pt-2 border-t border-admin-card-border">
+              <label className="font-bold text-admin-secondary flex items-center gap-1.5">
+                <Truck className="h-3.5 w-3.5 text-admin-brand-text" />
                 Proveedor Habitual
               </label>
               <select
@@ -751,7 +751,7 @@ export function ProductForm({
                   const val = e.target.value;
                   setSelectedSupplierId(val ? parseInt(val, 10) : null);
                 }}
-                className="w-full h-11 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 text-slate-900 dark:text-white font-medium cursor-pointer shadow-2xs text-xs outline-none focus:border-[var(--admin-brand)] focus:ring-2 focus:ring-[var(--admin-brand)]/20"
+                className="w-full h-11 px-3 rounded-xl border border-admin-card-border bg-admin-card-bg text-admin-text font-medium cursor-pointer text-xs outline-none focus:border-admin-brand focus:ring-2 focus:ring-admin-brand/20"
               >
                 <option value="">Sin proveedor asignado</option>
                 {suppliers.map((s) => (
@@ -765,10 +765,10 @@ export function ProductForm({
         </div>
 
         {/* CANALES DE VENTA */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <Store className="h-4 w-4 text-[var(--admin-brand)]" />
-            <h2 className="text-sm font-black text-slate-900 dark:text-white tracking-tight">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-4">
+          <div className="flex items-center gap-2 border-b border-admin-card-border pb-3">
+            <Store className="h-4 w-4 text-admin-brand-text" />
+            <h2 className="text-sm font-semibold text-admin-text tracking-tight">
               Canales & Visibilidad
             </h2>
           </div>
@@ -776,17 +776,17 @@ export function ProductForm({
           <div className="space-y-4 text-xs">
             {/* Estado Operativo */}
             <div className="space-y-2">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+              <span className="text-xs font-bold text-admin-secondary block">
                 Disponibilidad Comercial
               </span>
-              <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 gap-1 select-none">
+              <div className="grid grid-cols-2 p-1 bg-admin-raised rounded-xl border border-admin-card-border gap-1 select-none">
                 <button
                   type="button"
                   onClick={() => setIsActive(true)}
                   className={cn(
                     "py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer",
                     isActive
-                      ? "bg-emerald-600 text-white shadow-xs"
+                      ? "bg-emerald-600 text-white"
                       : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                   )}
                 >
@@ -800,7 +800,7 @@ export function ProductForm({
                   className={cn(
                     "py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer",
                     !isActive
-                      ? "bg-rose-600 text-white shadow-xs"
+                      ? "bg-rose-600 text-white"
                       : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                   )}
                 >
@@ -811,15 +811,15 @@ export function ProductForm({
             </div>
 
             {/* Opciones Web */}
-            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="space-y-2 pt-2 border-t border-admin-card-border">
               <div
                 onClick={() => isActive && setIsVisibleWeb(!isVisibleWeb)}
                 className={cn(
                   "flex items-center justify-between p-3 rounded-xl border transition-all select-none cursor-pointer",
                   !isActive && "opacity-40 pointer-events-none",
                   isVisibleWeb && isActive
-                    ? "bg-slate-50 dark:bg-slate-950/60 border-slate-300 dark:border-slate-700 shadow-2xs"
-                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    ? "bg-admin-raised border-admin-card-border"
+                    : "bg-admin-card-bg border-admin-card-border"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -827,14 +827,14 @@ export function ProductForm({
                     className={cn(
                       "h-8 w-8 rounded-lg flex items-center justify-center transition-colors",
                       isVisibleWeb && isActive
-                        ? "bg-sky-50 dark:bg-sky-950/80 text-[var(--admin-brand)]"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                        ? "bg-admin-brand-subtle text-admin-brand-text"
+                        : "bg-admin-raised text-slate-400"
                     )}
                   >
                     <Globe className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                    <p className="text-xs font-bold text-admin-text leading-tight">
                       Visible en Tienda Online
                     </p>
                   </div>
@@ -844,13 +844,13 @@ export function ProductForm({
                   className={cn(
                     "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out p-0.5",
                     isVisibleWeb && isActive
-                      ? "bg-[var(--admin-brand)]"
+                      ? "bg-admin-brand"
                       : "bg-slate-200 dark:bg-slate-700"
                   )}
                 >
                   <span
                     className={cn(
-                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out",
+                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out",
                       isVisibleWeb && isActive ? "translate-x-4" : "translate-x-0"
                     )}
                   />
@@ -863,8 +863,8 @@ export function ProductForm({
                   "flex items-center justify-between p-3 rounded-xl border transition-all select-none cursor-pointer",
                   (!isActive || !isVisibleWeb) && "opacity-40 pointer-events-none",
                   isFeatured && isActive && isVisibleWeb
-                    ? "bg-slate-50 dark:bg-slate-950/60 border-slate-300 dark:border-slate-700 shadow-2xs"
-                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    ? "bg-admin-raised border-admin-card-border"
+                    : "bg-admin-card-bg border-admin-card-border"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -872,14 +872,14 @@ export function ProductForm({
                     className={cn(
                       "h-8 w-8 rounded-lg flex items-center justify-center transition-colors",
                       isFeatured && isActive && isVisibleWeb
-                        ? "bg-sky-50 dark:bg-sky-950/80 text-[var(--admin-brand)]"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                        ? "bg-admin-brand-subtle text-admin-brand-text"
+                        : "bg-admin-raised text-slate-400"
                     )}
                   >
                     <Sparkles className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                    <p className="text-xs font-bold text-admin-text leading-tight">
                       Destacado en Portada
                     </p>
                   </div>
@@ -889,13 +889,13 @@ export function ProductForm({
                   className={cn(
                     "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out p-0.5",
                     isFeatured && isActive && isVisibleWeb
-                      ? "bg-[var(--admin-brand)]"
+                      ? "bg-admin-brand"
                       : "bg-slate-200 dark:bg-slate-700"
                   )}
                 >
                   <span
                     className={cn(
-                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out",
+                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out",
                       isFeatured && isActive && isVisibleWeb ? "translate-x-4" : "translate-x-0"
                     )}
                   />
@@ -907,14 +907,14 @@ export function ProductForm({
       </div>
 
       {/* BARRA INFERIOR */}
-      <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200/80 dark:border-slate-800">
+      <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-admin-card-border">
         <Link href="/admin/inventario">
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={isSubmitting}
-            className="h-10 px-5 rounded-xl font-bold text-xs cursor-pointer border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-2xs"
+            className="h-10 px-5 rounded-xl font-bold text-xs cursor-pointer border-admin-card-border bg-admin-card-bg text-admin-secondary hover:bg-admin-raised"
           >
             Descartar
           </Button>
@@ -923,7 +923,7 @@ export function ProductForm({
           type="submit"
           size="sm"
           disabled={isSubmitting}
-          className="h-10 px-7 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white font-black text-xs shadow-md shadow-[var(--admin-brand)]/25 transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+          className="h-10 px-7 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-white font-semibold text-xs transition-all active:scale-95 cursor-pointer disabled:opacity-60"
         >
           {isSubmitting ? (
             <>

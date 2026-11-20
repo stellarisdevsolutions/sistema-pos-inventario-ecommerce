@@ -1,8 +1,10 @@
 "use server";
 
+import { adminActionError } from "@/lib/admin-action-error";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { and, gte, lte, eq, desc, sql } from "drizzle-orm";
+import { and, gte, lt, eq, desc, sql } from "drizzle-orm";
+import { businessDate, businessDayStart, addBusinessDays } from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
 
 export interface ReporteZShiftItem {
@@ -115,20 +117,17 @@ export async function getReporteZAction(
     await requireRole(["admin", "manager"]);
 
     const now = new Date();
-    // Default YYYY-MM-DD
-    const targetDateStr = dateStr || now.toISOString().split("T")[0];
-
-    // Rango del día completo en UTC/Local
-    const startOfDay = new Date(`${targetDateStr}T00:00:00.000Z`);
-    const endOfDay = new Date(`${targetDateStr}T23:59:59.999Z`);
-    const todayStr = now.toISOString().split("T")[0];
+    const todayStr = businessDate(now);
+    const targetDateStr = dateStr || todayStr;
+    const startOfDay = businessDayStart(targetDateStr);
+    const endOfDay = addBusinessDays(startOfDay, 1);
     const isToday = targetDateStr === todayStr;
 
     // 1. Obtener todas las ventas del día
     const daySales = await db.query.sales.findMany({
       where: and(
         gte(schema.sales.createdAt, startOfDay),
-        lte(schema.sales.createdAt, endOfDay)
+        lt(schema.sales.createdAt, endOfDay)
       ),
       with: {
         items: {
@@ -150,7 +149,7 @@ export async function getReporteZAction(
     const dayShifts = await db.query.cashShifts.findMany({
       where: and(
         gte(schema.cashShifts.openedAt, startOfDay),
-        lte(schema.cashShifts.openedAt, endOfDay)
+        lt(schema.cashShifts.openedAt, endOfDay)
       ),
       with: {
         cashRegister: true,
@@ -345,7 +344,7 @@ export async function getReporteZAction(
       data: {
         reportDate: targetDateStr,
         isToday,
-        generatedAt: now.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        generatedAt: now.toLocaleTimeString("es-BO", { timeZone: "America/La_Paz", hour: "2-digit", minute: "2-digit", second: "2-digit" }),
         summary: {
           grossSales,
           refunds,
@@ -384,11 +383,10 @@ export async function getReporteZAction(
         sales: formattedSales,
       },
     };
-  } catch (error: any) {
-    console.error("Error al generar Reporte Z:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Error al calcular el Reporte Z diario.",
+      error: adminActionError(error, "Error al calcular el Reporte Z diario."),
     };
   }
 }

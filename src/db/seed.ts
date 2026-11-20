@@ -1,3 +1,4 @@
+import { hashPassword } from "@/lib/auth/password";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 dotenv.config();
@@ -18,6 +19,11 @@ async function runSeed() {
     return;
   }
 
+  const seedPassword = process.env.SEED_PASSWORD;
+  if (!seedPassword || seedPassword.trim().length < 16 || seedPassword.length > 100) {
+    throw new Error("Configura SEED_PASSWORD con 16 a 100 caracteres para la base de desarrollo.");
+  }
+
   console.log("🌱 Conectando a Neon DB para sembrar datos iniciales...");
   const sql = neon(connectionString);
   const db = drizzle(sql, { schema });
@@ -31,28 +37,28 @@ async function runSeed() {
         {
           name: "Administrador General",
           email: "admin@aurastudio.com",
-          passwordHash: "$2b$10$hashedpasswordforadminaurastudio",
+          passwordHash: hashPassword(seedPassword.trim()),
           role: "admin",
           phone: "+54 11 9999-0001",
         },
         {
           name: "Martín Supervisor",
           email: "supervisor@aurastudio.com",
-          passwordHash: "$2b$10$hashedpasswordforsupervisor",
+          passwordHash: hashPassword(seedPassword.trim()),
           role: "manager",
           phone: "+54 11 9999-0002",
         },
         {
           name: "Sofía Cajera",
           email: "cajera@aurastudio.com",
-          passwordHash: "$2b$10$hashedpasswordforcashier",
+          passwordHash: hashPassword(seedPassword.trim()),
           role: "cashier",
           phone: "+54 11 9999-0003",
         },
         {
           name: "Lucas Almacenero",
           email: "almacen@aurastudio.com",
-          passwordHash: "$2b$10$hashedpasswordforwarehouse",
+          passwordHash: hashPassword(seedPassword.trim()),
           role: "warehouse",
           phone: "+54 11 9999-0004",
         },
@@ -410,8 +416,11 @@ async function runSeed() {
 
     console.log("\n✅ ¡Seeding completado exitosamente con 15 tablas pobladas y trazabilidad total!\n");
   } catch (error) {
-    console.error("❌ Error al sembrar datos:", error);
+    throw new Error("Error al sembrar datos.", { cause: error });
   }
 }
 
-runSeed();
+runSeed().catch(() => {
+  console.error("La carga de datos de desarrollo no se completó.");
+  process.exitCode = 1;
+});

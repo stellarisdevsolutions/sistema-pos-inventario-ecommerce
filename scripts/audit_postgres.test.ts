@@ -1,0 +1,158 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { test, type TestContext } from "node:test";
+import { PGlite } from "@electric-sql/pglite";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { cancelPurchaseQuery, createPurchaseQuery } from "@/db/operations/purchases";
+import { cancelSaleQuery, createSaleQuery, refundSaleQuery } from "@/db/operations/sales";
+import { saleFormSchema } from "@/lib/validations/sale";
+import { purchaseFormSchema } from "@/lib/validations/purchase";
+import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
+
+async function createDatabase(context: TestContext) {
+  const db = new PGlite();
+  context.after(() => db.close());
+
+  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql"]) {
+    await db.exec(await readFile(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
+  }
+  await db.exec(`
+    INSERT INTO users (name, email, password_hash)
+    VALUES ('Fixture 1', 'one@example.invalid', 'fixture'), ('Fixture 2', 'two@example.invalid', 'fixture');
+  `);
+  return db;
+}
+
+test("PostgreSQL impide dos turnos abiertos por caja o por operador", async (t) => {
+  const db = await createDatabase(t);
+  await db.exec(`
+    INSERT INTO cash_registers (name, code) VALUES ('Terminal 1', 'FIX-1'), ('Terminal 2', 'FIX-2');
+    INSERT INTO cash_shifts (shift_number, cash_register_id, user_id) VALUES ('A', 1, 1);
+  `);
+
+  await assert.rejects(
+    db.exec("INSERT INTO cash_shifts (shift_number, cash_register_id, user_id) VALUES ('B', 1, 2)"),
+    /cash_shifts_open_register_unique/
+  );
+  await assert.rejects(
+    db.exec("INSERT INTO cash_shifts (shift_number, cash_register_id, user_id) VALUES ('C', 2, 1)"),
+    /cash_shifts_open_operator_unique/
+  );
+  await db.exec("UPDATE cash_shifts SET status = 'closed' WHERE shift_number = 'A'");
+  await db.exec("INSERT INTO cash_shifts (shift_number, cash_register_id, user_id) VALUES ('D', 1, 1)");
+});
+
+test("la baja aplica acta, detalle, stock y Kardex juntos o revierte todos", async (t) => {
+  const db = await createDatabase(t);
+  await db.exec("INSERT INTO products (name, slug, stock, cost_price, price) VALUES ('Fixture', 'fixture', 3, 10, 20)");
+
+  const dialect = new PgDialect();
+  function executeAdjustment(userId: number) {
+    const query = dialect.sqlToQuery(inventoryAdjustmentQuery({
+      productId: 1,
+      quantity: 2,
+      userId,
+      authorizedByUserId: null,
+      reason: "damaged",
+      notes: "Fixture",
+      prefix: "BAJA-2026-",
+    }));
+    return db.query<{ newStock: number }>(query.sql, query.params);
+  }
+
+  await assert.rejects(executeAdjustment(9999), /foreign key/);
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 3 }]);
+  const result = await executeAdjustment(1);
+  assert.equal(result.rows[0]?.newStock, 1);
+  assert.equal((await executeAdjustment(1)).rows.length, 0);
+  assert.deepEqual((await db.query("SELECT quantity, previous_stock, new_stock FROM inventory_movements")).rows, [
+    { quantity: -2, previous_stock: 3, new_stock: 1 },
+  ]);
+  assert.deepEqual((await db.query("SELECT quantity FROM inventory_adjustment_items")).rows, [{ quantity: 2 }]);
+  assert.equal((await db.query("SELECT id FROM inventory_adjustments")).rows.length, 1);
+});
+
+test("recibir y anular compras mantiene stock y Kardex consistentes", async (t) => {
+  const db = await createDatabase(t);
+  await db.exec(`
+    INSERT INTO suppliers (name) VALUES ('Proveedor fixture');
+    INSERT INTO products (name, slug, stock, cost_price, price) VALUES ('Fixture', 'fixture', 3, 10, 20);
+  `);
+
+  const dialect = new PgDialect();
+  const create = (userId: number) => {
+    const query = dialect.sqlToQuery(createPurchaseQuery(purchaseFormSchema.parse({
+      supplierId: 1,
+      items: [{ productId: 1, quantity: 2, unitCost: 20 }],
+    }), userId, "COM-2026-"));
+    return db.query<{ id: number }>(query.sql, query.params);
+  };
+  await assert.rejects(create(9999), /foreign key/);
+  assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 3 }]);
+
+  const created = await create(1);
+  const { id } = created.rows[0];
+  assert.deepEqual((await db.query("SELECT stock, cost_price FROM products")).rows, [{ stock: 5, cost_price: "14.00" }]);
+
+  const query = dialect.sqlToQuery(cancelPurchaseQuery(id, 1, "Fixture cancelado"));
+  await db.exec("UPDATE products SET stock = 1");
+  assert.equal((await db.query(query.sql, query.params)).rows.length, 0);
+  assert.deepEqual((await db.query("SELECT status FROM purchases")).rows, [{ status: "received" }]);
+
+  await db.exec("UPDATE products SET stock = 5");
+  assert.equal((await db.query(query.sql, query.params)).rows.length, 1);
+  assert.equal((await db.query(query.sql, query.params)).rows.length, 0);
+  assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 3 }]);
+  assert.deepEqual((await db.query("SELECT quantity FROM inventory_movements ORDER BY id")).rows, [
+    { quantity: 2 }, { quantity: -2 },
+  ]);
+});
+
+test("cobrar una venta aplica ticket, stock, Kardex y caja en la misma operación", async (t) => {
+  const db = await createDatabase(t);
+  await db.exec(`
+    INSERT INTO cash_registers (name, code) VALUES ('Terminal fixture', 'FIX');
+    INSERT INTO cash_shifts (shift_number, cash_register_id, user_id, initial_cash, expected_cash)
+      VALUES ('A', 1, 1, 50, 50);
+    INSERT INTO products (name, slug, stock, cost_price, price) VALUES ('Fixture', 'fixture', 3, 10, 20);
+  `);
+  const dialect = new PgDialect();
+  const execute = (operatorId: number, customerId: number | null = null) => {
+    const query = dialect.sqlToQuery(createSaleQuery({
+      sale: saleFormSchema.parse({ customerId, items: [{ productId: 1, quantity: 2, unitPrice: 20 }] }),
+      operatorId, shiftId: 1, prefix: "VTA-2026-", subtotal: 40, discount: 0, total: 40,
+      cashGiven: 50, changeGiven: 10, notes: null,
+    }));
+    return db.query<{ quantity: number; saleId: number }>(query.sql, query.params);
+  };
+  assert.equal((await execute(2)).rows.length, 0);
+  await assert.rejects(execute(1, 9999), /foreign key/);
+  assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 3 }]);
+  assert.deepEqual((await db.query("SELECT expected_cash FROM cash_shifts")).rows, [{ expected_cash: "50.00" }]);
+
+  assert.equal((await execute(1)).rows[0]?.quantity, 2);
+  assert.equal((await execute(1)).rows.length, 0);
+  assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 1 }]);
+  assert.deepEqual((await db.query("SELECT expected_cash FROM cash_shifts")).rows, [{ expected_cash: "90.00" }]);
+  assert.deepEqual((await db.query("SELECT quantity FROM inventory_movements")).rows, [{ quantity: 2 }]);
+  const [sale] = (await db.query<{ id: number }>("SELECT id FROM sales")).rows;
+  const [item] = (await db.query<{ id: number }>("SELECT id FROM sale_items")).rows;
+  const refund = dialect.sqlToQuery(refundSaleQuery({
+    saleId: sale.id, operatorId: 1, supervisorId: 2, cashShiftId: 1,
+    amount: 20, note: "Fixture devolución", items: [{ id: item.id, returnedQuantity: 0, quantity: 1 }],
+  }));
+  assert.equal((await db.query(refund.sql, refund.params)).rows.length, 1);
+  assert.equal((await db.query(refund.sql, refund.params)).rows.length, 0);
+  assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 2 }]);
+  assert.deepEqual((await db.query("SELECT expected_cash FROM cash_shifts")).rows, [{ expected_cash: "70.00" }]);
+
+  const cancelRefunded = dialect.sqlToQuery(cancelSaleQuery(sale.id, 2, "Fixture anulación"));
+  assert.equal((await db.query(cancelRefunded.sql, cancelRefunded.params)).rows.length, 0);
+
+  const another = await execute(1);
+  const cancel = dialect.sqlToQuery(cancelSaleQuery(another.rows[0].saleId, 2, "Fixture anulación"));
+  assert.equal((await db.query(cancel.sql, cancel.params)).rows.length, 1);
+  assert.equal((await db.query(cancel.sql, cancel.params)).rows.length, 0);
+  assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 2 }]);
+  assert.deepEqual((await db.query("SELECT expected_cash FROM cash_shifts")).rows, [{ expected_cash: "70.00" }]);
+});

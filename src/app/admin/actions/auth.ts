@@ -3,8 +3,9 @@
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { createSession, destroySession, getCurrentUser, type SessionUser, type UserRole } from "@/lib/auth/session";
-import { verifyPassword, hashPassword } from "@/lib/auth/password";
+import { createSession, destroySession, getCurrentUser, type SessionUser } from "@/lib/auth/session";
+import { verifyDemoLogin } from "@/lib/auth/demo-login";
+import { verifyPassword } from "@/lib/auth/password";
 import { revalidatePath } from "next/cache";
 
 export interface LoginResult {
@@ -19,6 +20,10 @@ export interface LoginResult {
  */
 export async function loginAction(email: string, password: string): Promise<LoginResult> {
   try {
+    if (typeof email !== "string" || email.length > 254 ||
+        typeof password !== "string" || password.length > 100) {
+      return { success: false, error: "Credenciales inválidas." };
+    }
     const cleanEmail = email.toLowerCase().trim();
     const cleanPassword = password.trim();
 
@@ -31,34 +36,11 @@ export async function loginAction(email: string, password: string): Promise<Logi
       where: eq(schema.users.email, cleanEmail),
     });
 
-    if (!user) {
-      return { success: false, error: "Credenciales inválidas. Verifica tu correo." };
-    }
-
-    if (!user.isActive) {
-      return {
-        success: false,
-        error: "Tu cuenta de usuario se encuentra suspendida o inactiva. Contacta al Administrador.",
-      };
-    }
-
-    // 2. Verificar contraseña
-    const isPasswordValid = verifyPassword(cleanPassword, user.passwordHash);
-    if (!isPasswordValid) {
-      return { success: false, error: "Contraseña incorrecta." };
-    }
-
-    // 3. Si la contraseña almacenada era formato legacy, actualizar a PBKDF2 de inmediato
-    if (!user.passwordHash.startsWith("pbkdf2:")) {
-      try {
-        const secureHash = hashPassword(cleanPassword);
-        await db
-          .update(schema.users)
-          .set({ passwordHash: secureHash })
-          .where(eq(schema.users.id, user.id));
-      } catch (e) {
-        console.error("Error al migrar hash de contraseña:", e);
-      }
+    if (!user?.isActive || (
+      !verifyPassword(cleanPassword, user.passwordHash) &&
+      !verifyDemoLogin(user.email, cleanPassword, user.passwordHash)
+    )) {
+      return { success: false, error: "Credenciales inválidas." };
     }
 
     // 4. Crear sesión
@@ -66,8 +48,7 @@ export async function loginAction(email: string, password: string): Promise<Logi
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role as UserRole,
-      pin: user.pin || null,
+      role: user.role,
       phone: user.phone || null,
     };
 
@@ -90,11 +71,11 @@ export async function loginAction(email: string, password: string): Promise<Logi
       user: sessionUser,
       redirectTo,
     };
-  } catch (error: any) {
-    console.error("Error en loginAction:", error);
+  } catch (error) {
+    console.error("Error en loginAction:", error instanceof Error ? error.name : "Unknown error");
     return {
       success: false,
-      error: error.message || "Ocurrió un error inesperado al iniciar sesión.",
+      error: "Ocurrió un error inesperado al iniciar sesión.",
     };
   }
 }
@@ -111,7 +92,7 @@ export async function logoutAction(): Promise<{ success: boolean }> {
     return { success: true };
   } catch (error) {
     console.error("Error al cerrar sesión:", error);
-    return { success: true };
+    return { success: false };
   }
 }
 

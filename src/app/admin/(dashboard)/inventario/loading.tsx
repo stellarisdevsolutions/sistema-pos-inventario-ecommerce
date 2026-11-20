@@ -10,7 +10,7 @@ export default function InventarioLoading() {
           <Skeleton className="h-4 w-96 max-w-full rounded-lg" />
         </div>
         <div className="flex items-center gap-2.5">
-          <Skeleton className="h-10 w-36 rounded-2xl" />
+          <Skeleton className="h-10 w-36 rounded-xl" />
         </div>
       </div>
 
@@ -19,7 +19,7 @@ export default function InventarioLoading() {
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between"
+            className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <Skeleton className="h-4 w-32 rounded-md" />
@@ -34,16 +34,16 @@ export default function InventarioLoading() {
       </section>
 
       {/* 3. Selector de Pestañas (Catálogo, Kárdex, Mermas) */}
-      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-200/60 dark:bg-slate-800/60 w-fit">
+      <div className="flex items-center gap-2 p-1.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/60 w-fit">
         <Skeleton className="h-9 w-44 rounded-xl" />
         <Skeleton className="h-9 w-40 rounded-xl" />
         <Skeleton className="h-9 w-44 rounded-xl" />
       </div>
 
       {/* 4. Tabla de Inventario / Kárdex */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
         {/* Barra superior de búsqueda y filtros */}
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="p-4 border-b border-admin-card-border flex flex-col sm:flex-row gap-3 items-center justify-between">
           <Skeleton className="h-10 w-full sm:w-80 rounded-xl" />
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Skeleton className="h-9 w-20 rounded-xl" />
@@ -57,7 +57,7 @@ export default function InventarioLoading() {
           {[1, 2, 3, 4, 5, 6].map((row) => (
             <div
               key={row}
-              className="p-3 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4"
+              className="p-3 rounded-xl border border-admin-card-border flex items-center justify-between gap-4"
             >
               <div className="flex items-center gap-3">
                 <Skeleton className="h-11 w-11 rounded-xl shrink-0" />

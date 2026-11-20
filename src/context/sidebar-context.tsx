@@ -12,8 +12,7 @@ interface SidebarContextType {
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  // En modo isla/dock Quixotic, el valor por defecto estable es colapsado (true)
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
   // Leer preferencia de localStorage solo tras montar en cliente para evitar mismatch de hidratación
@@ -49,7 +48,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   return (
     <SidebarContext.Provider
       value={{
-        isCollapsed: isMounted ? isCollapsed : true,
+        isCollapsed: isMounted ? isCollapsed : false,
         isMounted,
         toggleSidebar,
         setCollapsed,

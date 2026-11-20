@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import { CartProvider } from "@/context/cart-context";
 import "./globals.css";
+import "./admin-theme.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

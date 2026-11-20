@@ -49,13 +49,14 @@ export function AuthProvider({
 
   const logout = async () => {
     try {
-      await logoutAction();
+      const result = await logoutAction();
+      if (!result.success) throw new Error("No se pudo cerrar la sesión.");
       setUser(null);
       toast.success("Has cerrado sesión exitosamente.");
       router.push("/portal");
       router.refresh();
     } catch {
-      router.push("/portal");
+      toast.error("No se pudo cerrar la sesión. Inténtalo de nuevo.");
     }
   };
 

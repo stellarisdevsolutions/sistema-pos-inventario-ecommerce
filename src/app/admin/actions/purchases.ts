@@ -1,9 +1,12 @@
 "use server";
 
+import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { cancelPurchaseQuery, createPurchaseQuery } from "@/db/operations/purchases";
+import { businessDate } from "@/lib/business-date";
 import * as schema from "@/db/schema";
-import { eq, desc, count } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { purchaseFormSchema, type PurchaseFormInput } from "@/lib/validations/purchase";
 import { requireRole } from "@/lib/auth/session";
 
@@ -158,8 +161,7 @@ export async function getPurchasesAction(): Promise<{
         totalSuppliersCount: activeSupplierIds.size,
       },
     };
-  } catch (error: any) {
-    console.error("Error al obtener compras:", error);
+  } catch (error) {
     return {
       success: false,
       data: [],
@@ -169,7 +171,7 @@ export async function getPurchasesAction(): Promise<{
         monthlyUnitsReceived: 0,
         totalSuppliersCount: 0,
       },
-      error: error.message || "Error al leer compras del sistema.",
+      error: adminActionError(error, "Error al leer compras del sistema."),
     };
   }
 }
@@ -212,7 +214,7 @@ export async function getProductsForPurchaseAction() {
       })),
     };
   } catch (error: any) {
-    return { success: false, data: [], error: error.message };
+    return { success: false, data: [], error: adminActionError(error, "No se pudo completar la operación.") };
   }
 }
 
@@ -237,7 +239,7 @@ export async function getSuppliersForPurchaseAction() {
 
     return { success: true, data: list };
   } catch (error: any) {
-    return { success: false, data: [], error: error.message };
+    return { success: false, data: [], error: adminActionError(error, "No se pudo completar la operación.") };
   }
 }
 
@@ -254,91 +256,13 @@ export async function createPurchaseAction(input: PurchaseFormInput): Promise<{
 
     const parsed = purchaseFormSchema.parse(input);
 
-    // 1. Generar número correlativo de compra
-    const countResult = await db.select({ total: count() }).from(schema.purchases);
-    const nextNumber = (countResult[0]?.total || 0) + 1;
-    const year = new Date().getFullYear();
-    const purchaseNumber = `COM-${year}-${String(nextNumber).padStart(4, "0")}`;
-
-    // 2. Calcular montos
-    const subtotal = parsed.items.reduce(
-      (acc, it) => acc + it.quantity * it.unitCost,
-      0
-    );
-    const taxAmount = 0;
-    const totalAmount = subtotal + taxAmount;
-
-    // 3. Insertar orden de compra
-    const [newPurchase] = await db
-      .insert(schema.purchases)
-      .values({
-        purchaseNumber,
-        invoiceNumber: parsed.invoiceNumber || null,
-        supplierId: parsed.supplierId,
-        userId: currentUser.id,
-        subtotal: subtotal.toFixed(2),
-        taxAmount: taxAmount.toFixed(2),
-        totalAmount: totalAmount.toFixed(2),
-        status: parsed.status,
-        paymentStatus: parsed.paymentStatus,
-        paymentMethod: parsed.paymentMethod,
-        notes: parsed.notes || null,
-      })
-      .returning();
-
-    // 4. Insertar cada renglón de compra
-    for (const item of parsed.items) {
-      const itemSubtotal = item.quantity * item.unitCost;
-      await db.insert(schema.purchaseItems).values({
-        purchaseId: newPurchase.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        unitCost: item.unitCost.toFixed(2),
-        subtotal: itemSubtotal.toFixed(2),
-      });
-
-      // 5. Si la compra es recibida, sumamos existencias, recalculamos CPP e insertamos en Kardex
-      if (parsed.status === "received") {
-        const prod = await db.query.products.findFirst({
-          where: eq(schema.products.id, item.productId),
-        });
-
-        if (prod) {
-          const prevStock = prod.stock || 0;
-          const prevCost = parseFloat(prod.costPrice) || 0;
-          const newStock = prevStock + item.quantity;
-
-          // Cálculo del Costo Promedio Ponderado (CPP)
-          const newCost =
-            prevStock > 0
-              ? (prevStock * prevCost + item.quantity * item.unitCost) / newStock
-              : item.unitCost;
-
-          // Actualizar producto
-          await db
-            .update(schema.products)
-            .set({
-              stock: newStock,
-              costPrice: newCost.toFixed(2),
-            })
-            .where(eq(schema.products.id, item.productId));
-
-          // Registrar movimiento en el Kardex
-          const invoiceTag = parsed.invoiceNumber ? ` - Factura ${parsed.invoiceNumber}` : "";
-          await db.insert(schema.inventoryMovements).values({
-            productId: item.productId,
-            movementType: "purchase_in",
-            quantity: item.quantity,
-            previousStock: prevStock,
-            newStock: newStock,
-            unitCost: item.unitCost.toFixed(2),
-            referenceType: "purchase",
-            referenceId: newPurchase.id,
-            reason: `Ingreso por compra ${purchaseNumber}${invoiceTag}`,
-            userId: currentUser.id,
-          });
-        }
-      }
+    const { rows: [newPurchase] } = await db.execute(createPurchaseQuery(
+      parsed,
+      currentUser.id,
+      `COM-${businessDate().slice(0, 4)}-`
+    ));
+    if (!newPurchase) {
+      return { success: false, error: "El proveedor o uno de los productos ya no está activo." };
     }
 
     safeRevalidatePath("/admin/compras");
@@ -346,11 +270,10 @@ export async function createPurchaseAction(input: PurchaseFormInput): Promise<{
     safeRevalidatePath("/admin/proveedores");
 
     return { success: true, data: newPurchase };
-  } catch (error: any) {
-    console.error("Error al registrar compra:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Error al procesar y registrar la orden de compra.",
+      error: adminActionError(error, "Error al procesar y registrar la orden de compra."),
     };
   }
 }
@@ -365,69 +288,27 @@ export async function cancelPurchaseAction(
   try {
     const currentUser = await requireRole(["admin", "manager", "warehouse"]);
 
-    const purchase = await db.query.purchases.findFirst({
-      where: eq(schema.purchases.id, purchaseId),
-      with: {
-        items: true,
-      },
-    });
-
-    if (!purchase) {
-      return { success: false, error: "La orden de compra no fue encontrada." };
+    if (!Number.isSafeInteger(purchaseId) || purchaseId <= 0 ||
+        (reason !== undefined && (typeof reason !== "string" || reason.length > 500))) {
+      return { success: false, error: "Revisa el identificador de compra y el motivo." };
     }
 
-    if (purchase.status === "cancelled") {
-      return { success: false, error: "Esta orden de compra ya se encuentra anulada." };
+    const { rows } = await db.execute(cancelPurchaseQuery(
+      purchaseId, currentUser.id, reason?.trim() || "Cancelación de orden"
+    ));
+    if (!rows.length) {
+      return { success: false, error: "La compra no se puede anular o ya no hay stock suficiente para revertirla." };
     }
-
-    // Si ya fue recibida en almacén, revertir stock y registrar salida en Kardex
-    if (purchase.status === "received") {
-      for (const item of purchase.items || []) {
-        const prod = await db.query.products.findFirst({
-          where: eq(schema.products.id, item.productId),
-        });
-
-        if (prod) {
-          const prevStock = prod.stock || 0;
-          const newStock = Math.max(0, prevStock - item.quantity);
-
-          await db
-            .update(schema.products)
-            .set({ stock: newStock })
-            .where(eq(schema.products.id, item.productId));
-
-          await db.insert(schema.inventoryMovements).values({
-            productId: item.productId,
-            movementType: "adjustment_out",
-            quantity: -item.quantity,
-            previousStock: prevStock,
-            newStock: newStock,
-            unitCost: item.unitCost,
-            referenceType: "purchase",
-            referenceId: purchase.id,
-            reason: `Anulacion de compra ${purchase.purchaseNumber}: ${reason || "Cancelacion de orden"}`,
-            userId: currentUser.id,
-          });
-        }
-      }
-    }
-
-    // Actualizar estado de la compra a cancelled
-    await db
-      .update(schema.purchases)
-      .set({ status: "cancelled" })
-      .where(eq(schema.purchases.id, purchaseId));
 
     safeRevalidatePath("/admin/compras");
     safeRevalidatePath("/admin/inventario");
     safeRevalidatePath("/admin/proveedores");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("Error al anular compra:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Error al anular la orden de compra.",
+      error: adminActionError(error, "Error al anular la orden de compra."),
     };
   }
 }

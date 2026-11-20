@@ -1,5 +1,7 @@
 "use client";
 
+import { ProductThumbnail } from "@/components/admin/product-thumbnail";
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -85,11 +87,11 @@ function PaginationBar({
   const pages = getPaginationItems(currentPage, totalPages);
 
   return (
-    <div className="p-3.5 px-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-900/50">
+    <div className="p-3.5 px-4 border-t border-admin-card-border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-admin-muted bg-admin-raised">
       <div className="font-medium">
-        Mostrando <span className="font-bold text-slate-900 dark:text-white">{from}</span> a{" "}
-        <span className="font-bold text-slate-900 dark:text-white">{to}</span> de{" "}
-        <span className="font-bold text-slate-900 dark:text-white">{totalItems}</span> {itemName}
+        Mostrando <span className="font-bold text-admin-text">{from}</span> a{" "}
+        <span className="font-bold text-admin-text">{to}</span> de{" "}
+        <span className="font-bold text-admin-text">{totalItems}</span> {itemName}
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -98,7 +100,7 @@ function PaginationBar({
           disabled={currentPage <= 1}
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
           title="Página anterior"
-          className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+          className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-admin-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -117,10 +119,10 @@ function PaginationBar({
               type="button"
               onClick={() => onPageChange(item)}
               className={cn(
-                "h-8 w-8 rounded-lg text-xs font-bold flex items-center justify-center cursor-pointer transition-all shadow-2xs",
+                "h-8 w-8 rounded-lg text-xs font-bold flex items-center justify-center cursor-pointer transition-all",
                 currentPage === item
-                  ? "bg-indigo-600 text-white border border-indigo-600 shadow-sm shadow-indigo-600/30 scale-105"
-                  : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  ? "bg-admin-brand text-white border border-admin-brand shadow-indigo-600/30 scale-105"
+                  : "border border-admin-card-border bg-admin-card-bg text-admin-secondary hover:bg-admin-raised"
               )}
             >
               {item}
@@ -133,7 +135,7 @@ function PaginationBar({
           disabled={currentPage >= totalPages}
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
           title="Página siguiente"
-          className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+          className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-admin-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -255,16 +257,12 @@ export default function ComprasPage() {
       {/* =========================================================================
           1. HEADER CON TITULO, METRICAS Y ACCIONES
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Compras & Entradas de Stock
-            </h1>
+            <h1 className="admin-page-title">Compras</h1>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Control de facturas de proveedores, recepción de existencias y Costo Promedio Ponderado.
-          </p>
+          <p className="admin-page-description">Órdenes y entradas de mercadería.</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -273,17 +271,17 @@ export default function ComprasPage() {
             size="sm"
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
-            className="h-10 px-3 rounded-xl border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer shadow-2xs gap-1.5"
+            className="h-10 px-3 rounded-xl border-admin-card-border text-xs text-admin-secondary hover:bg-admin-raised cursor-pointer gap-1.5"
             title="Recargar datos"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-[var(--admin-brand)]")} />
+            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-admin-brand-text")} />
             <span className="hidden sm:inline">Actualizar</span>
           </Button>
 
           <Link href="/admin/compras/nueva">
             <Button
               size="sm"
-              className="h-10 px-4 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-bold gap-2 shadow-md shadow-[var(--admin-brand)]/25 active:scale-95 transition-all cursor-pointer w-full sm:w-auto"
+              className="h-10 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold gap-2 active:scale-95 transition-all cursor-pointer w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 stroke-[2.5]" />
               <span>Registrar Compra</span>
@@ -295,18 +293,18 @@ export default function ComprasPage() {
       {/* =========================================================================
           2. METRIC KPIS CORPORATIVOS (4 TARJETAS)
           ========================================================================= */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="admin-kpi-grid">
         {/* KPI 1: Inversión en Compras (Mes) */}
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+            <span className="text-xs font-semibold text-admin-secondary">
               Inversión del Mes
             </span>
             <div className="h-7 w-7 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400">
               <DollarSign className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight mt-3">
+          <div className="text-2xl lg:text-3xl font-bold text-admin-text tracking-tight mt-3">
             {CURRENCY_SYMBOL}{" "}
             {kpis.monthlyInvestment.toLocaleString("es-BO", {
               minimumFractionDigits: 2,
@@ -319,27 +317,27 @@ export default function ComprasPage() {
         </div>
 
         {/* KPI 2: Facturas Procesadas */}
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+            <span className="text-xs font-semibold text-admin-secondary">
               Facturas del Mes
             </span>
-            <div className="h-7 w-7 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
+            <div className="h-7 w-7 rounded-full bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-center text-admin-brand-text">
               <Receipt className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-2xl lg:text-3xl font-bold text-[var(--admin-brand)] tracking-tight mt-3">
+          <div className="text-2xl lg:text-3xl font-bold text-admin-brand-text tracking-tight mt-3">
             {kpis.monthlyPurchasesCount}
           </div>
-          <span className="text-[11px] text-[var(--admin-brand)] font-semibold mt-1 block">
+          <span className="text-[11px] text-admin-brand-text font-semibold mt-1 block">
             Recepciones en almacén
           </span>
         </div>
 
         {/* KPI 3: Unidades Ingresadas */}
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+            <span className="text-xs font-semibold text-admin-secondary">
               Unidades Ingresadas
             </span>
             <div className="h-7 w-7 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
@@ -356,9 +354,9 @@ export default function ComprasPage() {
         </div>
 
         {/* KPI 4: Proveedores con Compras */}
-        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+            <span className="text-xs font-semibold text-admin-secondary">
               Proveedores Suministradores
             </span>
             <div className="h-7 w-7 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400">
@@ -377,7 +375,7 @@ export default function ComprasPage() {
       {/* =========================================================================
           3. BARRA DE HERRAMIENTAS: BUSCADOR Y FILTROS POR ESTADO
           ========================================================================= */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-4 shadow-xs space-y-3">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-4 space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Buscador */}
           <div className="relative flex-1">
@@ -389,7 +387,7 @@ export default function ComprasPage() {
                 setCurrentPage(1);
               }}
               placeholder="Buscar por orden COM-..., factura, proveedor o producto..."
-              className="pl-9 h-11 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/80 focus:bg-white dark:focus:bg-slate-900 transition-colors"
+              className="pl-9 h-11 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-white dark:focus:bg-slate-900 transition-colors"
             />
             {searchTerm && (
               <button
@@ -406,7 +404,7 @@ export default function ComprasPage() {
           </div>
 
           {/* Filtros Rápidos de Estado */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-semibold shrink-0">
+          <div className="flex items-center gap-1 p-1 bg-admin-raised rounded-xl text-xs font-semibold shrink-0">
             <button
               type="button"
               onClick={() => {
@@ -416,8 +414,8 @@ export default function ComprasPage() {
               className={cn(
                 "px-3 py-1.5 rounded-lg transition-all cursor-pointer",
                 statusFilter === "all"
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  ? "bg-admin-card-bg text-admin-text"
+                  : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
               )}
             >
               Todas ({purchases.length})
@@ -431,8 +429,8 @@ export default function ComprasPage() {
               className={cn(
                 "px-3 py-1.5 rounded-lg transition-all cursor-pointer",
                 statusFilter === "received"
-                  ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-2xs font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  ? "bg-admin-card-bg text-emerald-600 dark:text-emerald-400 font-bold"
+                  : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
               )}
             >
               Recibidas ({purchases.filter((p) => p.status === "received").length})
@@ -446,8 +444,8 @@ export default function ComprasPage() {
               className={cn(
                 "px-3 py-1.5 rounded-lg transition-all cursor-pointer",
                 statusFilter === "cancelled"
-                  ? "bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-2xs font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  ? "bg-admin-card-bg text-rose-600 dark:text-rose-400 font-bold"
+                  : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
               )}
             >
               Anuladas ({purchases.filter((p) => p.status === "cancelled").length})
@@ -455,7 +453,7 @@ export default function ComprasPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400">
+        <div className="flex items-center justify-between pt-2 border-t border-admin-card-border text-xs text-slate-400">
           <span>Mostrando {filteredPurchases.length} de {purchases.length} compras registradas</span>
           <span>Todas las órdenes recibidas incrementan el stock en almacén</span>
         </div>
@@ -464,17 +462,17 @@ export default function ComprasPage() {
       {/* =========================================================================
           4. TABLA PRINCIPAL DE COMPRAS Y RECEPCIONES
           ========================================================================= */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 overflow-hidden shadow-xs">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
         {isLoading ? (
           <div className="py-20 text-center space-y-3">
-            <RefreshCw className="h-7 w-7 text-indigo-600 animate-spin mx-auto" />
+            <RefreshCw className="h-7 w-7 text-admin-brand-text animate-spin mx-auto" />
             <p className="text-xs text-slate-500 font-medium">
               Consultando registro de compras y almacén...
             </p>
           </div>
         ) : filteredPurchases.length === 0 ? (
           <div className="py-20 text-center space-y-3">
-            <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
+            <div className="h-12 w-12 rounded-full bg-admin-raised flex items-center justify-center mx-auto text-slate-400">
               <Truck className="h-6 w-6" />
             </div>
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
@@ -486,7 +484,7 @@ export default function ComprasPage() {
             <Link href="/admin/compras/nueva">
               <Button
                 size="sm"
-                className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold gap-1.5 shadow-sm shadow-indigo-600/20 cursor-pointer"
+                className="h-9 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand text-white text-xs font-bold gap-1.5 shadow-indigo-600/20 cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Registrar Primera Compra</span>
@@ -497,7 +495,7 @@ export default function ComprasPage() {
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <thead className="bg-admin-raised border-b border-admin-card-border text-[11px] font-bold text-admin-muted uppercase tracking-wider">
                   <tr>
                     <th className="py-3.5 px-5">Orden & Fecha</th>
                     <th className="py-3.5 px-4">Factura / Guía</th>
@@ -509,18 +507,18 @@ export default function ComprasPage() {
                     <th className="py-3.5 px-5 text-right">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                <tbody className="divide-y divide-admin-card-border font-medium text-admin-secondary">
                   {paginatedPurchases.map((p) => {
                     return (
                       <tr
                         key={p.id}
                         onClick={() => setSelectedPurchase(p)}
-                        className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer group"
+                        className="hover:bg-admin-raised transition-colors cursor-pointer group"
                       >
                         {/* 1. Orden & Fecha */}
                         <td className="py-4 px-5">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            <span className="font-mono font-bold text-admin-text group-hover:text-admin-brand-text transition-colors">
                               {p.purchaseNumber}
                             </span>
                           </div>
@@ -533,7 +531,7 @@ export default function ComprasPage() {
                         {/* 2. Factura / Guía */}
                         <td className="py-4 px-4">
                           {p.invoiceNumber ? (
-                            <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                            <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-200 bg-admin-raised px-2 py-0.5 rounded-md">
                               {p.invoiceNumber}
                             </span>
                           ) : (
@@ -543,7 +541,7 @@ export default function ComprasPage() {
 
                         {/* 3. Proveedor */}
                         <td className="py-4 px-4">
-                          <div className="font-bold text-slate-900 dark:text-white truncate max-w-[200px]">
+                          <div className="font-bold text-admin-text truncate max-w-[200px]">
                             {p.supplierName}
                           </div>
                           {p.supplierTaxId && (
@@ -555,7 +553,7 @@ export default function ComprasPage() {
 
                         {/* 4. Unidades e Ítems */}
                         <td className="py-4 px-4 text-center">
-                          <span className="font-bold text-slate-900 dark:text-white">
+                          <span className="font-bold text-admin-text">
                             {p.itemsCount}{" "}
                             <span className="text-[10px] font-normal text-slate-400">piezas</span>
                           </span>
@@ -566,7 +564,7 @@ export default function ComprasPage() {
 
                         {/* 5. Total */}
                         <td className="py-4 px-4 text-right">
-                          <div className="font-bold text-slate-900 dark:text-white font-mono text-sm">
+                          <div className="font-bold text-admin-text font-mono text-sm">
                             {CURRENCY_SYMBOL}{" "}
                             {p.totalAmount.toLocaleString("es-BO", {
                               minimumFractionDigits: 2,
@@ -598,7 +596,7 @@ export default function ComprasPage() {
 
                         {/* 7. Medio de Pago */}
                         <td className="py-4 px-4 text-center">
-                          <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 capitalize">
+                          <span className="text-[11px] font-medium text-admin-secondary capitalize">
                             {p.paymentMethod === "transfer"
                               ? "Transferencia"
                               : p.paymentMethod === "cash"
@@ -617,7 +615,7 @@ export default function ComprasPage() {
                               size="sm"
                               onClick={() => setSelectedPurchase(p)}
                               title="Ver Comprobante / Detalle"
-                              className="h-8 w-8 p-0 rounded-lg text-slate-500 hover:text-[var(--admin-brand)] hover:bg-[var(--admin-brand-light)] dark:hover:bg-slate-800 cursor-pointer"
+                              className="h-8 w-8 p-0 rounded-lg text-slate-500 hover:text-admin-brand-text hover:bg-[var(--admin-brand-light)] dark:hover:bg-slate-800 cursor-pointer"
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -667,12 +665,12 @@ export default function ComprasPage() {
           />
 
           {/* Panel Lateral */}
-          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl z-10 flex flex-col h-full overflow-hidden animate-in slide-in-from-right duration-200">
+          <div className="relative w-full max-w-xl bg-admin-card-bg border-l border-admin-card-border z-10 flex flex-col h-full overflow-hidden animate-in slide-in-from-right duration-200">
             {/* Header del Drawer */}
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-900/60">
+            <div className="p-5 border-b border-admin-card-border flex items-center justify-between bg-admin-raised">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-base font-bold text-slate-900 dark:text-white">
+                  <span className="font-mono text-base font-bold text-admin-text">
                     {selectedPurchase.purchaseNumber}
                   </span>
                   <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
@@ -701,7 +699,7 @@ export default function ComprasPage() {
               <button
                 type="button"
                 onClick={() => setSelectedPurchase(null)}
-                className="h-8 w-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                className="h-8 w-8 rounded-lg hover:bg-admin-raised flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -711,56 +709,56 @@ export default function ComprasPage() {
             <div className="p-5 space-y-5 overflow-y-auto flex-1 text-xs">
               {/* Mini Tarjetas de Resumen Financiero */}
               <div className="grid grid-cols-3 gap-2.5">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                <div className="p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                   <span className="text-[10px] text-slate-400 font-medium block">Total Factura</span>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white font-mono mt-0.5 block">
+                  <span className="text-sm font-bold text-admin-text font-mono mt-0.5 block">
                     {CURRENCY_SYMBOL} {selectedPurchase.totalAmount.toFixed(2)}
                   </span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                <div className="p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                   <span className="text-[10px] text-slate-400 font-medium block">Unidades</span>
-                  <span className="text-sm font-bold text-[var(--admin-brand)] font-mono mt-0.5 block">
+                  <span className="text-sm font-bold text-admin-brand-text font-mono mt-0.5 block">
                     {selectedPurchase.itemsCount} piezas
                   </span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                <div className="p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                   <span className="text-[10px] text-slate-400 font-medium block">Medio de Pago</span>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white capitalize mt-0.5 block">
+                  <span className="text-sm font-bold text-admin-text capitalize mt-0.5 block">
                     {selectedPurchase.paymentMethod}
                   </span>
                 </div>
               </div>
 
               {/* Datos del Proveedor y Factura */}
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-2">
+              <div className="p-4 rounded-xl bg-admin-raised border border-admin-card-border space-y-2">
                 <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block mb-1">
                   Datos de Facturación & Proveedor
                 </span>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500">Proveedor:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">
+                  <span className="font-bold text-admin-text">
                     {selectedPurchase.supplierName}
                   </span>
                 </div>
                 {selectedPurchase.supplierTaxId && (
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-500">NIT / RUC:</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300">
+                    <span className="font-mono text-admin-secondary">
                       {selectedPurchase.supplierTaxId}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500">N° Factura / Guía:</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">
+                  <span className="font-mono font-bold text-admin-text">
                     {selectedPurchase.invoiceNumber || "Sin factura formal"}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500">Medio de Pago:</span>
-                  <span className="font-medium text-slate-700 dark:text-slate-300 capitalize">
+                  <span className="font-medium text-admin-secondary capitalize">
                     {selectedPurchase.paymentMethod}
                   </span>
                 </div>
@@ -777,37 +775,37 @@ export default function ComprasPage() {
                   </span>
                 </div>
 
-                <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="border border-admin-card-border rounded-xl overflow-hidden divide-y divide-admin-card-border">
                   {selectedPurchase.items.map((it) => (
                     <div
                       key={it.id}
-                      className="p-3 bg-white dark:bg-slate-900 flex items-center justify-between gap-3"
+                      className="p-3 bg-admin-card-bg flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         {it.productImage ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img
+                          <ProductThumbnail
                             src={it.productImage}
                             alt={it.productName}
-                            className="h-10 w-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
+                            className="h-10 w-10 rounded-lg object-cover border border-admin-card-border shrink-0"
                           />
                         ) : (
-                          <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center text-slate-400 shrink-0">
+                          <div className="h-10 w-10 rounded-lg bg-admin-raised border border-admin-card-border flex items-center justify-center text-slate-400 shrink-0">
                             <Package className="h-5 w-5" />
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-slate-900 dark:text-white truncate">
+                          <p className="font-bold text-admin-text truncate">
                             {it.productName}
                           </p>
                         </div>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <div className="text-xs font-mono font-bold text-slate-900 dark:text-white">
+                        <div className="text-xs font-mono font-bold text-admin-text">
                           {it.quantity} u. x {CURRENCY_SYMBOL} {it.unitCost.toFixed(2)}
                         </div>
-                        <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                        <span className="text-[11px] font-bold text-admin-brand-text font-mono">
                           {CURRENCY_SYMBOL} {it.subtotal.toFixed(2)}
                         </span>
                       </div>
@@ -818,19 +816,19 @@ export default function ComprasPage() {
 
               {/* Observaciones */}
               {selectedPurchase.notes && (
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800 space-y-1">
+                <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     Notas y Observaciones
                   </span>
-                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                  <p className="text-admin-secondary leading-relaxed">
                     {selectedPurchase.notes}
                   </p>
                 </div>
               )}
 
               {/* Nota de Auditoría de Almacén */}
-              <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/70 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200 flex items-start gap-2.5">
-                <Info className="h-4 w-4 shrink-0 mt-0.5 text-indigo-600 dark:text-indigo-400" />
+              <div className="p-3 rounded-xl bg-admin-brand-subtle border border-admin-brand-light text-admin-brand-text flex items-start gap-2.5">
+                <Info className="h-4 w-4 shrink-0 mt-0.5 text-admin-brand-text" />
                 <div className="text-[11px] leading-relaxed">
                   Esta orden incrementó el stock disponible en almacén y recalculó el Costo Promedio Ponderado (CPP) en el Kardex.
                 </div>
@@ -838,12 +836,12 @@ export default function ComprasPage() {
             </div>
 
             {/* Footer del Drawer */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 flex items-center justify-between">
+            <div className="p-4 border-t border-admin-card-border bg-admin-raised flex items-center justify-between">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setSelectedPurchase(null)}
-                className="h-9 px-4 rounded-xl border-slate-200 dark:border-slate-700 text-xs font-semibold cursor-pointer"
+                className="h-9 px-4 rounded-xl border-admin-card-border text-xs font-semibold cursor-pointer"
               >
                 Cerrar Ficha
               </Button>
@@ -873,13 +871,13 @@ export default function ComprasPage() {
         open={!!purchaseToCancel}
         onOpenChange={(open) => !open && setPurchaseToCancel(null)}
       >
-        <DialogContent className="sm:max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xl">
-          <DialogHeader className="pb-2 border-b border-slate-100 dark:border-slate-800">
-            <DialogTitle className="text-base font-black text-rose-600 flex items-center gap-2">
+        <DialogContent className="sm:max-w-md rounded-xl bg-admin-card-bg border border-admin-card-border p-6">
+          <DialogHeader className="pb-2 border-b border-admin-card-border">
+            <DialogTitle className="text-base font-semibold text-rose-600 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
               <span>Anular Orden de Compra</span>
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+            <DialogDescription className="text-xs text-admin-muted">
               Esta acción revertirá las existencias ingresadas al almacén y registrará un movimiento de salida en el Kardex.
             </DialogDescription>
           </DialogHeader>
@@ -899,26 +897,26 @@ export default function ComprasPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-300">
+                <label className="font-semibold text-admin-secondary">
                   Motivo de la anulación (opcional):
                 </label>
                 <Input
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
                   placeholder="Ej. Factura duplicada, error en precios, devolución..."
-                  className="h-9 text-xs rounded-lg border-slate-200 dark:border-slate-700"
+                  className="h-9 text-xs rounded-lg border-admin-card-border"
                 />
               </div>
             </div>
           )}
 
-          <DialogFooter className="mt-3 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <DialogFooter className="mt-3 gap-2 pt-3 border-t border-admin-card-border">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => setPurchaseToCancel(null)}
-              className="h-9 rounded-lg border-slate-200 dark:border-slate-700 text-xs cursor-pointer"
+              className="h-9 rounded-lg border-admin-card-border text-xs cursor-pointer"
             >
               Cancelar
             </Button>
@@ -927,7 +925,7 @@ export default function ComprasPage() {
               size="sm"
               onClick={handleConfirmCancel}
               disabled={isCancelling}
-              className="h-9 px-4 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/20 cursor-pointer gap-1.5"
+              className="h-9 px-4 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-rose-600/20 cursor-pointer gap-1.5"
             >
               {isCancelling ? (
                 <>

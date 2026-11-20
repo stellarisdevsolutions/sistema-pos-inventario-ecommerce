@@ -1,11 +1,13 @@
 "use server";
 
+import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq, desc, and, count } from "drizzle-orm";
-import { userFormSchema, type UserFormInput } from "@/lib/validations/user";
+import { eq } from "drizzle-orm";
+import { userFormSchema, userUpdateSchema, type UserFormInput } from "@/lib/validations/user";
 import { requireRole } from "@/lib/auth/session";
+import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
 import { hashPassword } from "@/lib/auth/password";
 
 function safeRevalidatePath(path: string) {
@@ -23,7 +25,6 @@ export type UserListItem = {
   role: "admin" | "manager" | "cashier" | "warehouse";
   phone: string | null;
   hasPin: boolean;
-  pin: string | null;
   isActive: boolean;
   createdAt: string;
 };
@@ -48,6 +49,7 @@ export async function getUsersAction(): Promise<{
     await requireRole(["admin"]);
 
     const list = await db.query.users.findMany({
+      columns: { passwordHash: false },
       orderBy: (u, { asc }) => [asc(u.id)],
     });
 
@@ -69,7 +71,6 @@ export async function getUsersAction(): Promise<{
         role: u.role,
         phone: u.phone,
         hasPin: Boolean(u.pin && u.pin.trim().length >= 4),
-        pin: u.pin,
         isActive: u.isActive,
         createdAt: dateStr,
       };
@@ -85,13 +86,12 @@ export async function getUsersAction(): Promise<{
         activeUsersCount,
       },
     };
-  } catch (error: any) {
-    console.error("Error al obtener usuarios:", error);
+  } catch (error) {
     return {
       success: false,
       users: [],
       kpis: { totalUsers: 0, adminsCount: 0, cashiersCount: 0, activeUsersCount: 0 },
-      error: error.message || "Error al cargar usuarios.",
+      error: adminActionError(error, "Error al cargar usuarios."),
     };
   }
 }
@@ -124,7 +124,7 @@ export async function createUserAction(input: UserFormInput): Promise<{
 
     const passwordHash = hashPassword(rawPassword);
 
-    const cleanPin = parsed.pin && parsed.pin.trim() ? parsed.pin.trim() : null;
+    const cleanPin = parsed.pin ? encodeSupervisorPin(parsed.pin) : null;
 
     const [newUser] = await db
       .insert(schema.users)
@@ -144,9 +144,8 @@ export async function createUserAction(input: UserFormInput): Promise<{
     safeRevalidatePath("/admin/cajas");
 
     return { success: true, userId: newUser.id };
-  } catch (error: any) {
-    console.error("Error al crear usuario:", error);
-    return { success: false, error: error.message || "Error al crear usuario." };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al crear usuario.") };
   }
 }
 
@@ -158,7 +157,11 @@ export async function updateUserAction(
   input: Partial<UserFormInput>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireRole(["admin"]);
+    const actor = await requireRole(["admin"]);
+    input = userUpdateSchema.parse(input);
+    if (actor.id === userId && (input.isActive === false || (input.role && input.role !== "admin"))) {
+      return { success: false, error: "No puedes quitar tus propios permisos de administrador." };
+    }
 
     const user = await db.query.users.findFirst({
       where: eq(schema.users.id, userId),
@@ -168,7 +171,7 @@ export async function updateUserAction(
       return { success: false, error: "El usuario no fue encontrado." };
     }
 
-    const updates: any = {};
+    const updates: Partial<typeof schema.users.$inferInsert> = {};
 
     if (input.name !== undefined) updates.name = input.name.trim();
     if (input.email !== undefined && input.email !== user.email) {
@@ -184,12 +187,13 @@ export async function updateUserAction(
     if (input.phone !== undefined) updates.phone = input.phone ? input.phone.trim() : null;
     if (input.isActive !== undefined) updates.isActive = input.isActive;
     if (input.pin !== undefined) {
-      updates.pin = input.pin && input.pin.trim() ? input.pin.trim() : null;
+      updates.pin = input.pin ? encodeSupervisorPin(input.pin) : null;
     }
     if (input.password && input.password.trim().length >= 6) {
       updates.passwordHash = hashPassword(input.password.trim());
     }
 
+    if (Object.keys(updates).length === 0) return { success: true };
     await db.update(schema.users).set(updates).where(eq(schema.users.id, userId));
 
     safeRevalidatePath("/admin/usuarios");
@@ -197,9 +201,8 @@ export async function updateUserAction(
     safeRevalidatePath("/admin/cajas");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("Error al actualizar usuario:", error);
-    return { success: false, error: error.message || "Error al actualizar usuario." };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al actualizar usuario.") };
   }
 }
 
@@ -210,7 +213,7 @@ export async function toggleUserStatusAction(
   userId: number
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireRole(["admin"]);
+    const actor = await requireRole(["admin"]);
 
     const user = await db.query.users.findFirst({
       where: eq(schema.users.id, userId),
@@ -220,11 +223,10 @@ export async function toggleUserStatusAction(
       return { success: false, error: "Usuario no encontrado." };
     }
 
-    // No permitir desactivar al usuario admin #1 si es el único
-    if (user.id === 1 && user.role === "admin") {
+    if (user.id === actor.id) {
       return {
         success: false,
-        error: "No se puede desactivar al Administrador Principal del sistema.",
+        error: "No puedes desactivar tu propia cuenta.",
       };
     }
 
@@ -238,48 +240,7 @@ export async function toggleUserStatusAction(
     safeRevalidatePath("/admin/cajas");
 
     return { success: true };
-  } catch (error: any) {
-    console.error("Error al cambiar estado de usuario:", error);
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * 5. Validar PIN de supervisor para autorizaciones de mostrador (Devoluciones, anulaciones, descuentos)
- */
-export async function verifySupervisorPinAction(
-  pin: string
-): Promise<{ success: boolean; supervisor?: { id: number; name: string; role: string }; error?: string }> {
-  try {
-    const cleanPin = pin.trim();
-    if (!cleanPin || cleanPin.length < 4) {
-      return { success: false, error: "El PIN debe tener al menos 4 dígitos numéricos." };
-    }
-
-    const supervisor = await db.query.users.findFirst({
-      where: and(
-        eq(schema.users.pin, cleanPin),
-        eq(schema.users.isActive, true)
-      ),
-    });
-
-    if (!supervisor || (supervisor.role !== "admin" && supervisor.role !== "manager")) {
-      return {
-        success: false,
-        error: "PIN incorrecto o el usuario no posee rol de Administrador/Supervisor autorizado.",
-      };
-    }
-
-    return {
-      success: true,
-      supervisor: {
-        id: supervisor.id,
-        name: supervisor.name,
-        role: supervisor.role,
-      },
-    };
-  } catch (error: any) {
-    console.error("Error al verificar PIN de supervisor:", error);
-    return { success: false, error: "Error al validar PIN de autorización." };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "No se pudo completar la operación.") };
   }
 }

@@ -1,7 +1,11 @@
 "use server";
 
+import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
+import { businessDate } from "@/lib/business-date";
+import { z } from "zod";
 import * as schema from "@/db/schema";
 import { eq, desc, and, gt } from "drizzle-orm";
 import {
@@ -189,11 +193,10 @@ export async function createProductAction(input: ProductFormInput): Promise<Acti
     safeRevalidatePath("/catalogo");
 
     return { success: true, data: newProduct };
-  } catch (error: any) {
-    console.error("Error al crear producto:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Error interno al guardar el producto en la base de datos.",
+      error: adminActionError(error, "Error interno al guardar el producto en la base de datos."),
     };
   }
 }
@@ -275,7 +278,7 @@ export async function updateProductAction(
     console.error(`Error al actualizar producto #${id}:`, error);
     return {
       success: false,
-      error: error.message || "Error interno al actualizar el producto en la base de datos.",
+      error: adminActionError(error, "Error interno al actualizar el producto en la base de datos."),
     };
   }
 }
@@ -288,6 +291,7 @@ export async function createCategoryAction(
   imageUrl?: string | null
 ): Promise<ActionResult> {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
     const trimmed = name.trim();
     if (!trimmed) {
       return { success: false, error: "El nombre de la categoría no puede estar vacío." };
@@ -316,9 +320,8 @@ export async function createCategoryAction(
     safeRevalidatePath("/catalogo");
     safeRevalidatePath("/");
     return { success: true, data: newCat };
-  } catch (error: any) {
-    console.error("Error al crear categoría:", error);
-    return { success: false, error: error.message || "Error al registrar la categoría." };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al registrar la categoría.") };
   }
 }
 
@@ -331,6 +334,7 @@ export async function updateCategoryAction(
   imageUrl?: string | null
 ): Promise<ActionResult> {
   try {
+    await requireRole(["admin", "manager", "warehouse"]);
     const trimmed = newName.trim();
     if (!trimmed) {
       return { success: false, error: "El nombre no puede estar vacío." };
@@ -356,9 +360,8 @@ export async function updateCategoryAction(
     safeRevalidatePath("/catalogo");
     safeRevalidatePath("/");
     return { success: true, data: updated };
-  } catch (error: any) {
-    console.error("Error al actualizar categoría:", error);
-    return { success: false, error: error.message || "Error al actualizar categoría." };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al actualizar categoría.") };
   }
 }
 
@@ -374,20 +377,16 @@ export async function renameCategoryAction(id: number, newName: string): Promise
  */
 export async function deleteCategoryAction(id: number): Promise<ActionResult> {
   try {
-    // 1. Reasignar productos huérfanos a NULL
-    await db
-      .update(schema.products)
-      .set({ categoryId: null })
-      .where(eq(schema.products.categoryId, id));
-
-    // 2. Eliminar la categoría
-    await db.delete(schema.categories).where(eq(schema.categories.id, id));
+    await requireRole(["admin", "manager", "warehouse"]);
+    await db.batch([
+      db.update(schema.products).set({ categoryId: null }).where(eq(schema.products.categoryId, id)),
+      db.delete(schema.categories).where(eq(schema.categories.id, id)),
+    ]);
 
     safeRevalidatePath("/admin/inventario");
     return { success: true };
-  } catch (error: any) {
-    console.error("Error al eliminar categoría:", error);
-    return { success: false, error: error.message || "Error al eliminar categoría." };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al eliminar categoría.") };
   }
 }
 
@@ -415,11 +414,10 @@ export async function toggleProductActiveAction(
     safeRevalidatePath("/");
 
     return { success: true, data: updated };
-  } catch (error: any) {
-    console.error("Error al actualizar estado del producto:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Error al cambiar el estado del producto.",
+      error: adminActionError(error, "Error al cambiar el estado del producto."),
     };
   }
 }
@@ -506,9 +504,8 @@ export async function getProductKardexAction(productId?: number) {
         };
       }),
     };
-  } catch (error: any) {
-    console.error("Error al obtener movimientos de kárdex:", error);
-    return { success: false, data: [], error: error.message };
+  } catch (error) {
+    return { success: false, data: [], error: adminActionError(error, "No se pudo completar la operación.") };
   }
 }
 
@@ -517,7 +514,6 @@ export interface CreateAdjustmentInput {
   quantity: number;
   reason: "damaged" | "defective" | "expired" | "loss_theft" | "supplier_return" | "internal_use";
   notes?: string;
-  authorizedByUserId?: number;
 }
 
 /**
@@ -532,91 +528,25 @@ export async function createInventoryAdjustmentAction(
   try {
     const currentUser = await requireRole(["admin", "manager", "warehouse"]);
 
-    const { productId, quantity, reason, notes, authorizedByUserId } = input;
+    const parsed = z.object({
+      productId: z.number().int().positive(),
+      quantity: z.number().int().positive().max(2_147_483_647),
+      reason: z.enum(["damaged", "defective", "expired", "loss_theft", "supplier_return", "internal_use"]),
+      notes: z.string().trim().max(500).optional(),
+    }).safeParse(input);
 
-    if (!productId || typeof productId !== "number") {
-      return { success: false, error: "Producto no válido." };
-    }
-    if (!quantity || quantity <= 0 || !Number.isInteger(quantity)) {
-      return { success: false, error: "La cantidad debe ser un número entero mayor a 0." };
-    }
+    if (!parsed.success) return { success: false, error: "Revisa los datos de la baja." };
 
-    // 1. Obtener producto y verificar existencia y stock suficiente
-    const product = await db.query.products.findFirst({
-      where: eq(schema.products.id, productId),
-    });
-
-    if (!product) {
-      return { success: false, error: "El producto seleccionado no existe." };
-    }
-
-    if (product.stock < quantity) {
-      return {
-        success: false,
-        error: `Stock insuficiente: El producto solo tiene ${product.stock} unidad(es) disponible(s).`,
-      };
-    }
-
-    const previousStock = product.stock;
-    const newStock = previousStock - quantity;
-    const unitCostNum = Number(product.costPrice || 0);
-    const totalCostNum = unitCostNum * quantity;
-
-    // 2. Generar correlativo formal de baja (ej: BAJA-2026-002)
-    const countResult = await db.query.inventoryAdjustments.findMany({
-      columns: { id: true },
-    });
-    const currentYear = new Date().getFullYear();
-    const folioNumber = String(countResult.length + 1).padStart(3, "0");
-    const adjustmentNumber = `BAJA-${currentYear}-${folioNumber}`;
-
-    // 3. Asentar las operaciones en la base de datos
-    // a) Insertar cabecera de baja
-    const [adj] = await db
-      .insert(schema.inventoryAdjustments)
-      .values({
-        adjustmentNumber,
-        reason,
-        userId: currentUser.id,
-        authorizedByUserId: authorizedByUserId || (currentUser.role === "admin" || currentUser.role === "manager" ? currentUser.id : 1),
-        totalCost: totalCostNum.toFixed(2),
-        notes: notes?.trim() || `Baja por ${reason}`,
-      })
-      .returning();
-
-    // b) Insertar ítem de detalle de la baja
-    await db.insert(schema.inventoryAdjustmentItems).values({
-      adjustmentId: adj.id,
-      productId: product.id,
-      quantity,
-      unitCost: unitCostNum.toFixed(2),
-      subtotal: totalCostNum.toFixed(2),
-    });
-
-    // c) Actualizar stock del producto
-    await db
-      .update(schema.products)
-      .set({
-        stock: newStock,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.products.id, product.id));
-
-    // d) Registrar asiento inmutable en el Kárdex (damaged_out)
-    await db.insert(schema.inventoryMovements).values({
-      productId: product.id,
-      movementType: "damaged_out",
-      quantity: -quantity, // Salida negativa
-      previousStock,
-      newStock,
-      unitCost: unitCostNum.toFixed(2),
-      referenceType: "adjustment",
-      referenceId: adj.id,
-      reason: `Baja #${adjustmentNumber}: ${notes?.trim() || reason}`,
+    const { rows: [result] } = await db.execute(inventoryAdjustmentQuery({
+      ...parsed.data,
+      notes: parsed.data.notes || `Baja por ${parsed.data.reason}`,
       userId: currentUser.id,
-    });
-
-    const result = adj;
+      authorizedByUserId: currentUser.role === "warehouse" ? null : currentUser.id,
+      prefix: `BAJA-${businessDate().slice(0, 4)}-`,
+    }));
+    if (!result) {
+      return { success: false, error: "El producto no existe o no tiene stock suficiente." };
+    }
 
     safeRevalidatePath("/admin/inventario");
     safeRevalidatePath("/catalogo");
@@ -625,15 +555,14 @@ export async function createInventoryAdjustmentAction(
     return {
       success: true,
       data: {
-        adjustment: result,
-        newStock,
-        previousStock,
-        productName: product.name,
+        adjustment: { id: result.id, adjustmentNumber: result.adjustmentNumber },
+        newStock: result.newStock,
+        previousStock: result.previousStock,
+        productName: result.productName,
       },
     };
-  } catch (error: any) {
-    console.error("Error al registrar acta de baja:", error);
-    return { success: false, error: error.message || "Error al procesar la baja de inventario." };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al procesar la baja de inventario.") };
   }
 }
 
@@ -697,8 +626,7 @@ export async function getInventoryAdjustmentsAction() {
     });
 
     return { success: true, data: flatList };
-  } catch (error: any) {
-    console.error("Error al obtener actas de bajas:", error);
-    return { success: false, data: [], error: error.message };
+  } catch (error) {
+    return { success: false, data: [], error: adminActionError(error, "No se pudo completar la operación.") };
   }
 }

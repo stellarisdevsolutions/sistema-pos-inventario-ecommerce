@@ -1,5 +1,7 @@
 "use client";
 
+import { ProductThumbnail } from "@/components/admin/product-thumbnail";
+
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -346,11 +348,11 @@ function PaginationBar({
   const pages = getPaginationItems(currentPage, totalPages);
 
   return (
-    <div className="p-3.5 px-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-900/50">
+    <div className="p-3.5 px-4 border-t border-admin-card-border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-admin-muted bg-admin-raised">
       <div className="font-medium">
-        Mostrando <span className="font-bold text-slate-900 dark:text-white">{from}</span> a{" "}
-        <span className="font-bold text-slate-900 dark:text-white">{to}</span> de{" "}
-        <span className="font-bold text-slate-900 dark:text-white">{totalItems}</span> {itemName}
+        Mostrando <span className="font-bold text-admin-text">{from}</span> a{" "}
+        <span className="font-bold text-admin-text">{to}</span> de{" "}
+        <span className="font-bold text-admin-text">{totalItems}</span> {itemName}
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -360,7 +362,7 @@ function PaginationBar({
           disabled={currentPage <= 1}
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
           title="Página anterior"
-          className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+          className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-admin-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -380,10 +382,10 @@ function PaginationBar({
               type="button"
               onClick={() => onPageChange(item)}
               className={cn(
-                "h-8 w-8 rounded-xl text-xs font-bold flex items-center justify-center cursor-pointer transition-all shadow-2xs",
+                "h-8 w-8 rounded-xl text-xs font-bold flex items-center justify-center cursor-pointer transition-all",
                 currentPage === item
-                  ? "bg-[var(--admin-brand)] text-white border border-[var(--admin-brand)] shadow-sm shadow-[var(--admin-brand)]/30 scale-105"
-                  : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                  ? "bg-admin-brand text-white border border-admin-brand scale-105"
+                  : "border border-admin-card-border bg-admin-card-bg text-admin-secondary hover:bg-admin-raised hover:border-slate-300 dark:hover:border-slate-600"
               )}
             >
               {item}
@@ -397,7 +399,7 @@ function PaginationBar({
           disabled={currentPage >= totalPages}
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
           title="Página siguiente"
-          className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+          className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-admin-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -876,14 +878,10 @@ export default function InventarioPage() {
       {/* =========================================================================
           1. HEADER DEL MÓDULO (ESTILO BENTO / QUIXOTIC)
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-            Inventario & Kárdex
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
-            Existencias físicas, auditoría contable y control de mermas
-          </p>
+          <h1 className="admin-page-title">Inventario y Kárdex</h1>
+          <p className="admin-page-description">Productos, existencias y movimientos de stock.</p>
         </div>
 
         {/* Acciones Superiores */}
@@ -892,16 +890,16 @@ export default function InventarioPage() {
             variant="outline"
             size="sm"
             onClick={() => setIsCategoryModalOpen(true)}
-            className="h-10 px-4 rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer shadow-2xs"
+            className="h-10 px-4 rounded-xl border-admin-card-border text-admin-secondary font-bold text-xs gap-2 hover:bg-admin-raised cursor-pointer"
           >
-            <FolderTree className="h-4 w-4 text-[var(--admin-brand)]" />
+            <FolderTree className="h-4 w-4 text-admin-brand-text" />
             <span>Categorías</span>
           </Button>
 
           <Link href="/admin/inventario/nuevo">
             <Button
               size="sm"
-              className="h-10 px-5 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white text-xs font-black gap-2 shadow-md shadow-[var(--admin-brand)]/25 transition-all active:scale-95 cursor-pointer"
+              className="h-10 px-5 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-semibold gap-2 transition-all active:scale-95 cursor-pointer"
             >
               <Plus className="h-4 w-4 stroke-[2.5]" />
               <span>Nuevo Producto</span>
@@ -913,16 +911,16 @@ export default function InventarioPage() {
       {/* =========================================================================
           2. LAS 4 TARJETAS KPI DE INVENTARIO BENTO
           ========================================================================= */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="admin-kpi-grid">
         {/* KPI 1: VALORIZACIÓN TOTAL */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[160px]">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Valor en Bodega</span>
+            <span className="text-xs font-bold text-admin-muted">Valor en Bodega</span>
             <div className="h-8 w-8 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600">
               <DollarSign className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-3">
+          <div className="text-3xl font-semibold text-admin-text tracking-tight mt-3">
             {CURRENCY_SYMBOL}{" "}
             {products
               .reduce((acc, p) => acc + p.stock * p.costPrice, 0)
@@ -934,31 +932,31 @@ export default function InventarioPage() {
         </div>
 
         {/* KPI 2: TOTAL EXISTENCIAS */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[160px]">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Unidades Físicas</span>
-            <div className="h-8 w-8 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
+            <span className="text-xs font-bold text-admin-muted">Unidades Físicas</span>
+            <div className="h-8 w-8 rounded-full bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-center text-admin-brand-text">
               <Boxes className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-3">
+          <div className="text-3xl font-semibold text-admin-text tracking-tight mt-3">
             {products.reduce((acc, p) => acc + p.stock, 0)}{" "}
             <span className="text-sm font-bold text-slate-400">uds</span>
           </div>
-          <span className="text-xs text-[var(--admin-brand)] font-bold mt-1 block">
+          <span className="text-xs text-admin-brand-text font-bold mt-1 block">
             {categoriesList.filter((c) => c !== "Sin categoría").length} categorías activas
           </span>
         </div>
 
         {/* KPI 3: ALERTA STOCK CRÍTICO */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[160px]">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Stock Crítico</span>
+            <span className="text-xs font-bold text-admin-muted">Stock Crítico</span>
             <div className="h-8 w-8 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600">
               <AlertTriangle className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-amber-600 tracking-tight mt-3">
+          <div className="text-3xl font-semibold text-amber-600 tracking-tight mt-3">
             {products.filter((p) => p.stock <= p.minStock).length}{" "}
             <span className="text-sm font-bold text-amber-600/70">ítems</span>
           </div>
@@ -968,14 +966,14 @@ export default function InventarioPage() {
         </div>
 
         {/* KPI 4: MERMAS & PÉRDIDAS */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between min-h-[160px]">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-5 flex flex-col justify-between min-h-[160px]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Mermas del Mes</span>
+            <span className="text-xs font-bold text-admin-muted">Mermas del Mes</span>
             <div className="h-8 w-8 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 flex items-center justify-center text-rose-600">
               <ShieldAlert className="h-4 w-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-rose-600 tracking-tight mt-3">
+          <div className="text-3xl font-semibold text-rose-600 tracking-tight mt-3">
             {CURRENCY_SYMBOL}{" "}
             {activeAdjustmentsSource
               .reduce((acc, a) => acc + a.totalLoss, 0)
@@ -990,14 +988,14 @@ export default function InventarioPage() {
       {/* =========================================================================
           3. SELECTOR DE PESTAÑAS (SEGMENTED CONTROL MODERNO)
           ========================================================================= */}
-      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/60 w-fit">
+      <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-admin-raised w-fit">
         <button
           onClick={() => setActiveTab("catalog")}
           className={cn(
             "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "catalog"
-              ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              ? "bg-admin-card-bg text-admin-brand-text"
+              : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
           )}
         >
           <Package className="h-4 w-4" />
@@ -1009,8 +1007,8 @@ export default function InventarioPage() {
           className={cn(
             "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "kardex"
-              ? "bg-white dark:bg-slate-900 text-[var(--admin-brand)] shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              ? "bg-admin-card-bg text-admin-brand-text"
+              : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
           )}
         >
           <BookOpen className="h-4 w-4" />
@@ -1022,8 +1020,8 @@ export default function InventarioPage() {
           className={cn(
             "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "adjustments"
-              ? "bg-white dark:bg-slate-900 text-rose-600 shadow-xs"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              ? "bg-admin-card-bg text-rose-600"
+              : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
           )}
         >
           <ShieldAlert className="h-4 w-4 text-rose-500" />
@@ -1036,11 +1034,11 @@ export default function InventarioPage() {
           ========================================================================= */}
       {activeTab === "catalog" ? (
         /* PESTAÑA 1: CATÁLOGO DE PRODUCTOS & STOCK ACTUAL */
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 overflow-hidden shadow-xs">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
           {/* =========================================================================
               BARRA DE BÚSQUEDA, VISTA Y FILTROS SEGÚN ESPECIFICACIÓN
               ========================================================================= */}
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800 space-y-3">
+          <div className="p-4 border-b border-admin-card-border space-y-3">
             {/* Fila 1: Buscador a la izquierda + Switcher de Vista a la derecha */}
             <div className="flex items-center gap-3 w-full">
               <div className="relative flex-1">
@@ -1052,7 +1050,7 @@ export default function InventarioPage() {
                     setSearchTerm(e.target.value);
                     setCatalogPage(1);
                   }}
-                  className="pl-9 h-11 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/80 focus:bg-white dark:focus:bg-slate-900 transition-colors"
+                  className="pl-9 h-11 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-white dark:focus:bg-slate-900 transition-colors"
                 />
                 {searchTerm && (
                   <button
@@ -1069,7 +1067,7 @@ export default function InventarioPage() {
               </div>
 
               {/* Selector de Modo: Lista vs Cuadros */}
-              <div className="inline-flex items-center bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 shrink-0">
+              <div className="inline-flex items-center bg-admin-raised p-1 rounded-xl border border-admin-card-border shrink-0">
                 <button
                   type="button"
                   onClick={() => setViewMode("list")}
@@ -1077,7 +1075,7 @@ export default function InventarioPage() {
                   className={cn(
                     "p-2 rounded-lg text-xs transition-all cursor-pointer flex items-center justify-center",
                     viewMode === "list"
-                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
+                      ? "bg-admin-card-bg text-admin-text"
                       : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   )}
                 >
@@ -1090,7 +1088,7 @@ export default function InventarioPage() {
                   className={cn(
                     "p-2 rounded-lg text-xs transition-all cursor-pointer flex items-center justify-center",
                     viewMode === "grid"
-                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs"
+                      ? "bg-admin-card-bg text-admin-text"
                       : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   )}
                 >
@@ -1102,7 +1100,7 @@ export default function InventarioPage() {
             {/* Fila 2: Filtros de Estado, Stock, Categoría y Limpiar */}
             <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
               {/* Segmented control 1: Estado (Todos / Activos / Inactivos) */}
-              <div className="inline-flex items-center bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+              <div className="inline-flex items-center bg-admin-raised p-1 rounded-xl border border-admin-card-border">
                 <button
                   type="button"
                   onClick={() => {
@@ -1112,7 +1110,7 @@ export default function InventarioPage() {
                   className={cn(
                     "px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer",
                     statusFilter === "all"
-                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-semibold"
+                      ? "bg-admin-card-bg text-admin-text font-semibold"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-medium"
                   )}
                 >
@@ -1127,7 +1125,7 @@ export default function InventarioPage() {
                   className={cn(
                     "px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer",
                     statusFilter === "active"
-                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-semibold"
+                      ? "bg-admin-card-bg text-admin-text font-semibold"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-medium"
                   )}
                 >
@@ -1142,7 +1140,7 @@ export default function InventarioPage() {
                   className={cn(
                     "px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer",
                     statusFilter === "inactive"
-                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-semibold"
+                      ? "bg-admin-card-bg text-admin-text font-semibold"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-medium"
                   )}
                 >
@@ -1151,7 +1149,7 @@ export default function InventarioPage() {
               </div>
 
               {/* Segmented control 2: Stock (Todo stock / ⚠️ Bajo (< 10) / ✕ Agotado) */}
-              <div className="inline-flex items-center bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+              <div className="inline-flex items-center bg-admin-raised p-1 rounded-xl border border-admin-card-border">
                 <button
                   type="button"
                   onClick={() => {
@@ -1161,7 +1159,7 @@ export default function InventarioPage() {
                   className={cn(
                     "px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer",
                     filterStock === "all"
-                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-semibold"
+                      ? "bg-admin-card-bg text-admin-text font-semibold"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-medium"
                   )}
                 >
@@ -1176,7 +1174,7 @@ export default function InventarioPage() {
                   className={cn(
                     "px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer",
                     filterStock === "low"
-                      ? "bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs font-semibold"
+                      ? "bg-admin-card-bg text-amber-600 dark:text-amber-400 font-semibold"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-medium"
                   )}
                 >
@@ -1191,7 +1189,7 @@ export default function InventarioPage() {
                   className={cn(
                     "px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer",
                     filterStock === "out"
-                      ? "bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-xs font-semibold"
+                      ? "bg-admin-card-bg text-rose-600 dark:text-rose-400 font-semibold"
                       : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-medium"
                   )}
                 >
@@ -1206,7 +1204,7 @@ export default function InventarioPage() {
                   setSelectedCategory(e.target.value);
                   setCatalogPage(1);
                 }}
-                className="h-9 px-3.5 text-xs rounded-xl border border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-[var(--admin-brand)]/20"
+                className="h-9 px-3.5 text-xs rounded-xl border border-admin-card-border bg-admin-card-bg text-admin-secondary font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-admin-brand/20"
               >
                 <option value="all">Categoría</option>
                 {categoriesList.map((cat) => (
@@ -1221,7 +1219,7 @@ export default function InventarioPage() {
                 <button
                   type="button"
                   onClick={handleClearFilters}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 transition-all cursor-pointer shadow-2xs"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 transition-all cursor-pointer"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>Limpiar filtros</span>
@@ -1238,7 +1236,7 @@ export default function InventarioPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                  <tr className="border-b border-admin-card-border bg-admin-raised text-admin-muted font-bold uppercase tracking-wider text-[11px]">
                     <th className="py-3.5 px-5">Producto</th>
                     <th className="py-3.5 px-5 text-right">Precio</th>
                     <th className="py-3.5 px-5 text-center">Stock</th>
@@ -1247,13 +1245,13 @@ export default function InventarioPage() {
                     <th className="py-3.5 px-5 text-right">Acciones</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                <tbody className="divide-y divide-admin-card-border text-admin-secondary">
                   {paginatedProducts.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-12 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Package className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          <p className="text-sm font-semibold text-admin-secondary">
                             No se encontraron productos
                           </p>
                           <p className="text-xs text-slate-400">
@@ -1285,25 +1283,24 @@ export default function InventarioPage() {
                           key={p.id}
                           onClick={() => setSelectedProductForDetails(p)}
                           className={cn(
-                            "hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group cursor-pointer",
-                            !isProductActive && "opacity-60 bg-slate-50/30 dark:bg-slate-900/40"
+                            "hover:bg-admin-raised transition-colors group cursor-pointer",
+                            !isProductActive && "opacity-60 bg-admin-raised"
                           )}
                         >
                           {/* 1. Producto (Nombre arriba + Categoría debajito) */}
                           <td className="py-4 px-5">
                             <div className="flex items-center gap-3.5">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
+                              <ProductThumbnail
                                 src={p.image}
                                 alt={p.name}
-                                className="h-12 w-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
+                                className="h-12 w-12 rounded-xl object-cover border border-admin-card-border shrink-0"
                               />
                               <div className="flex flex-col min-w-0">
-                                <p className="font-bold text-sm text-slate-900 dark:text-white leading-snug line-clamp-1">
+                                <p className="font-bold text-sm text-admin-text leading-snug line-clamp-1">
                                   {p.name}
                                 </p>
                                 <div className="flex items-center gap-1.5 mt-1">
-                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                  <span className="text-xs text-admin-muted font-medium">
                                     {p.category}
                                   </span>
                                   {p.sku && (
@@ -1321,7 +1318,7 @@ export default function InventarioPage() {
 
                           {/* 2. Precio */}
                           <td className="py-4 px-5 text-right">
-                            <span className="font-bold text-slate-900 dark:text-white font-mono text-sm tracking-tight">
+                            <span className="font-bold text-admin-text font-mono text-sm tracking-tight">
                               {CURRENCY_SYMBOL} {p.price.toFixed(2)}
                             </span>
                           </td>
@@ -1336,7 +1333,7 @@ export default function InventarioPage() {
                                     ? "text-rose-600"
                                     : isLow
                                     ? "text-amber-600"
-                                    : "text-slate-900 dark:text-white"
+                                    : "text-admin-text"
                                 )}
                               >
                                 {p.stock}
@@ -1400,14 +1397,14 @@ export default function InventarioPage() {
                             >
                               <span
                                 className={cn(
-                                  "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none shadow-2xs items-center",
+                                  "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none items-center",
                                   isProductActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700",
                                   isToggling && "opacity-80"
                                 )}
                               >
                                 <span
                                   className={cn(
-                                    "pointer-events-none flex items-center justify-center h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
+                                    "pointer-events-none flex items-center justify-center h-4 w-4 transform rounded-full bg-white ring-0 transition duration-200 ease-in-out",
                                     isProductActive ? "translate-x-4" : "translate-x-0"
                                   )}
                                 >
@@ -1421,7 +1418,7 @@ export default function InventarioPage() {
                                   "text-[11px] font-medium select-none min-w-[50px] text-left",
                                   isProductActive
                                     ? "text-emerald-700 dark:text-emerald-400"
-                                    : "text-slate-400 dark:text-slate-500"
+                                    : "text-admin-muted"
                                 )}
                               >
                                 {isToggling ? "Cargando..." : isProductActive ? "Activo" : "Inactivo"}
@@ -1437,7 +1434,7 @@ export default function InventarioPage() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-8 w-8 p-0 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                    className="h-8 w-8 p-0 rounded-xl hover:bg-admin-raised cursor-pointer"
                                   />
                                 }
                               >
@@ -1445,7 +1442,7 @@ export default function InventarioPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
                                 align="end"
-                                className="rounded-2xl border border-slate-200 dark:border-slate-800 p-1.5 shadow-xl bg-white dark:bg-slate-900 text-xs min-w-[170px]"
+                                className="rounded-xl border border-admin-card-border p-1.5 bg-admin-card-bg text-xs min-w-[170px]"
                               >
                                 <DropdownMenuGroup>
                                   <DropdownMenuLabel className="text-[10px] text-slate-400 uppercase tracking-wider px-2 py-1">
@@ -1453,20 +1450,20 @@ export default function InventarioPage() {
                                   </DropdownMenuLabel>
                                   <DropdownMenuItem
                                     onClick={() => setSelectedProductForDetails(p)}
-                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-slate-700 dark:text-slate-300"
+                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-secondary"
                                   >
                                     <Package className="h-4 w-4 mr-2 text-slate-500" />
                                     Ver Información
                                   </DropdownMenuItem>
                                   <Link href={`/admin/inventario/${p.id}/editar`}>
-                                    <DropdownMenuItem className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-slate-700 dark:text-slate-300">
+                                    <DropdownMenuItem className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-secondary">
                                       <Edit className="h-4 w-4 mr-2 text-slate-500" />
                                       Editar Producto
                                     </DropdownMenuItem>
                                   </Link>
                                   <DropdownMenuItem
                                     onClick={() => setSelectedProductForKardex(p)}
-                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-[var(--admin-brand)] focus:bg-sky-50 dark:focus:bg-sky-950/60"
+                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-brand-text focus:bg-admin-brand-subtle"
                                   >
                                     <BookOpen className="h-4 w-4 mr-2" />
                                     Ver Kárdex
@@ -1495,7 +1492,7 @@ export default function InventarioPage() {
               {paginatedProducts.length === 0 ? (
                 <div className="py-12 text-center flex flex-col items-center justify-center gap-2">
                   <Package className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  <p className="text-sm font-semibold text-admin-secondary">
                     No se encontraron productos
                   </p>
                   <p className="text-xs text-slate-400">
@@ -1526,14 +1523,13 @@ export default function InventarioPage() {
                         key={p.id}
                         onClick={() => setSelectedProductForDetails(p)}
                         className={cn(
-                          "rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all group relative cursor-pointer select-none",
-                          !isProductActive && "opacity-60 bg-slate-50/40 dark:bg-slate-900/40"
+                          "rounded-xl border border-admin-card-border bg-admin-card-bg overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all group relative cursor-pointer select-none",
+                          !isProductActive && "opacity-60 bg-admin-raised"
                         )}
                       >
                         {/* Contenedor Superior de Imagen a Ancho Completo */}
-                        <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
+                        <div className="relative aspect-square w-full bg-admin-raised">
+                          <ProductThumbnail
                             src={p.image}
                             alt={p.name}
                             className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -1543,7 +1539,7 @@ export default function InventarioPage() {
                           <div className="absolute top-2.5 left-2.5 z-10">
                             <Badge
                               className={cn(
-                                "text-[10px] font-semibold px-2 py-0.5 rounded-lg shadow-sm border backdrop-blur-md",
+                                "text-[10px] font-semibold px-2 py-0.5 rounded-lg border backdrop-blur-md",
                                 p.status === "in_stock"
                                   ? "bg-emerald-500/90 text-white border-emerald-400"
                                   : p.status === "low_stock"
@@ -1571,7 +1567,7 @@ export default function InventarioPage() {
                                     type="button"
                                     title="Acciones"
                                     onClick={(e) => e.stopPropagation()}
-                                    className="h-7 w-7 rounded-xl bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 backdrop-blur-md flex items-center justify-center text-slate-600 dark:text-slate-300 shadow-sm cursor-pointer transition active:scale-95"
+                                    className="h-7 w-7 rounded-xl bg-admin-card-bg hover:bg-white dark:hover:bg-slate-900 border border-admin-card-border backdrop-blur-md flex items-center justify-center text-admin-secondary cursor-pointer transition active:scale-95"
                                   />
                                 }
                               >
@@ -1579,7 +1575,7 @@ export default function InventarioPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
                                 align="end"
-                                className="rounded-2xl border border-slate-200 dark:border-slate-800 p-1.5 shadow-xl bg-white dark:bg-slate-900 text-xs min-w-[175px]"
+                                className="rounded-xl border border-admin-card-border p-1.5 bg-admin-card-bg text-xs min-w-[175px]"
                               >
                                 <DropdownMenuGroup>
                                   <DropdownMenuLabel className="text-[10px] text-slate-400 uppercase tracking-wider px-2 py-1">
@@ -1590,13 +1586,13 @@ export default function InventarioPage() {
                                       e.stopPropagation();
                                       setSelectedProductForDetails(p);
                                     }}
-                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-slate-700 dark:text-slate-300"
+                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-secondary"
                                   >
                                     <Package className="h-4 w-4 mr-2 text-slate-500" />
                                     Ver Información
                                   </DropdownMenuItem>
                                   <Link href={`/admin/inventario/${p.id}/editar`}>
-                                    <DropdownMenuItem className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-slate-700 dark:text-slate-300">
+                                    <DropdownMenuItem className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-secondary">
                                       <Edit className="h-4 w-4 mr-2 text-slate-500" />
                                       Editar Producto
                                     </DropdownMenuItem>
@@ -1606,7 +1602,7 @@ export default function InventarioPage() {
                                       e.stopPropagation();
                                       setSelectedProductForKardex(p);
                                     }}
-                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-[var(--admin-brand)] focus:bg-sky-50 dark:focus:bg-sky-950/60"
+                                    className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-brand-text focus:bg-admin-brand-subtle"
                                   >
                                     <BookOpen className="h-4 w-4 mr-2" />
                                     Ver Kárdex
@@ -1622,7 +1618,7 @@ export default function InventarioPage() {
                                     Dar de Baja (Merma)
                                   </DropdownMenuItem>
 
-                                  <DropdownMenuSeparator className="my-1 bg-slate-100 dark:bg-slate-800" />
+                                  <DropdownMenuSeparator className="my-1 bg-admin-raised" />
 
                                   {/* Acción de Estado dentro del menú de 3 puntos */}
                                   <DropdownMenuItem
@@ -1634,7 +1630,7 @@ export default function InventarioPage() {
                                     className={cn(
                                       "rounded-xl px-2.5 py-2 font-semibold cursor-pointer",
                                       isProductActive
-                                        ? "text-slate-600 dark:text-slate-400"
+                                        ? "text-admin-secondary"
                                         : "text-emerald-600 dark:text-emerald-400 focus:bg-emerald-50 dark:focus:bg-emerald-950/60"
                                     )}
                                   >
@@ -1660,22 +1656,22 @@ export default function InventarioPage() {
                         {/* Datos del producto con padding */}
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
+                            <span className="text-xs text-admin-muted font-medium block">
                               {p.category}
                             </span>
                             <h4
                               title={p.name}
-                              className="font-bold text-sm text-slate-900 dark:text-white leading-snug line-clamp-2 mt-1"
+                              className="font-bold text-sm text-admin-text leading-snug line-clamp-2 mt-1"
                             >
                               {p.name}
                             </h4>
                           </div>
 
                           {/* Fila de Precio y Stock (solo cantidad numérica) */}
-                          <div className="flex items-baseline justify-between mt-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                          <div className="flex items-baseline justify-between mt-3 pt-2 border-t border-admin-card-border">
                             <div>
                               <span className="text-[10px] text-slate-400 font-medium block">Precio</span>
-                              <span className="font-bold text-slate-900 dark:text-white font-mono text-base tracking-tight">
+                              <span className="font-bold text-admin-text font-mono text-base tracking-tight">
                                 {CURRENCY_SYMBOL} {p.price.toFixed(2)}
                               </span>
                             </div>
@@ -1716,19 +1712,19 @@ export default function InventarioPage() {
         </div>
       ) : activeTab === "kardex" ? (
         /* PESTAÑA 2: KÁRDEX AUDITORÍA GENERAL (LIBRO MAYOR) */
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 overflow-hidden shadow-xs">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
           {/* Header de la auditoría */}
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="p-4 border-b border-admin-card-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-black text-sm text-slate-900 dark:text-white">
+                <h3 className="font-semibold text-sm text-admin-text">
                   Libro Mayor de Inventario (Kárdex General)
                 </h3>
-                <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[10px]">
+                <Badge className="bg-admin-raised text-admin-secondary font-mono text-[10px]">
                   Método Oficial: Costo Promedio Ponderado (CPP)
                 </Badge>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-admin-muted mt-0.5">
                 Registro inmutable de entradas por compras, salidas por ventas (POS/Web) y actas de merma.
               </p>
             </div>
@@ -1744,7 +1740,7 @@ export default function InventarioPage() {
                 }}
                 className={cn(
                   "rounded-xl text-xs font-bold h-8 cursor-pointer",
-                  kardexFilterType === "all" ? "bg-[var(--admin-brand)] text-white shadow-2xs hover:bg-[var(--admin-brand-hover)]" : ""
+                  kardexFilterType === "all" ? "bg-admin-brand text-white hover:bg-admin-brand-hover" : ""
                 )}
               >
                 Todos ({activeKardexSource.length})
@@ -1758,7 +1754,7 @@ export default function InventarioPage() {
                 }}
                 className={cn(
                   "rounded-xl text-xs font-bold h-8 text-emerald-600 border-emerald-200 hover:bg-emerald-50 cursor-pointer",
-                  kardexFilterType === "in" ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs" : ""
+                  kardexFilterType === "in" ? "bg-emerald-600 text-white border-emerald-600" : ""
                 )}
               >
                 + Entradas (Compras)
@@ -1771,8 +1767,8 @@ export default function InventarioPage() {
                   setKardexPage(1);
                 }}
                 className={cn(
-                  "rounded-xl text-xs font-bold h-8 text-[var(--admin-brand)] border-sky-200 hover:bg-sky-50 cursor-pointer",
-                  kardexFilterType === "out" ? "bg-[var(--admin-brand)] text-white border-[var(--admin-brand)] shadow-2xs hover:bg-[var(--admin-brand-hover)]" : ""
+                  "rounded-xl text-xs font-bold h-8 text-admin-brand-text border-admin-brand-light hover:bg-admin-brand-subtle cursor-pointer",
+                  kardexFilterType === "out" ? "bg-admin-brand text-white border-admin-brand hover:bg-admin-brand-hover" : ""
                 )}
               >
                 - Salidas (Ventas)
@@ -1786,7 +1782,7 @@ export default function InventarioPage() {
                 }}
                 className={cn(
                   "rounded-xl text-xs font-bold h-8 text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer",
-                  kardexFilterType === "damaged" ? "bg-rose-600 text-white border-rose-600 shadow-2xs" : ""
+                  kardexFilterType === "damaged" ? "bg-rose-600 text-white border-rose-600" : ""
                 )}
               >
                 - Bajas (Mermas)
@@ -1798,7 +1794,7 @@ export default function InventarioPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                <tr className="border-b border-admin-card-border bg-admin-raised text-admin-muted font-bold uppercase tracking-wider text-[11px]">
                   <th className="py-3 px-4">Fecha / Hora</th>
                   <th className="py-3 px-4">Producto Afectado</th>
                   <th className="py-3 px-4">Tipo Movimiento</th>
@@ -1809,14 +1805,14 @@ export default function InventarioPage() {
                   <th className="py-3 px-4">Responsable</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+              <tbody className="divide-y divide-admin-card-border text-admin-secondary">
                 {paginatedKardex.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                  <tr key={m.id} className="hover:bg-admin-raised transition-colors">
+                    <td className="py-3.5 px-4 font-mono text-[11px] text-admin-muted">
                       {m.date}
                     </td>
                     <td className="py-3.5 px-4">
-                      <p className="font-bold text-slate-900 dark:text-white">{m.product}</p>
+                      <p className="font-bold text-admin-text">{m.product}</p>
                       <p className="text-[10px] text-slate-400 font-mono">{m.sku}</p>
                     </td>
                     <td className="py-3.5 px-4">
@@ -1827,7 +1823,7 @@ export default function InventarioPage() {
                             m.type === "purchase_in"
                               ? "bg-emerald-500"
                               : m.type === "sale_out"
-                              ? "bg-[var(--admin-brand)]"
+                              ? "bg-admin-brand"
                               : m.typeLabel.includes("Anulación")
                               ? "bg-amber-500"
                               : "bg-rose-500"
@@ -1838,7 +1834,7 @@ export default function InventarioPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-center font-black">
+                    <td className="py-3.5 px-4 text-center font-semibold">
                       <span
                         className={cn(
                           "px-2 py-0.5 rounded-lg font-mono text-xs",
@@ -1855,7 +1851,7 @@ export default function InventarioPage() {
                     <td className="py-3.5 px-4 text-center font-mono">
                       <span className="text-slate-400">{m.previousStock}</span>
                       <span className="mx-1.5 text-slate-300 dark:text-slate-600">➜</span>
-                      <span className="font-black text-slate-900 dark:text-white">{m.newStock} uds</span>
+                      <span className="font-semibold text-admin-text">{m.newStock} uds</span>
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
                       {CURRENCY_SYMBOL} {m.unitCost.toFixed(2)}
@@ -1870,7 +1866,7 @@ export default function InventarioPage() {
                         </p>
                       )}
                     </td>
-                    <td className="py-3.5 px-4 font-bold text-[11px] text-slate-700 dark:text-slate-300">
+                    <td className="py-3.5 px-4 font-bold text-[11px] text-admin-secondary">
                       {m.user}
                     </td>
                   </tr>
@@ -1891,18 +1887,18 @@ export default function InventarioPage() {
         </div>
       ) : (
         /* PESTAÑA 3: BAJAS & MERMAS POR DAÑO */
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border overflow-hidden">
+          <div className="p-4 border-b border-admin-card-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-black text-sm text-slate-900 dark:text-white">
+                <h3 className="font-semibold text-sm text-admin-text">
                   Actas de Baja & Pérdidas por Merma
                 </h3>
                 <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 text-[10px] font-bold">
                   Auditoría Financiera
                 </Badge>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-admin-muted mt-0.5">
                 Control estricto de productos quebrados, averiados o defectuosos autorizados por supervisión.
               </p>
             </div>
@@ -1916,7 +1912,7 @@ export default function InventarioPage() {
                 setAdjustmentNotes("");
                 setIsAdjustmentModalOpen(true);
               }}
-              className="h-9 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold gap-1.5 cursor-pointer shadow-sm"
+              className="h-9 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold gap-1.5 cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Registrar Nueva Baja</span>
@@ -1926,7 +1922,7 @@ export default function InventarioPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                <tr className="border-b border-admin-card-border bg-admin-raised text-admin-muted font-bold uppercase tracking-wider text-[11px]">
                   <th className="py-3 px-4">Folio de Acta</th>
                   <th className="py-3 px-4">Fecha</th>
                   <th className="py-3 px-4">Producto Afectado</th>
@@ -1937,37 +1933,37 @@ export default function InventarioPage() {
                   <th className="py-3 px-4">Autorizado Por</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+              <tbody className="divide-y divide-admin-card-border text-admin-secondary">
                 {paginatedAdjustments.map((a) => (
-                  <tr key={a.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-black text-rose-600 dark:text-rose-400">
+                  <tr key={a.id} className="hover:bg-admin-raised transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-semibold text-rose-600 dark:text-rose-400">
                       {a.adjustmentNumber}
                     </td>
-                    <td className="py-3.5 px-4 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                    <td className="py-3.5 px-4 text-[11px] text-admin-muted font-mono">
                       {a.date}
                     </td>
                     <td className="py-3.5 px-4">
-                      <p className="font-bold text-slate-900 dark:text-white">{a.productName}</p>
+                      <p className="font-bold text-admin-text">{a.productName}</p>
                       <p className="text-[10px] text-slate-400 font-mono">{a.sku}</p>
                     </td>
                     <td className="py-3.5 px-4">
                       <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 text-[10px] font-bold">
                         {a.reasonLabel}
                       </Badge>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{a.notes}</p>
+                      <p className="text-[10px] text-admin-muted mt-0.5">{a.notes}</p>
                     </td>
-                    <td className="py-3.5 px-4 text-center font-black">
+                    <td className="py-3.5 px-4 text-center font-semibold">
                       <span className="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-mono">
                         {a.quantity} ud
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-black text-rose-600 dark:text-rose-400 text-sm">
+                    <td className="py-3.5 px-4 text-right font-mono font-semibold text-rose-600 dark:text-rose-400 text-sm">
                       {CURRENCY_SYMBOL} {a.totalLoss.toFixed(2)}
                     </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-300">
+                    <td className="py-3.5 px-4 font-bold text-admin-secondary">
                       {a.reportedBy}
                     </td>
-                    <td className="py-3.5 px-4 text-[var(--admin-brand)] font-black">
+                    <td className="py-3.5 px-4 text-admin-brand-text font-semibold">
                       ✓ {a.authorizedBy}
                     </td>
                   </tr>
@@ -1999,16 +1995,16 @@ export default function InventarioPage() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg sm:max-w-xl bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-300 cursor-default"
+            className="w-full max-w-lg sm:max-w-xl bg-admin-card-bg border-l border-admin-card-border h-full flex flex-col justify-between animate-in slide-in-from-right duration-300 cursor-default"
           >
             {/* Header del Drawer */}
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
+            <div className="p-5 border-b border-admin-card-border flex items-center justify-between bg-admin-raised">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-[var(--admin-brand)] text-white flex items-center justify-center shadow-sm">
+                <div className="h-10 w-10 rounded-xl bg-admin-brand text-white flex items-center justify-center">
                   <Package className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  <h2 className="text-base font-bold text-admin-text">
                     Detalles del Producto
                   </h2>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
@@ -2029,10 +2025,9 @@ export default function InventarioPage() {
             {/* Contenido con Scroll */}
             <div className="p-5 space-y-5 overflow-y-auto flex-1">
               {/* Fotografía e Identificación Principal con Formato 4:3 */}
-              <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-900/60 shadow-xs">
-                <div className="relative aspect-[4/3] w-full bg-slate-100 dark:bg-slate-800">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+              <div className="rounded-xl border border-admin-card-border overflow-hidden bg-admin-raised">
+                <div className="relative aspect-[4/3] w-full bg-admin-raised">
+                  <ProductThumbnail
                     src={selectedProductForDetails.image}
                     alt={selectedProductForDetails.name}
                     className="h-full w-full object-cover"
@@ -2040,7 +2035,7 @@ export default function InventarioPage() {
                   <div className="absolute top-3 left-3 flex items-center gap-2">
                     <Badge
                       className={cn(
-                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg shadow-sm border backdrop-blur-md",
+                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border backdrop-blur-md",
                         selectedProductForDetails.status === "in_stock"
                           ? "bg-emerald-500/90 text-white border-emerald-400"
                           : selectedProductForDetails.status === "low_stock"
@@ -2056,9 +2051,9 @@ export default function InventarioPage() {
                     </Badge>
                     <Badge
                       className={cn(
-                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg shadow-sm border backdrop-blur-md",
+                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border backdrop-blur-md",
                         (selectedProductForDetails.isActive ?? true)
-                          ? "bg-[var(--admin-brand)]/90 text-white border-sky-400"
+                          ? "bg-admin-brand/90 text-white border-admin-brand"
                           : "bg-slate-600/90 text-white border-slate-500"
                       )}
                     >
@@ -2068,10 +2063,10 @@ export default function InventarioPage() {
                 </div>
 
                 <div className="p-4">
-                  <span className="text-xs font-bold text-[var(--admin-brand)] block uppercase tracking-wider">
+                  <span className="text-xs font-bold text-admin-brand-text block uppercase tracking-wider">
                     {selectedProductForDetails.category}
                   </span>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1 leading-snug">
+                  <h3 className="text-base font-bold text-admin-text mt-1 leading-snug">
                     {selectedProductForDetails.name}
                   </h3>
                 </div>
@@ -2082,7 +2077,7 @@ export default function InventarioPage() {
                 <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block px-1">
                   Descripción del Producto
                 </span>
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                <div className="p-4 rounded-xl bg-admin-raised border border-admin-card-border text-xs text-admin-secondary leading-relaxed whitespace-pre-line">
                   {selectedProductForDetails.description && selectedProductForDetails.description.trim() ? (
                     selectedProductForDetails.description
                   ) : (
@@ -2097,23 +2092,23 @@ export default function InventarioPage() {
                   Valores Financieros
                 </span>
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
                     <span className="text-[10px] text-slate-400 font-medium block">Precio Venta</span>
                     <span className="text-base font-bold text-emerald-600 font-mono tracking-tight mt-0.5 block">
                       {CURRENCY_SYMBOL} {selectedProductForDetails.price.toFixed(2)}
                     </span>
                   </div>
 
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
                     <span className="text-[10px] text-slate-400 font-medium block">Costo Adquisición</span>
-                    <span className="text-base font-bold text-slate-700 dark:text-slate-300 font-mono tracking-tight mt-0.5 block">
+                    <span className="text-base font-bold text-admin-secondary font-mono tracking-tight mt-0.5 block">
                       {CURRENCY_SYMBOL} {selectedProductForDetails.costPrice.toFixed(2)}
                     </span>
                   </div>
 
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
                     <span className="text-[10px] text-slate-400 font-medium block">Margen Bruto</span>
-                    <span className="text-base font-bold text-[var(--admin-brand)] font-mono tracking-tight mt-0.5 block">
+                    <span className="text-base font-bold text-admin-brand-text font-mono tracking-tight mt-0.5 block">
                       {selectedProductForDetails.price > 0
                         ? (
                             ((selectedProductForDetails.price - selectedProductForDetails.costPrice) /
@@ -2133,14 +2128,14 @@ export default function InventarioPage() {
                   Existencias en Almacén
                 </span>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
                     <span className="text-[10px] text-slate-400 font-medium block">Stock Físico Actual</span>
-                    <span className="text-xl font-bold text-slate-900 dark:text-white font-mono mt-0.5 block">
+                    <span className="text-xl font-bold text-admin-text font-mono mt-0.5 block">
                       {selectedProductForDetails.stock}
                     </span>
                   </div>
 
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
                     <span className="text-[10px] text-slate-400 font-medium block">Alerta Stock Bajo</span>
                     <span className="text-xl font-bold text-amber-600 font-mono mt-0.5 block">
                       {selectedProductForDetails.minStock}
@@ -2149,12 +2144,12 @@ export default function InventarioPage() {
                 </div>
 
                 {/* Valorización en Bodega de este Producto */}
-                <div className="p-3.5 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200/60 dark:border-sky-800/50 flex items-center justify-between text-xs">
+                <div className="p-3.5 rounded-xl bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-between text-xs">
                   <div>
-                    <span className="text-[10px] text-[var(--admin-brand)] font-bold uppercase tracking-wider block">
+                    <span className="text-[10px] text-admin-brand-text font-bold uppercase tracking-wider block">
                       Valor Total en Bodega (Costo)
                     </span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">
+                    <span className="text-sm font-bold text-admin-text font-mono">
                       {CURRENCY_SYMBOL}{" "}
                       {(
                         selectedProductForDetails.stock * selectedProductForDetails.costPrice
@@ -2162,7 +2157,7 @@ export default function InventarioPage() {
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] text-[var(--admin-brand)] font-bold uppercase tracking-wider block">
+                    <span className="text-[10px] text-admin-brand-text font-bold uppercase tracking-wider block">
                       Potencial Venta
                     </span>
                     <span className="text-sm font-bold text-emerald-600 font-mono">
@@ -2177,7 +2172,7 @@ export default function InventarioPage() {
             </div>
 
             {/* Footer con Acciones */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between gap-2.5">
+            <div className="p-4 border-t border-admin-card-border bg-admin-raised flex items-center justify-between gap-2.5">
               <Button
                 variant="outline"
                 size="sm"
@@ -2196,7 +2191,7 @@ export default function InventarioPage() {
                     setSelectedProductForDetails(null);
                     setSelectedProductForKardex(prod);
                   }}
-                  className="rounded-xl text-xs font-semibold text-[var(--admin-brand)] gap-1.5 cursor-pointer"
+                  className="rounded-xl text-xs font-semibold text-admin-brand-text gap-1.5 cursor-pointer"
                 >
                   <BookOpen className="h-4 w-4" />
                   <span>Ver Kárdex</span>
@@ -2205,7 +2200,7 @@ export default function InventarioPage() {
                 <Link href={`/admin/inventario/${selectedProductForDetails.id}/editar`}>
                   <Button
                     size="sm"
-                    className="rounded-xl text-xs font-semibold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-1.5 shadow-sm cursor-pointer"
+                    className="rounded-xl text-xs font-semibold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
                   >
                     <Edit className="h-4 w-4" />
                     <span>Editar</span>
@@ -2228,17 +2223,17 @@ export default function InventarioPage() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-300 cursor-default"
+            className="w-full max-w-2xl bg-admin-card-bg border-l border-admin-card-border h-full flex flex-col justify-between animate-in slide-in-from-right duration-300 cursor-default"
           >
             {/* Header del Drawer */}
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
+            <div className="p-5 border-b border-admin-card-border flex items-center justify-between bg-admin-raised">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-[var(--admin-brand)] text-white flex items-center justify-center shadow-sm">
+                <div className="h-10 w-10 rounded-xl bg-admin-brand text-white flex items-center justify-center">
                   <BookOpen className="h-5 w-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-base font-black text-slate-900 dark:text-white">
+                    <h2 className="text-base font-semibold text-admin-text">
                       Kárdex de Producto
                     </h2>
                   </div>
@@ -2259,14 +2254,14 @@ export default function InventarioPage() {
             {/* Contenido con Scroll */}
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
               {/* Tarjeta Resumen del Producto */}
-              <div className="p-4 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex items-center gap-4">
-                <img
+              <div className="p-4 rounded-xl bg-admin-raised border border-admin-card-border flex items-center gap-4">
+                <ProductThumbnail
                   src={selectedProductForKardex.image}
                   alt={selectedProductForKardex.name}
-                  className="h-16 w-16 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm shrink-0"
+                  className="h-16 w-16 rounded-xl object-cover border border-admin-card-border shrink-0"
                 />
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-black text-sm text-slate-900 dark:text-white truncate">
+                  <h3 className="font-semibold text-sm text-admin-text truncate">
                     {selectedProductForKardex.name}
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
@@ -2276,22 +2271,22 @@ export default function InventarioPage() {
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 text-center">
+                  <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-admin-card-border text-center">
                     <div>
                       <span className="block text-[9px] uppercase font-mono text-slate-400">Stock Actual</span>
-                      <span className="font-black text-sm text-slate-900 dark:text-white">
+                      <span className="font-semibold text-sm text-admin-text">
                         {selectedProductForKardex.stock} uds
                       </span>
                     </div>
                     <div>
                       <span className="block text-[9px] uppercase font-mono text-slate-400">Costo Adquisición</span>
-                      <span className="font-black text-sm text-slate-700 dark:text-slate-300 font-mono">
+                      <span className="font-semibold text-sm text-admin-secondary font-mono">
                         {CURRENCY_SYMBOL} {selectedProductForKardex.costPrice.toFixed(2)}
                       </span>
                     </div>
                     <div>
                       <span className="block text-[9px] uppercase font-mono text-slate-400">Precio Venta</span>
-                      <span className="font-black text-sm text-emerald-600 font-mono">
+                      <span className="font-semibold text-sm text-emerald-600 font-mono">
                         {CURRENCY_SYMBOL} {selectedProductForKardex.price.toFixed(2)}
                       </span>
                     </div>
@@ -2302,7 +2297,7 @@ export default function InventarioPage() {
               {/* Historial de Movimientos de este Producto */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Historial Cronológico de Movimientos
                   </h4>
                   <span className="text-[11px] font-mono text-slate-400">
@@ -2311,8 +2306,8 @@ export default function InventarioPage() {
                 </div>
 
                 {loadingDrawerKardex ? (
-                  <div className="p-8 text-center flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-                    <Loader2 className="h-6 w-6 text-[var(--admin-brand)] animate-spin" />
+                  <div className="p-8 text-center flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-admin-card-border">
+                    <Loader2 className="h-6 w-6 text-admin-brand-text animate-spin" />
                     <span className="text-xs text-slate-500 font-bold">Cargando movimientos...</span>
                   </div>
                 ) : productSpecificKardex.length > 0 ? (
@@ -2320,7 +2315,7 @@ export default function InventarioPage() {
                     {productSpecificKardex.map((item) => (
                       <div
                         key={item.id}
-                        className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs space-y-2"
+                        className="p-3.5 rounded-xl bg-admin-card-bg border border-admin-card-border space-y-2"
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-mono text-slate-500">{item.date}</span>
@@ -2331,7 +2326,7 @@ export default function InventarioPage() {
                                 item.type === "purchase_in" || item.typeLabel.includes("Apertura")
                                   ? "bg-emerald-500"
                                   : item.type === "sale_out"
-                                  ? "bg-[var(--admin-brand)]"
+                                  ? "bg-admin-brand"
                                   : item.typeLabel.includes("Anulación")
                                   ? "bg-amber-500"
                                   : "bg-rose-500"
@@ -2342,7 +2337,7 @@ export default function InventarioPage() {
                                 item.type === "purchase_in" || item.typeLabel.includes("Apertura")
                                   ? "text-emerald-700 dark:text-emerald-300"
                                   : item.type === "sale_out"
-                                  ? "text-[var(--admin-brand)] dark:text-sky-300"
+                                  ? "text-admin-brand-text"
                                   : item.typeLabel.includes("Anulación")
                                   ? "text-amber-700 dark:text-amber-300"
                                   : "text-rose-700 dark:text-rose-300"
@@ -2365,8 +2360,8 @@ export default function InventarioPage() {
                             <span className="text-xs text-slate-400">Variación:</span>
                             <p
                               className={cn(
-                                "font-mono font-black text-xs",
-                                item.quantity > 0 ? "text-emerald-600" : "text-slate-900 dark:text-white"
+                                "font-mono font-semibold text-xs",
+                                item.quantity > 0 ? "text-emerald-600" : "text-admin-text"
                               )}
                             >
                               {item.quantity > 0 ? `+${item.quantity}` : item.quantity} uds
@@ -2375,19 +2370,19 @@ export default function InventarioPage() {
 
                           <div className="text-right">
                             <span className="text-xs text-slate-400">Saldo Resultante:</span>
-                            <p className="font-mono font-black text-xs text-[var(--admin-brand)]">
+                            <p className="font-mono font-semibold text-xs text-admin-brand-text">
                               {item.newStock} uds
                             </p>
                           </div>
                         </div>
 
                         {item.reason && (
-                          <p className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-950/60 p-2 rounded-xl border border-slate-100 dark:border-slate-800/80 leading-relaxed">
+                          <p className="text-[10px] text-admin-muted bg-admin-raised p-2 rounded-xl border border-admin-card-border leading-relaxed">
                             {item.reason}
                           </p>
                         )}
 
-                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                        <div className="pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-slate-400">
                           <span>Operador: {item.user}</span>
                           <span>Costo Unit: {CURRENCY_SYMBOL} {item.unitCost.toFixed(2)}</span>
                         </div>
@@ -2395,7 +2390,7 @@ export default function InventarioPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 text-xs">
+                  <div className="p-8 text-center rounded-xl border border-dashed border-admin-card-border text-slate-400 text-xs">
                     No se registran movimientos recientes de kárdex para este ítem.
                   </div>
                 )}
@@ -2403,7 +2398,7 @@ export default function InventarioPage() {
             </div>
 
             {/* Footer del Drawer */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between">
+            <div className="p-4 border-t border-admin-card-border bg-admin-raised flex items-center justify-between">
               <Button
                 variant="outline"
                 size="sm"
@@ -2415,7 +2410,7 @@ export default function InventarioPage() {
 
               <Button
                 size="sm"
-                className="rounded-xl h-10 text-xs font-bold bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white gap-2 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
+                className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-2 cursor-pointer"
                 onClick={() =>
                   toast.success("Ficha de Auditoría exportada", {
                     description: "El reporte oficial del Kárdex CPP fue generado exitosamente.",
@@ -2434,7 +2429,7 @@ export default function InventarioPage() {
           MODAL: GESTIÓN CENTRALIZADA DE CATEGORÍAS (OPCIÓN B)
           ========================================================================= */}
       <Dialog open={isCategoryModalOpen} onOpenChange={setIsCategoryModalOpen}>
-        <DialogContent className="sm:max-w-xl rounded-3xl p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
+        <DialogContent className="sm:max-w-xl rounded-xl p-6 bg-admin-card-bg border border-admin-card-border">
           <input
             type="file"
             ref={newCatFileInputRef}
@@ -2452,14 +2447,14 @@ export default function InventarioPage() {
 
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-center text-[var(--admin-brand)]">
+              <div className="h-10 w-10 rounded-xl bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-center text-admin-brand-text">
                 <FolderTree className="h-5 w-5" />
               </div>
               <div>
-                <DialogTitle className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                <DialogTitle className="text-lg font-semibold text-admin-text tracking-tight">
                   Gestión de Categorías
                 </DialogTitle>
-                <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+                <DialogDescription className="text-xs text-admin-muted">
                   Crea, renombra o añade fotos para la Tienda Online.
                 </DialogDescription>
               </div>
@@ -2476,7 +2471,7 @@ export default function InventarioPage() {
                   <img
                     src={newCategoryImage}
                     alt="Previsualización"
-                    className="h-10 w-10 rounded-xl object-cover border-2 border-[var(--admin-brand)] shadow-sm"
+                    className="h-10 w-10 rounded-xl object-cover border-2 border-admin-brand"
                   />
                   <button
                     type="button"
@@ -2493,10 +2488,10 @@ export default function InventarioPage() {
                   onClick={() => newCatFileInputRef.current?.click()}
                   disabled={isUploadingCatImage}
                   title="Subir foto para Tienda Online (se optimiza a WebP)"
-                  className="h-10 px-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-[var(--admin-brand)] hover:bg-sky-50/50 dark:hover:bg-sky-950/30 text-slate-500 hover:text-[var(--admin-brand)] flex items-center gap-1.5 text-xs font-semibold shrink-0 cursor-pointer transition-colors disabled:opacity-50"
+                  className="h-10 px-2.5 rounded-xl border border-dashed border-admin-card-border hover:border-admin-brand hover:bg-admin-brand-subtle text-slate-500 hover:text-admin-brand-text flex items-center gap-1.5 text-xs font-semibold shrink-0 cursor-pointer transition-colors disabled:opacity-50"
                 >
                   {isUploadingCatImage ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-[var(--admin-brand)]" />
+                    <Loader2 className="h-4 w-4 animate-spin text-admin-brand-text" />
                   ) : (
                     <Camera className="h-4 w-4" />
                   )}
@@ -2515,7 +2510,7 @@ export default function InventarioPage() {
                 type="submit"
                 size="sm"
                 disabled={isUploadingCatImage}
-                className="h-10 px-5 rounded-xl bg-[var(--admin-brand)] hover:bg-[var(--admin-brand-hover)] text-white font-black text-xs gap-1.5 shrink-0 cursor-pointer shadow-md shadow-[var(--admin-brand)]/20"
+                className="h-10 px-5 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid font-semibold text-xs gap-1.5 shrink-0 cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
                 <span>Crear</span>
@@ -2525,11 +2520,11 @@ export default function InventarioPage() {
 
           {/* Diálogo de Confirmación para Eliminar Categoría */}
           {categoryToDelete && (
-            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 space-y-2.5 animate-in fade-in-50 duration-150">
+            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 space-y-2.5 animate-in fade-in-50 duration-150">
               <div className="flex items-start gap-2.5 text-rose-900 dark:text-rose-200">
                 <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-black">
+                  <p className="text-xs font-semibold">
                     ¿Eliminar la categoría "{categoryToDelete}"?
                   </p>
                   <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5 leading-tight">
@@ -2551,7 +2546,7 @@ export default function InventarioPage() {
                   type="button"
                   size="sm"
                   onClick={handleConfirmDeleteCategory}
-                  className="h-8 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black"
+                  className="h-8 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold"
                 >
                   Confirmar Eliminación y Reasignar
                 </Button>
@@ -2573,7 +2568,7 @@ export default function InventarioPage() {
               return (
                 <div
                   key={cat}
-                  className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between gap-3"
+                  className="p-3 rounded-xl border border-admin-card-border bg-admin-raised flex items-center justify-between gap-3"
                 >
                   {isEditing ? (
                     <div className="flex items-center gap-2 flex-1">
@@ -2631,7 +2626,7 @@ export default function InventarioPage() {
                             handleSaveEditCategory(cat);
                           }
                         }}
-                        className="h-8 text-xs rounded-lg bg-white dark:bg-slate-900 font-bold"
+                        className="h-8 text-xs rounded-lg bg-admin-card-bg font-bold"
                         autoFocus
                       />
                       <Button
@@ -2658,21 +2653,21 @@ export default function InventarioPage() {
                           <img
                             src={catData.imageUrl}
                             alt={cat}
-                            className="h-9 w-9 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm"
+                            className="h-9 w-9 rounded-xl object-cover border border-admin-card-border shrink-0"
                           />
                         ) : (
-                          <div className="h-9 w-9 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-center text-slate-400 dark:text-slate-500 shrink-0">
+                          <div className="h-9 w-9 rounded-xl bg-admin-raised border border-admin-card-border flex items-center justify-center text-admin-muted shrink-0">
                             <Tag className="h-4 w-4" />
                           </div>
                         )}
 
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-900 dark:text-white">
+                          <span className="text-xs font-semibold text-admin-text">
                             {cat}
                           </span>
                           <Badge
                             variant="outline"
-                            className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                            className="text-[10px] font-mono font-medium text-admin-muted border-admin-card-border"
                           >
                             {productCount} {productCount === 1 ? "artículo" : "artículos"}
                           </Badge>
@@ -2682,7 +2677,7 @@ export default function InventarioPage() {
                             </Badge>
                           )}
                           {isDefault && (
-                            <Badge className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[9px] font-bold">
+                            <Badge className="bg-slate-200 dark:bg-slate-700 text-admin-secondary text-[9px] font-bold">
                               Por Defecto
                             </Badge>
                           )}
@@ -2701,7 +2696,7 @@ export default function InventarioPage() {
                               })
                             }
                             title="Editar nombre y foto"
-                            className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-amber-50 hover:border-amber-300 text-slate-500 hover:text-amber-600 flex items-center justify-center cursor-pointer transition-colors"
+                            className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-amber-50 hover:border-amber-300 text-slate-500 hover:text-amber-600 flex items-center justify-center cursor-pointer transition-colors"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
@@ -2709,7 +2704,7 @@ export default function InventarioPage() {
                             type="button"
                             onClick={() => setCategoryToDelete(cat)}
                             title="Eliminar categoría"
-                            className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-rose-50 hover:border-rose-300 text-slate-500 hover:text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
+                            className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-rose-50 hover:border-rose-300 text-slate-500 hover:text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -2722,7 +2717,7 @@ export default function InventarioPage() {
             })}
           </div>
 
-          <DialogFooter className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <DialogFooter className="pt-2 border-t border-admin-card-border">
             <Button
               variant="outline"
               size="sm"
@@ -2743,17 +2738,17 @@ export default function InventarioPage() {
           MODAL: REGISTRAR ACTA FORMAL DE BAJA & MERMA EN KÁRDEX
           ========================================================================= */}
       <Dialog open={isAdjustmentModalOpen} onOpenChange={setIsAdjustmentModalOpen}>
-        <DialogContent className="sm:max-w-lg rounded-3xl p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
+        <DialogContent className="sm:max-w-lg rounded-xl p-6 bg-admin-card-bg border border-admin-card-border">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 flex items-center justify-center text-rose-600 dark:text-rose-400">
+              <div className="h-10 w-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 flex items-center justify-center text-rose-600 dark:text-rose-400">
                 <ShieldAlert className="h-5 w-5" />
               </div>
               <div>
-                <DialogTitle className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                <DialogTitle className="text-lg font-semibold text-admin-text tracking-tight">
                   Registrar Acta de Baja & Merma
                 </DialogTitle>
-                <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+                <DialogDescription className="text-xs text-admin-muted">
                   Descuenta existencias físicas y asienta la salida por daño en el Kárdex contable.
                 </DialogDescription>
               </div>
@@ -2763,13 +2758,13 @@ export default function InventarioPage() {
           <form onSubmit={handleConfirmAdjustment} className="space-y-4 pt-2">
             {/* 1. Selector de Producto Afectado */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-admin-secondary">
                 Producto Afectado *
               </label>
               <select
                 value={adjustmentProductId ?? ""}
                 onChange={(e) => setAdjustmentProductId(Number(e.target.value) || null)}
-                className="w-full h-10 px-3 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold cursor-pointer"
+                className="w-full h-10 px-3 text-xs rounded-lg border border-admin-card-border bg-admin-card-bg text-admin-text font-bold cursor-pointer"
                 required
               >
                 <option value="">-- Selecciona el producto con merma --</option>
@@ -2784,16 +2779,16 @@ export default function InventarioPage() {
 
             {/* Ficha Resumen del Producto Seleccionado */}
             {selectedProdForAdjustment && (
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700 flex items-center justify-between text-xs">
+              <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border flex items-center justify-between text-xs">
                 <div>
                   <span className="text-[11px] text-slate-400 font-mono">SKU: {selectedProdForAdjustment.sku}</span>
                   <p className="font-bold text-slate-800 dark:text-slate-200">
-                    Stock disponible: <span className="font-mono text-[var(--admin-brand)] font-bold">{selectedProdForAdjustment.stock} uds</span>
+                    Stock disponible: <span className="font-mono text-admin-brand-text font-bold">{selectedProdForAdjustment.stock} uds</span>
                   </p>
                 </div>
                 <div className="text-right">
                   <span className="text-[11px] text-slate-400">Pérdida monetaria</span>
-                  <p className="font-mono font-black text-rose-600 dark:text-rose-400 text-sm">
+                  <p className="font-mono font-semibold text-rose-600 dark:text-rose-400 text-sm">
                     {CURRENCY_SYMBOL} {(selectedProdForAdjustment.costPrice * (parseInt(adjustmentQuantity, 10) || 0)).toFixed(2)}
                   </p>
                 </div>
@@ -2803,7 +2798,7 @@ export default function InventarioPage() {
             {/* 2. Cantidad y Causa */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="text-xs font-bold text-admin-secondary">
                   Unidades a dar de baja *
                 </label>
                 <Input
@@ -2818,7 +2813,7 @@ export default function InventarioPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <label className="text-xs font-bold text-admin-secondary">
                   Causa / Justificación *
                 </label>
                 <select
@@ -2828,7 +2823,7 @@ export default function InventarioPage() {
                       e.target.value as "damaged" | "defective" | "expired" | "loss_theft" | "supplier_return" | "internal_use"
                     )
                   }
-                  className="w-full h-10 px-3 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold cursor-pointer"
+                  className="w-full h-10 px-3 text-xs rounded-lg border border-admin-card-border bg-admin-card-bg text-admin-text font-bold cursor-pointer"
                 >
                   <option value="damaged">Rotura física / Daño en bodega</option>
                   <option value="defective">Falla de fábrica (Garantía)</option>
@@ -2842,7 +2837,7 @@ export default function InventarioPage() {
 
             {/* 3. Observaciones / Detalle */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label className="text-xs font-bold text-admin-secondary">
                 Detalle del Incidente / Acta *
               </label>
               <textarea
@@ -2850,20 +2845,20 @@ export default function InventarioPage() {
                 placeholder="Ej: Auricular con caja rota por caída; no enciende al probarlo..."
                 value={adjustmentNotes}
                 onChange={(e) => setAdjustmentNotes(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-admin-card-border bg-admin-card-bg text-admin-text placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
                 required
               />
             </div>
 
             {/* Alerta de Auditoría Contable */}
-            <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-[11px] text-rose-800 dark:text-rose-300 leading-tight">
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-[11px] text-rose-800 dark:text-rose-300 leading-tight">
               <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
               <span>
                 Esta acción generará un asiento formal <strong>inmutable</strong> en el Kárdex (tipo <code>damaged_out</code>) y restará el stock inmediatamente en la base de datos.
               </span>
             </div>
 
-            <DialogFooter className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+            <DialogFooter className="pt-2 border-t border-admin-card-border flex items-center justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -2877,7 +2872,7 @@ export default function InventarioPage() {
                 type="submit"
                 size="sm"
                 disabled={isSubmittingAdjustment || !adjustmentProductId}
-                className="rounded-lg h-9 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white gap-2 shadow-sm cursor-pointer disabled:opacity-50"
+                className="rounded-lg h-9 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isSubmittingAdjustment ? (
                   <>

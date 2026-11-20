@@ -26,7 +26,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-async function ProductDataLoader({ slug }: { slug: string }) {
+async function ProductDataLoader({ params }: PageProps) {
+  const { slug } = await params;
   const product = await getStoreProductBySlug(slug);
 
   if (!product) {
@@ -41,9 +42,7 @@ async function ProductDataLoader({ slug }: { slug: string }) {
   return <ProductDetailClient product={product} relatedProducts={relatedProducts} />;
 }
 
-export default async function ProductDetailPage({ params }: PageProps) {
-  const { slug } = await params;
-
+export default function ProductDetailPage({ params }: PageProps) {
   return (
     <Suspense
       fallback={
@@ -57,7 +56,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
         </div>
       }
     >
-      <ProductDataLoader slug={slug} />
+      <ProductDataLoader params={params} />
     </Suspense>
   );
 }

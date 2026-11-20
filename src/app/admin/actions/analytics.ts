@@ -1,8 +1,10 @@
 "use server";
 
+import { adminActionError } from "@/lib/admin-action-error";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { and, gte, lte, desc, eq } from "drizzle-orm";
+import { and, gte, lt, desc, eq } from "drizzle-orm";
+import { businessDate, businessDayStart, addBusinessDays } from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
 
 export interface AnalyticsDailyItem {
@@ -101,14 +103,18 @@ export async function getPeriodAnalyticsAction(
   try {
     await requireRole(["admin", "manager"]);
 
-    const startOfDay = new Date(`${startDateStr}T00:00:00.000Z`);
-    const endOfDay = new Date(`${endDateStr}T23:59:59.999Z`);
+    const startOfDay = businessDayStart(startDateStr);
+    const endOfDay = addBusinessDays(businessDayStart(endDateStr), 1);
+
+    if (startOfDay >= endOfDay || endOfDay > addBusinessDays(startOfDay, 366)) {
+      return { success: false, error: "Selecciona un rango de entre 1 y 366 días." };
+    }
 
     // Consultar todas las ventas del rango
     const sales = await db.query.sales.findMany({
       where: and(
         gte(schema.sales.createdAt, startOfDay),
-        lte(schema.sales.createdAt, endOfDay)
+        lt(schema.sales.createdAt, endOfDay)
       ),
       with: {
         items: {
@@ -155,15 +161,10 @@ export async function getPeriodAnalyticsAction(
     const formattedSalesList: PeriodAnalyticsData["sales"] = [];
 
     // Inicializar mapa de días en el rango para que los días con 0 ventas aparezcan en el gráfico
-    const curr = new Date(startOfDay);
-    const end = new Date(endOfDay);
-    const maxDays = 366;
-    let daysIterated = 0;
-
-    while (curr <= end && daysIterated < maxDays) {
-      const dayKey = curr.toISOString().split("T")[0];
-      const dayLabel = curr.toLocaleDateString("es-BO", { weekday: "short" });
-      const formattedDate = curr.toLocaleDateString("es-BO", { day: "2-digit", month: "short" });
+    for (let curr = startOfDay; curr < endOfDay; curr = addBusinessDays(curr, 1)) {
+      const dayKey = businessDate(curr);
+      const dayLabel = curr.toLocaleDateString("es-BO", { weekday: "short", timeZone: "America/La_Paz" });
+      const formattedDate = curr.toLocaleDateString("es-BO", { day: "2-digit", month: "short", timeZone: "America/La_Paz" });
 
       dailyMap.set(dayKey, {
         date: dayKey,
@@ -177,8 +178,6 @@ export async function getPeriodAnalyticsAction(
         salesCount: 0,
       });
 
-      curr.setDate(curr.getDate() + 1);
-      daysIterated += 1;
     }
 
     for (const s of sales) {
@@ -240,7 +239,7 @@ export async function getPeriodAnalyticsAction(
       }
 
       // Distribución diaria
-      const saleDayKey = s.createdAt.toISOString().split("T")[0];
+      const saleDayKey = businessDate(s.createdAt);
       const dayRecord = dailyMap.get(saleDayKey);
       if (dayRecord && s.status !== "cancelled") {
         dayRecord.grossSales += origTotal;
@@ -359,11 +358,10 @@ export async function getPeriodAnalyticsAction(
         sales: formattedSalesList,
       },
     };
-  } catch (error: any) {
-    console.error("Error al calcular analítica periódica:", error);
+  } catch (error) {
     return {
       success: false,
-      error: error.message || "Error al calcular el reporte de periodo.",
+      error: adminActionError(error, "Error al calcular el reporte de periodo."),
     };
   }
 }

@@ -10,7 +10,7 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
       {/* =========================================================================
           CABECERA DE ACCIÓN Y TÍTULO (SKELETON)
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200/80 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-admin-card-border">
         <div className="flex items-center gap-3">
           <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
           <div className="space-y-1.5">
@@ -28,10 +28,10 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
       {/* =========================================================================
           FILA 1: INFORMACIÓN PRINCIPAL (SKELETON)
           ========================================================================= */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-5">
+        <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[var(--admin-brand)]/50" />
+            <span className="h-2 w-2 rounded-full bg-admin-brand/50" />
             <Skeleton className="h-5 w-44 rounded-lg" />
           </div>
           <Skeleton className="h-3 w-48 rounded-md" />
@@ -43,18 +43,18 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
           <div className="md:col-span-5 space-y-4">
             <div className="space-y-1.5">
               <Skeleton className="h-4 w-32 rounded-md" />
-              <Skeleton className="aspect-[4/3] w-full rounded-2xl" />
+              <Skeleton className="aspect-[4/3] w-full rounded-xl" />
               <Skeleton className="h-3 w-48 rounded-md" />
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="space-y-2 pt-2 border-t border-admin-card-border">
               <div className="flex justify-between">
                 <Skeleton className="h-3 w-32 rounded-md" />
                 <Skeleton className="h-3 w-10 rounded-md" />
               </div>
               <div className="grid grid-cols-4 gap-2.5">
                 {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="aspect-square rounded-2xl" />
+                  <Skeleton key={i} className="aspect-square rounded-xl" />
                 ))}
               </div>
             </div>
@@ -65,7 +65,7 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
             {/* Nombre del Producto */}
             <div className="space-y-1.5">
               <Skeleton className="h-4 w-40 rounded-md" />
-              <Skeleton className="h-12 w-full rounded-2xl" />
+              <Skeleton className="h-12 w-full rounded-xl" />
               <Skeleton className="h-3 w-64 rounded-md" />
             </div>
 
@@ -75,7 +75,7 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
                 <Skeleton className="h-4 w-36 rounded-md" />
                 <Skeleton className="h-3 w-28 rounded-md" />
               </div>
-              <Skeleton className="h-11 w-full rounded-2xl" />
+              <Skeleton className="h-11 w-full rounded-xl" />
               <Skeleton className="h-3 w-72 rounded-md" />
             </div>
 
@@ -85,7 +85,7 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
                 <Skeleton className="h-4 w-44 rounded-md" />
                 <Skeleton className="h-3 w-20 rounded-md" />
               </div>
-              <Skeleton className="h-32 w-full rounded-2xl" />
+              <Skeleton className="h-32 w-full rounded-xl" />
               <Skeleton className="h-3 w-56 rounded-md" />
             </div>
           </div>
@@ -95,8 +95,8 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
       {/* =========================================================================
           FILA 2: PRECIOS & RENTABILIDAD COMERCIAL (SKELETON)
           ========================================================================= */}
-      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-5">
+        <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
           <div className="flex items-center gap-2">
             <Skeleton className="h-4 w-4 rounded-md" />
             <Skeleton className="h-5 w-60 rounded-lg" />
@@ -107,19 +107,19 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div className="space-y-1.5">
             <Skeleton className="h-4 w-48 rounded-md" />
-            <Skeleton className="h-12 w-full rounded-2xl" />
+            <Skeleton className="h-12 w-full rounded-xl" />
             <Skeleton className="h-3 w-56 rounded-md" />
           </div>
 
           <div className="space-y-1.5">
             <Skeleton className="h-4 w-48 rounded-md" />
-            <Skeleton className="h-12 w-full rounded-2xl" />
+            <Skeleton className="h-12 w-full rounded-xl" />
             <Skeleton className="h-3 w-64 rounded-md" />
           </div>
         </div>
 
         {/* Widget Financiero */}
-        <Skeleton className="h-20 w-full rounded-2xl" />
+        <Skeleton className="h-20 w-full rounded-xl" />
       </div>
 
       {/* =========================================================================
@@ -127,8 +127,8 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
           ========================================================================= */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Bloque Izquierdo: Inventario & Abastecimiento */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-4">
+          <div className="flex items-center gap-2 border-b border-admin-card-border pb-3">
             <Skeleton className="h-4 w-4 rounded-md" />
             <Skeleton className="h-4 w-48 rounded-lg" />
           </div>
@@ -147,7 +147,7 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
               </div>
             </div>
 
-            <div className="space-y-1.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="space-y-1.5 pt-3 border-t border-admin-card-border">
               <div className="flex justify-between">
                 <Skeleton className="h-4 w-36 rounded-md" />
                 <Skeleton className="h-3 w-20 rounded-md" />
@@ -159,8 +159,8 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
         </div>
 
         {/* Bloque Derecho: Operación & Canales */}
-        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div className="rounded-xl bg-admin-card-bg border border-admin-card-border p-6 space-y-4">
+          <div className="flex items-center gap-2 border-b border-admin-card-border pb-3">
             <Skeleton className="h-4 w-4 rounded-md" />
             <Skeleton className="h-4 w-48 rounded-lg" />
           </div>
@@ -169,14 +169,14 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
             {/* Estado Operativo */}
             <div className="space-y-2">
               <Skeleton className="h-4 w-32 rounded-md" />
-              <Skeleton className="h-12 w-full rounded-2xl" />
+              <Skeleton className="h-12 w-full rounded-xl" />
             </div>
 
             {/* Canales Web */}
-            <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="space-y-2.5 pt-3 border-t border-admin-card-border">
               <Skeleton className="h-4 w-36 rounded-md" />
-              <Skeleton className="h-14 w-full rounded-2xl" />
-              <Skeleton className="h-14 w-full rounded-2xl" />
+              <Skeleton className="h-14 w-full rounded-xl" />
+              <Skeleton className="h-14 w-full rounded-xl" />
             </div>
           </div>
         </div>
@@ -185,7 +185,7 @@ export function ProductFormSkeleton({ isEdit = false }: ProductFormSkeletonProps
       {/* =========================================================================
           BARRA INFERIOR (SKELETON)
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200/80 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-admin-card-border">
         <Skeleton className="h-4 w-64 rounded-md" />
         <div className="flex items-center gap-2.5">
           <Skeleton className="h-10 w-24 rounded-xl" />

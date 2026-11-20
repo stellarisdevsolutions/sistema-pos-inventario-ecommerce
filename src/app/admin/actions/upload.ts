@@ -1,85 +1,46 @@
 "use server";
 
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { existsSync } from "fs";
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { requireRole } from "@/lib/auth/session";
 
-export type UploadResult = {
-  success: boolean;
-  url?: string;
-  error?: string;
-};
+export type UploadResult = { success: boolean; url?: string; error?: string };
 
-/**
- * Server Action: Recibe el archivo físico optimizado en WebP y lo guarda
- * en el servidor de archivos (public/uploads/products) para servicio estático inmediato.
- */
-export async function uploadProductImageAction(formData: FormData): Promise<UploadResult> {
+const MAX_IMAGE_BYTES = 1024 * 1024;
+
+async function uploadImage(formData: FormData, folder: "products" | "categories"): Promise<UploadResult> {
   try {
-    const file = formData.get("file") as File | null;
-    if (!file) {
-      return { success: false, error: "No se proporcionó ningún archivo de imagen." };
+    await requireRole(["admin", "manager", "warehouse"]);
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.type !== "image/webp" ||
+        file.size < 20 || file.size > MAX_IMAGE_BYTES) {
+      return { success: false, error: "Selecciona una imagen WebP de hasta 1 MB." };
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    // Directorio físico de destino: public/uploads/products
-    const uploadDir = join(process.cwd(), "public", "uploads", "products");
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
+    const bytes = Buffer.from(await file.arrayBuffer());
+    if (bytes.toString("ascii", 0, 4) !== "RIFF" ||
+        bytes.toString("ascii", 8, 12) !== "WEBP" ||
+        bytes.readUInt32LE(4) !== bytes.length - 8 ||
+        !["VP8 ", "VP8L", "VP8X"].includes(bytes.toString("ascii", 12, 16))) {
+      return { success: false, error: "El archivo no tiene una cabecera WebP válida." };
     }
 
-    const timestamp = Date.now();
-    const randomHex = Math.random().toString(36).substring(2, 7);
-    const fileName = `prod-${timestamp}-${randomHex}.webp`;
-    const fullPath = join(uploadDir, fileName);
+    const directory = join(process.cwd(), "public", "uploads", folder);
+    const name = `${randomUUID()}.webp`;
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, name), bytes, { flag: "wx" });
 
-    await writeFile(fullPath, buffer);
-
-    const publicUrl = `/uploads/products/${fileName}`;
-    return { success: true, url: publicUrl };
-  } catch (error: any) {
-    console.error("Error al guardar archivo físico de imagen:", error);
-    return {
-      success: false,
-      error: error.message || "Error al procesar y almacenar la imagen en el servidor.",
-    };
+    return { success: true, url: `/uploads/${folder}/${name}` };
+  } catch {
+    return { success: false, error: "No se pudo guardar la imagen." };
   }
 }
 
-/**
- * Server Action: Recibe imagen para Categoría (WebP) y la guarda en public/uploads/categories
- */
+export async function uploadProductImageAction(formData: FormData): Promise<UploadResult> {
+  return uploadImage(formData, "products");
+}
+
 export async function uploadCategoryPhotoAction(formData: FormData): Promise<UploadResult> {
-  try {
-    const file = formData.get("file") as File | null;
-    if (!file) {
-      return { success: false, error: "No se proporcionó ningún archivo de imagen para la categoría." };
-    }
-
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    const uploadDir = join(process.cwd(), "public", "uploads", "categories");
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
-    }
-
-    const timestamp = Date.now();
-    const randomHex = Math.random().toString(36).substring(2, 7);
-    const fileName = `cat-${timestamp}-${randomHex}.webp`;
-    const fullPath = join(uploadDir, fileName);
-
-    await writeFile(fullPath, buffer);
-
-    const publicUrl = `/uploads/categories/${fileName}`;
-    return { success: true, url: publicUrl };
-  } catch (error: any) {
-    console.error("Error al guardar foto de categoría:", error);
-    return {
-      success: false,
-      error: error.message || "Error al guardar foto de categoría.",
-    };
-  }
+  return uploadImage(formData, "categories");
 }
