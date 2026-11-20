@@ -73,8 +73,8 @@ test("PBKDF2 verifica contraseñas válidas y rechaza registros sin hash", () =>
   assert.equal(verifyPassword(password, password), false);
 });
 
-test("las cuentas de prueba requieren activación explícita y un registro de semilla", (t) => {
-  const keys = ["NODE_ENV", "ENABLE_DEMO_LOGIN", "VERCEL_ENV", "ENABLE_DEPLOYED_DEMO_LOGIN"] as const;
+test("las cuentas de prueba están disponibles en desarrollo y en el Preview de mejoras-panel-admin", (t) => {
+  const keys = ["NODE_ENV", "ENABLE_DEMO_LOGIN", "VERCEL_ENV", "VERCEL_GIT_COMMIT_REF"] as const;
   const previous = keys.map((name) => [name, process.env[name]] as const);
   t.after(() => {
     for (const [name, value] of previous) {
@@ -86,14 +86,16 @@ test("las cuentas de prueba requieren activación explícita y un registro de se
   const demo = ["cajera@aurastudio.com", "password123", "$2b$10$hashedpasswordforcashier"] as const;
   process.env.ENABLE_DEMO_LOGIN = "1";
   process.env.VERCEL_ENV = "production";
-  delete process.env.ENABLE_DEPLOYED_DEMO_LOGIN;
+  process.env.VERCEL_GIT_COMMIT_REF = "mejoras-panel-admin";
   Reflect.set(process.env, "NODE_ENV", "production");
   assert.equal(verifyDemoLogin(...demo), false);
   assert.equal(getDemoLoginOptions(), null);
-  process.env.ENABLE_DEPLOYED_DEMO_LOGIN = "1";
+  process.env.VERCEL_ENV = "preview";
   assert.equal(verifyDemoLogin(...demo), true);
   assert.equal(getDemoLoginOptions()?.accounts.length, 4);
-  process.env.VERCEL_ENV = "preview";
+  assert.equal(verifyDemoLogin(demo[0], demo[1], "different-hash"), false);
+
+  process.env.VERCEL_GIT_COMMIT_REF = "otra-rama";
   assert.equal(verifyDemoLogin(...demo), false);
   assert.equal(getDemoLoginOptions(), null);
 
