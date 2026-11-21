@@ -3,7 +3,7 @@
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { automaticSku, createCatalogProductsQuery } from "@/db/operations/catalog";
+import { automaticModelCode, automaticSku, createCatalogProductsQuery, type CatalogEntry } from "@/db/operations/catalog";
 import { productName } from "@/lib/product-name";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
 import { businessDate } from "@/lib/business-date";
@@ -12,6 +12,8 @@ import * as schema from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import {
   productFormSchema,
+  productOptionsSchema,
+  type ProductOptionInput,
   productDbInsertSchema,
   slugify,
   type ProductFormInput,
@@ -100,6 +102,14 @@ export async function getInventoryFormData() {
   }
 }
 
+export async function getProductModelsForForm() {
+  await requireRole(["admin", "manager", "warehouse"]);
+  return db.query.productModels.findMany({
+    columns: { code: true, name: true, variantSelector: true },
+    orderBy: (model, { asc }) => [asc(model.name), asc(model.code)],
+  });
+}
+
 /**
  * Obtiene un producto por su ID para precargar el formulario de edición
  */
@@ -127,37 +137,62 @@ export async function getProductById(id: number) {
 /**
  * Server Action: Crear un nuevo producto en Neon DB y registrar Kárdex inicial
  */
-export async function createProductAction(input: ProductFormInput): Promise<ActionResult> {
+export async function createProductAction(input: ProductFormInput, options?: ProductOptionInput[]): Promise<ActionResult> {
   try {
     const currentUser = await requireRole(["admin", "manager", "warehouse"]);
+    let entries: CatalogEntry[];
 
-    // 1. Validar datos con Zod
-    const validated = productFormSchema.safeParse(input);
-    if (!validated.success) {
-      const errorMsg = validated.error.issues[0]?.message || "Datos inválidos en el formulario.";
-      return { success: false, error: errorMsg };
+    if (options === undefined) {
+      const validated = productFormSchema.safeParse(input);
+      if (!validated.success) return { success: false, error: validated.error.issues[0]?.message };
+      entries = [{ ...productDbInsertSchema.parse(validated.data), variantSelector: validated.data.variantSelector || null }];
+    } else {
+      const validated = productOptionsSchema.safeParse(options);
+      if (!validated.success) {
+        const issue = validated.error.issues[0];
+        const prefix = typeof issue.path[0] === "number" ? `Opción ${issue.path[0] + 1}. ` : "";
+        return { success: false, error: prefix + issue.message };
+      }
+
+      const existingCode = input.modelCode?.trim().toUpperCase();
+      const model = existingCode ? await db.query.productModels.findFirst({ where: eq(schema.productModels.code, existingCode) }) : undefined;
+      if (existingCode && !model) return { success: false, error: "El modelo seleccionado ya no está disponible." };
+      const modelCode = model?.code ?? automaticModelCode();
+      entries = validated.data.map(option => {
+        const product = productFormSchema.parse({
+          ...input,
+          ...option,
+          modelCode,
+          name: model?.name ?? input.name,
+          variantSelector: model ? model.variantSelector : input.variantSelector,
+          mainImage: option.mainImage || input.mainImage,
+          additionalImages: option.mainImage ? [] : input.additionalImages,
+        });
+        return { ...productDbInsertSchema.parse(product), variantSelector: product.variantSelector || null };
+      });
     }
 
-    const payload = productDbInsertSchema.parse(validated.data);
-    if (payload.modelCode) {
-      const model = await db.query.productModels.findFirst({ where: eq(schema.productModels.code, payload.modelCode) });
-      if (model && (model.name !== payload.name || (validated.data.variantSelector && model.variantSelector !== validated.data.variantSelector))) {
+    const [first] = entries;
+    if (first.modelCode && options === undefined) {
+      const model = await db.query.productModels.findFirst({ where: eq(schema.productModels.code, first.modelCode) });
+      if (model && (model.name !== first.name || (first.variantSelector && model.variantSelector !== first.variantSelector))) {
         return { success: false, error: "Usa el nombre y selector del modelo existente o escribe otro código de grupo." };
       }
     }
-    const { rows: [newProduct] } = await db.execute(createCatalogProductsQuery([
-      { ...payload, variantSelector: validated.data.variantSelector || null },
-    ], currentUser.id));
+    const { rows } = await db.execute(createCatalogProductsQuery(entries, currentUser.id));
 
-    // 5. Revalidar rutas
     safeRevalidatePath("/admin/inventario");
     safeRevalidatePath("/catalogo");
-
-    return { success: true, data: newProduct };
+    safeRevalidatePath("/");
+    return { success: true, data: rows[0] };
   } catch (error) {
+    const cause = error instanceof Error && error.cause ? error.cause : error;
+    if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "23505") {
+      return { success: false, error: "Ya existe una variante, SKU o código de barras con esos datos." };
+    }
     return {
       success: false,
-      error: adminActionError(error, "Error interno al guardar el producto en la base de datos."),
+      error: adminActionError(error, "Error al guardar el producto."),
     };
   }
 }
@@ -173,7 +208,10 @@ export async function updateProductAction(
     await requireRole(["admin", "manager", "warehouse"]);
 
     // 1. Validar datos con Zod
-    const validated = productFormSchema.safeParse(input);
+    const validated = productFormSchema.safeParse({
+      ...input,
+      modelCode: input.variant?.trim() && !input.modelCode?.trim() ? automaticModelCode() : input.modelCode,
+    });
     if (!validated.success) {
       const errorMsg = validated.error.issues[0]?.message || "Datos inválidos en el formulario.";
       return { success: false, error: errorMsg };

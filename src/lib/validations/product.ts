@@ -28,7 +28,7 @@ export function generateInternalSku(prefix = "PROD"): string {
 /**
  * Esquema de validación para los datos ingresados en el formulario de Crear/Editar Producto
  */
-export const productFormSchema = z.object({
+const productFieldsSchema = z.object({
   name: z
     .string().trim()
     .min(2, "El nombre comercial debe tener al menos 2 caracteres.")
@@ -89,10 +89,43 @@ export const productFormSchema = z.object({
   variant: z.string().trim().max(100).optional().nullable(),
   variantSelector: z.string().trim().max(60).optional().nullable(),
   variantColor: z.string().trim().regex(/^(#[0-9a-fA-F]{6})?$/, "Escribe un color hexadecimal válido.").optional().nullable(),
-}).refine(data => Boolean(data.modelCode) === Boolean(data.variant),
+});
+
+export const productFormSchema = productFieldsSchema.refine(data => Boolean(data.modelCode) === Boolean(data.variant),
   { path: ["variant"], message: "Completa el grupo y la variante juntos." })
   .refine(data => Boolean(data.variant) || !data.variantColor && !data.variantSelector,
     { path: ["variant"], message: "El selector y el color requieren una variante." });
+
+export const productOptionsSchema = z.array(
+  productFieldsSchema.pick({
+    sku: true,
+    barcode: true,
+    price: true,
+    costPrice: true,
+    initialStock: true,
+    variantColor: true,
+  }).extend({
+    variant: z.string().trim().min(1, "Escribe el valor de la variante.").max(100),
+    mainImage: z.union([
+      z.literal(""),
+      z.url({ protocol: /^https$/ }).max(1500),
+    ]).optional(),
+  }),
+).min(1).max(100).superRefine((options, context) => {
+  const seen = { variant: new Set<string>(), sku: new Set<string>(), barcode: new Set<string>() };
+  for (const [index, option] of options.entries()) {
+    for (const [key, label] of [["variant", "variante"], ["sku", "SKU"], ["barcode", "código de barras"]] as const) {
+      const value = option[key]?.toLowerCase();
+      if (!value) continue;
+      if (seen[key].has(value)) {
+        context.addIssue({ code: "custom", path: [index, key], message: `El valor de ${label} está repetido.` });
+      }
+      seen[key].add(value);
+    }
+  }
+});
+
+export type ProductOptionInput = z.input<typeof productOptionsSchema>[number];
 
 export type ProductFormInput = z.infer<typeof productFormSchema>;
 

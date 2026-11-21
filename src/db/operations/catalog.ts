@@ -8,6 +8,10 @@ export function automaticSku() {
   return "PROD-" + randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase();
 }
 
+export function automaticModelCode() {
+  return "MOD-" + randomUUID().toUpperCase();
+}
+
 export function createCatalogProductsQuery(entries: CatalogEntry[], userId: number) {
   const rows = entries.map(entry => ({
     ...entry,

@@ -37,6 +37,7 @@ import { uploadProductImageAction } from "@/app/admin/actions/upload";
 import { optimizeImageToWebP } from "@/lib/image-optimizer";
 import type { ProductFormInput } from "@/lib/validations/product";
 import { CURRENCY_SYMBOL, CURRENCY_NAME } from "@/lib/currency";
+import { emptyProductOption, ProductSkuField, ProductVariantFields, toProductOption, VariantColorField } from "./product-variant-fields";
 
 interface ProductFormProps {
   initialData?: {
@@ -66,6 +67,7 @@ interface ProductFormProps {
   brands?: { id: number; name: string }[];
   suppliers: { id: number; name: string }[];
   isEdit?: boolean;
+  models?: { code: string; name: string; variantSelector: string | null }[];
 }
 
 export function ProductForm({
@@ -73,16 +75,21 @@ export function ProductForm({
   categories,
   suppliers,
   isEdit = false,
+  models = [],
 }: ProductFormProps) {
   const router = useRouter();
 
   const [sku, setSku] = useState(initialData?.sku || "");
-  const [manualSku, setManualSku] = useState(false);
   const [barcode, setBarcode] = useState(initialData?.barcode || "");
   const [modelCode, setModelCode] = useState(initialData?.modelCode || "");
   const [variant, setVariant] = useState(initialData?.variant || "");
   const [variantSelector, setVariantSelector] = useState(initialData?.variantSelector || "");
   const [variantColor, setVariantColor] = useState(initialData?.variantColor || "");
+  const [usesVariants, setUsesVariants] = useState(Boolean(initialData?.variant));
+  const [options, setOptions] = useState(() => [emptyProductOption(0)]);
+  const nextOptionId = useRef(1);
+  const createWithVariants = !isEdit && usesVariants;
+  const existingModel = createWithVariants ? models.find(model => model.code === modelCode) : undefined;
 
   // 1. Información Básica
   const [name, setName] = useState(initialData?.name || "");
@@ -147,12 +154,12 @@ export function ProductForm({
       return;
     }
 
-    if (priceNum <= 0) {
+    if (!createWithVariants && priceNum <= 0) {
       toast.error(`El precio debe ser mayor a 0 ${CURRENCY_SYMBOL}`);
       return;
     }
 
-    if (cost.trim() === "") {
+    if (!createWithVariants && cost.trim() === "") {
       toast.error("Ingresa el costo de adquisición");
       return;
     }
@@ -171,7 +178,11 @@ export function ProductForm({
     try {
       const payload: ProductFormInput = {
         name: name.trim(),
-        sku, barcode, modelCode, variant, variantSelector, variantColor,
+        sku, barcode,
+        modelCode: usesVariants ? modelCode : null,
+        variant: usesVariants && isEdit ? variant : null,
+        variantSelector: usesVariants ? variantSelector : null,
+        variantColor: usesVariants && isEdit ? variantColor : null,
         description: description.trim(),
         mainImage: imageUrl || mainImage || null,
         additionalImages,
@@ -191,7 +202,7 @@ export function ProductForm({
       if (isEdit && initialData?.id) {
         result = await updateProductAction(initialData.id, payload);
       } else {
-        result = await createProductAction(payload);
+        result = await createProductAction(payload, createWithVariants ? options.map(toProductOption) : undefined);
       }
 
       if (result.success) {
@@ -517,44 +528,59 @@ export function ProductForm({
                 placeholder="Ej. Auriculares Inalámbricos Pro"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                readOnly={Boolean(existingModel)}
                 className="h-11 rounded-xl text-xs font-medium bg-admin-card-bg border border-admin-card-border focus-visible:border-admin-brand focus-visible:ring-2 focus-visible:ring-admin-brand/20"
                 required
               />
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <label htmlFor="product-sku" className="text-xs font-semibold">SKU</label>
-                <div className="flex gap-2">
-                  <Input id="product-sku" readOnly={!manualSku} placeholder="Se genera al guardar" value={sku} maxLength={60} onChange={e => setSku(e.target.value)} />
-                  <Button type="button" variant="outline" aria-label="Editar SKU" aria-pressed={manualSku} onClick={() => setManualSku(!manualSku)}><Pencil className="size-4" /></Button>
-                </div>
-              </div>
-              <label className="grid gap-1 text-xs font-semibold">Código de barras
-                <Input value={barcode} maxLength={60} onChange={e => setBarcode(e.target.value)} />
-              </label>
-            </div>
-            <details open={initialData?.variant ? true : undefined} className="rounded-xl border border-admin-card-border p-3">
-              <summary className="cursor-pointer text-sm font-medium">Variante opcional</summary>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1 text-xs">Grupo del modelo
-                  <Input placeholder="REM-BASICA" value={modelCode} maxLength={60} onChange={e => setModelCode(e.target.value)} />
-                </label>
-                <label className="grid gap-1 text-xs">Nombre del selector
-                  <Input placeholder="Talla y color" value={variantSelector} maxLength={60} onChange={e => setVariantSelector(e.target.value)} />
-                </label>
-                <label className="grid gap-1 text-xs">Variante
-                  <Input placeholder="S / Verde" value={variant} maxLength={100} onChange={e => setVariant(e.target.value)} />
-                </label>
-                <label className="grid gap-1 text-xs">Color visual
-                  <span className="flex gap-2">
-                    <Input placeholder="#2E7D32" value={variantColor} maxLength={7} onChange={e => setVariantColor(e.target.value)} />
-                    <Input aria-label="Elegir tono de la variante" type="color" value={/^#[0-9a-f]{6}$/i.test(variantColor) ? variantColor : "#000000"} onChange={e => setVariantColor(e.target.value)} className="w-10 shrink-0 p-1" />
-                  </span>
+            {!createWithVariants && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <ProductSkuField value={sku} onChange={setSku} />
+                <label className="grid gap-1 text-sm">Código de barras
+                  <Input value={barcode} maxLength={60} onChange={e => setBarcode(e.target.value)} />
                 </label>
               </div>
-              <p className="mt-2 text-xs text-admin-muted">Usa el mismo grupo para las opciones de un modelo. La foto principal de esta ficha será la de la variante.</p>
-            </details>
+            )}
+
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={usesVariants} onChange={e => setUsesVariants(e.target.checked)} />
+              Este producto tiene variantes
+            </label>
+
+            {usesVariants && (
+              <div className="space-y-3 rounded-xl border border-admin-card-border p-3">
+                {createWithVariants && models.length > 0 && (
+                  <label className="grid gap-1 text-sm">Modelo
+                    <select className="min-h-9 rounded-lg border border-admin-card-border bg-admin-card-bg px-2"
+                      value={modelCode} onChange={event => {
+                        const selected = models.find(model => model.code === event.target.value);
+                        setModelCode(selected?.code ?? "");
+                        if (selected) {
+                          setName(selected.name);
+                          setVariantSelector(selected.variantSelector ?? "");
+                        }
+                      }}>
+                      <option value="">Crear un modelo nuevo</option>
+                      {models.map(model => <option key={model.code} value={model.code}>{model.name}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label className="grid gap-1 text-sm">Nombre del selector (opcional)
+                  <Input placeholder="Variante" value={variantSelector} readOnly={Boolean(existingModel)} maxLength={60} onChange={e => setVariantSelector(e.target.value)} />
+                </label>
+                <p className="text-xs text-admin-muted">Por ejemplo, Talla, Color o Almacenamiento. Si lo dejas vacío se muestra «Variante».</p>
+                {isEdit && (
+                  <>
+                    {modelCode && <p className="break-all text-xs text-admin-muted">Grupo para Excel <code>{modelCode}</code></p>}
+                    <label className="grid gap-1 text-sm">Valor de la variante
+                      <Input placeholder="41, Verde o S / Verde" value={variant} required maxLength={100} onChange={e => setVariant(e.target.value)} />
+                    </label>
+                    <VariantColorField value={variantColor} onChange={setVariantColor} />
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-admin-secondary flex items-center gap-1.5">
@@ -602,7 +628,14 @@ export function ProductForm({
       {/* =========================================================================
           FILA 2: PRECIOS Y RENTABILIDAD COMERCIAL
           ========================================================================= */}
-      <div className="admin-panel p-6 space-y-4">
+      {createWithVariants && (
+        <div className="admin-panel space-y-3 p-4 sm:p-6">
+          <h2 className="text-base font-semibold">Variantes, precios y stock</h2>
+          <ProductVariantFields options={options} onChange={setOptions}
+            onAdd={() => setOptions([...options, emptyProductOption(nextOptionId.current++)])} />
+        </div>
+      )}
+      {!createWithVariants && <div className="admin-panel p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-emerald-600" />
@@ -744,7 +777,7 @@ export function ProductForm({
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* =========================================================================
           FILA 3: INVENTARIO (IZQ) + ESTADO Y CANALES (DER)
@@ -761,25 +794,27 @@ export function ProductForm({
 
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="font-bold text-admin-secondary flex items-center gap-1">
-                  {isEdit && <Lock className="h-3 w-3 text-slate-400 shrink-0" />}
-                  {isEdit ? "Stock en Mano" : "Stock Inicial"}
-                </label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={stock}
-                  disabled={isEdit}
-                  onChange={(e) => setStock(e.target.value)}
-                  className={cn(
-                    "h-11 rounded-xl font-bold font-mono border border-admin-card-border",
-                    isEdit
-                      ? "bg-admin-raised text-slate-400 cursor-not-allowed opacity-85"
-                      : "bg-admin-card-bg text-admin-text"
-                  )}
-                />
-              </div>
+              {!createWithVariants && (
+                <div className="space-y-1.5">
+                  <label className="font-bold text-admin-secondary flex items-center gap-1">
+                    {isEdit && <Lock className="h-3 w-3 text-slate-400 shrink-0" />}
+                    {isEdit ? "Stock en Mano" : "Stock Inicial"}
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={stock}
+                    disabled={isEdit}
+                    onChange={(e) => setStock(e.target.value)}
+                    className={cn(
+                      "h-11 rounded-xl font-bold font-mono border border-admin-card-border",
+                      isEdit
+                        ? "bg-admin-raised text-slate-400 cursor-not-allowed opacity-85"
+                        : "bg-admin-card-bg text-admin-text"
+                    )}
+                  />
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="font-bold text-admin-secondary">

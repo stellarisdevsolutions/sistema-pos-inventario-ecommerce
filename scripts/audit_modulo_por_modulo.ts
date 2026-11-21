@@ -1,3 +1,4 @@
+import { productOptionsSchema } from "@/lib/validations/product";
 import { importCatalogAction } from "@/app/admin/actions/catalog-import";
 import { returnPurchaseAction } from "@/app/admin/actions/purchases";
 import assert from "node:assert/strict";
@@ -176,4 +177,19 @@ test("las Server Actions rechazan la llamada sin sesión antes de leer o escribi
   const results = await Promise.all(actions);
   for (const result of results) assert.equal(result.success, false);
   for (const operation of operations) assert.equal(operation.mock.callCount(), 0);
+});
+
+test("una variante admite solo una talla o un color y detecta opciones repetidas", () => {
+  const options = [{
+    variant: "41", price: "180", costPrice: "", initialStock: "3",
+  }, {
+    variant: "Verde", price: "200", costPrice: "80", initialStock: "5", variantColor: "#2e7d32",
+  }];
+  const parsed = productOptionsSchema.parse(options);
+  assert.equal(parsed[0].variant, "41");
+  assert.equal(parsed[0].variantColor, undefined);
+  assert.equal(parsed[0].costPrice, 0);
+  assert.equal(parsed[1].variant, "Verde");
+  assert.equal(parsed[1].price, 200);
+  assert.equal(productOptionsSchema.safeParse([options[1], { ...options[1], variant: " verde " }]).success, false);
 });
