@@ -163,10 +163,20 @@ export const customers = pgTable("customers", {
 });
 
 // Productos y Control de Stock en Mano
+export const productModels = pgTable("product_models", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  variantSelector: text("variant_selector"),
+});
+
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  modelCode: text("model_code").references(() => productModels.code),
+  variant: text("variant"),
+  variantColor: text("variant_color"),
+  importKey: text("import_key").unique(),
   sku: text("sku").unique(),                                                        // Código SKU interno (opcional / nullable)
   barcode: text("barcode").unique(),                                                // Código de barras (opcional / nullable)
   description: text("description"),
@@ -184,7 +194,11 @@ export const products = pgTable("products", {
   isFeatured: boolean("is_featured").default(false).notNull(),                      // Destacado en la portada de la tienda web
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => [
+  uniqueIndex("products_model_variant_unique").on(t.modelCode, sql`lower(${t.variant})`),
+  check("products_model_variant_pair", sql`(${t.modelCode} IS NULL) = (${t.variant} IS NULL)`),
+  check("products_variant_color_valid", sql`${t.variantColor} IS NULL OR (${t.variant} IS NOT NULL AND ${t.variantColor} ~ '^#[0-9A-Fa-f]{6}$')`),
+]);
 
 /* =========================================================================
    3. TURNOS DE CAJA / ARQUEO POS (CASH SHIFTS)
@@ -274,6 +288,8 @@ export const purchaseReturnItems = pgTable("purchase_return_items", {
 
 export const sales = pgTable("sales", {
   id: serial("id").primaryKey(),
+  checkoutRequestId: uuid("checkout_request_id"),
+  checkoutFingerprint: text("checkout_fingerprint"),
   saleNumber: text("sale_number").notNull().unique(), // ej: "VTA-1049"
   customerId: integer("customer_id").references(() => customers.id),
   customerName: text("customer_name").notNull().default("Público General"),
@@ -292,7 +308,7 @@ export const sales = pgTable("sales", {
   channel: saleChannelEnum("channel").default("pos").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [uniqueIndex("sales_operator_checkout_unique").on(t.userId, t.checkoutRequestId)]);
 
 // Detalle de ítems cobrados en el ticket de venta
 export const saleItems = pgTable("sale_items", {
@@ -386,6 +402,10 @@ export const customersRelations = relations(customers, ({ many }) => ({
 }));
 
 export const productsRelations = relations(products, ({ one, many }) => ({
+  model: one(productModels, {
+    fields: [products.modelCode],
+    references: [productModels.code],
+  }),
   category: one(categories, {
     fields: [products.categoryId],
     references: [categories.id],

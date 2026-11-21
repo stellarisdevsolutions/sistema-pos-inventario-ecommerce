@@ -40,9 +40,13 @@ import { toast } from "sonner";
 interface ProductClientProps {
   product: StoreProduct;
   relatedProducts: StoreProduct[];
+  variants: StoreProduct[];
 }
 
-export function ProductDetailClient({ product, relatedProducts }: ProductClientProps) {
+export function ProductDetailClient({ product: initialProduct, variants, relatedProducts }: ProductClientProps) {
+  const [variantId, setVariantId] = useState(initialProduct.id);
+  const product = variants.find(variant => variant.id === variantId) ?? initialProduct;
+  const saleName = product.variant ? product.name + " — " + product.variant : product.name;
   const images = product.images.length > 0 ? product.images : [product.imageUrl];
   const [selectedImage, setSelectedImage] = useState(images[0] || product.imageUrl);
   const [quantity, setQuantity] = useState(1);
@@ -57,7 +61,7 @@ export function ProductDetailClient({ product, relatedProducts }: ProductClientP
     if (!inStock) return;
     addToCart({
       id: product.id,
-      name: product.name,
+      name: saleName,
       price: product.price,
       image: selectedImage,
       quantity,
@@ -68,7 +72,7 @@ export function ProductDetailClient({ product, relatedProducts }: ProductClientP
     if (!inStock) return;
     addToCart({
       id: product.id,
-      name: product.name,
+      name: saleName,
       price: product.price,
       image: selectedImage,
       quantity,
@@ -96,11 +100,11 @@ export function ProductDetailClient({ product, relatedProducts }: ProductClientP
 
   const whatsappMessage = encodeURIComponent(
     `¡Hola! Me interesa comprar en su tienda online:\n\n` +
-      `📦 *${product.name}*\n` +
+      `📦 *${saleName}*\n` +
       `🔢 Cantidad: ${quantity} unidad(es)\n` +
       `💰 Subtotal: ${totalBs}\n` +
       (product.sku ? `🏷️ SKU: ${product.sku}\n` : "") +
-      `🔗 Enlace: ${typeof window !== "undefined" ? window.location.href : ""}\n\n` +
+      `🔗 Enlace: ${typeof window !== "undefined" ? new URL("/producto/" + product.slug, window.location.origin).href : ""}\n\n` +
       `¿Tienen entrega inmediata y cómo puedo realizar el pago por QR Simple?`
   );
 
@@ -287,6 +291,26 @@ export function ProductDetailClient({ product, relatedProducts }: ProductClientP
               <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight leading-tight">
                 {product.name}
               </h1>
+
+              {variants.length > 0 && (
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-semibold">{product.variantSelector || "Variante"}</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {variants.map(option => (
+                      <button key={option.id} type="button" aria-pressed={option.id === product.id}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm aria-pressed:border-store-primary aria-pressed:bg-store-primary-light"
+                        onClick={() => {
+                          setVariantId(option.id);
+                          setSelectedImage(option.imageUrl);
+                          setQuantity(1);
+                        }}>
+                        {option.variantColor && <span aria-hidden className="size-4 rounded-full border border-slate-400" style={{ backgroundColor: option.variantColor }} />}
+                        {option.variant}{option.stock === 0 && " · Sin stock"}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
 
               {/* Estado de Inventario y Despacho */}
               <div className="flex items-center gap-2 text-xs font-bold">

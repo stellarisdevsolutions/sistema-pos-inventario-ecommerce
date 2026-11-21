@@ -7,6 +7,7 @@ export const saleItemSchema = z.object({
 });
 
 export const saleFormSchema = z.object({
+  checkoutRequestId: z.uuid().optional(),
   customerId: z.number().int().positive().optional().nullable(),
   customerName: z
     .string()

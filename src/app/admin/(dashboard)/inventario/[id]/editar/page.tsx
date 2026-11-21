@@ -46,7 +46,9 @@ function EditarProductoContent() {
       isEdit={true}
       initialData={{
         id: product.id,
-        name: product.name,
+        name: product.model?.name ?? product.name,
+        sku: product.sku, barcode: product.barcode, modelCode: product.modelCode,
+        variant: product.variant, variantSelector: product.variantSelector, variantColor: product.variantColor,
         description: product.description,
         mainImage: product.imageUrl,
         additionalImages: product.images || [],

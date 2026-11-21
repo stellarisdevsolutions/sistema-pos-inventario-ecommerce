@@ -442,6 +442,7 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                             disabled={!inStock}
                             onClick={() => {
                               if (inStock) {
+                                if (p.modelCode) { window.location.assign("/producto/" + p.slug); return; }
                                 addToCart({
                                   id: p.id,
                                   name: p.name,

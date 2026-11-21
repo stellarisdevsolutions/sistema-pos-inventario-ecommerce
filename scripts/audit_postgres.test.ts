@@ -1,3 +1,6 @@
+import ExcelJS from "exceljs";
+import { makeCatalogWorkbook, readCatalogWorkbook } from "@/lib/catalog-workbook";
+import { createCatalogProductsQuery } from "@/db/operations/catalog";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -15,7 +18,7 @@ async function createDatabase(context: TestContext) {
   const db = new PGlite();
   context.after(() => db.close());
 
-  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql"]) {
+  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql"]) {
     await db.exec(await readFile(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
   }
   await db.exec(`
@@ -253,4 +256,51 @@ test("devuelve al proveedor al costo vigente sin duplicar salidas ni superar la 
   assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 5 }]))).rows.length, 0);
   assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 4 }]))).rows.length, 1);
   assert.deepEqual((await db.query("SELECT stock, cost_price FROM products WHERE id = 1")).rows, [{ stock: 0, cost_price: "22.00" }]);
+});
+
+test("el mismo intento de cobro guarda una sola venta, una salida y un abono de caja", async (t) => {
+  const db = await createDatabase(t);
+  await db.exec(`
+    INSERT INTO cash_registers (name, code) VALUES ('Caja', 'C01');
+    INSERT INTO cash_shifts (shift_number, cash_register_id, user_id) VALUES ('TURNO', 1, 1);
+    INSERT INTO products (name, slug, price, stock) VALUES ('Remera', 'remera', 30, 2);
+  `);
+  const sale = saleFormSchema.parse({
+    checkoutRequestId: randomUUID(), items: [{ productId: 1, quantity: 1, unitPrice: 30 }],
+  });
+  const query = new PgDialect().sqlToQuery(createSaleQuery({
+    sale, operatorId: 1, shiftId: 1, prefix: "VTA-", subtotal: 30, total: 30,
+    discount: 0, cashGiven: 30, changeGiven: 0, notes: null, checkoutFingerprint: "fixture",
+  }));
+  assert.equal((await db.query(query.sql, query.params)).rows.length, 1);
+  assert.equal((await db.query(query.sql, query.params)).rows.length, 0);
+  assert.deepEqual((await db.query("SELECT checkout_request_id, checkout_fingerprint FROM sales")).rows,
+    [{ checkout_request_id: sale.checkoutRequestId, checkout_fingerprint: "fixture" }]);
+  assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 1 }]);
+  assert.deepEqual((await db.query("SELECT quantity FROM inventory_movements")).rows, [{ quantity: 1 }]);
+  assert.deepEqual((await db.query("SELECT expected_cash FROM cash_shifts")).rows, [{ expected_cash: "30.00" }]);
+});
+
+test("la plantilla Excel crea SKU, variantes y aperturas con un solo alta por fila", async (t) => {
+  const db = await createDatabase(t);
+  const file = await makeCatalogWorkbook();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Uint8Array.from(file).buffer);
+  const sheet = workbook.getWorksheet("Carga")!;
+  const ex = workbook.getWorksheet("Ejemplos")!;
+  for (let row = 2; row <= 4; row++) sheet.addRow(ex.getRow(row).values);
+  const input = await readCatalogWorkbook(await workbook.xlsx.writeBuffer() as ArrayBuffer);
+  assert.deepEqual(input.errors, []);
+  assert.equal(input.entries.length, 3);
+  const query = new PgDialect().sqlToQuery(createCatalogProductsQuery(input.entries.map(row => row.entry), 1));
+  await db.query(query.sql, query.params);
+  await assert.rejects(db.query(query.sql, query.params), /duplicate key/);
+  assert.deepEqual((await db.query("SELECT code, variant_selector FROM product_models")).rows,
+    [{ code: "REM-BASICA", variant_selector: "Talla y color" }]);
+  const { rows } = await db.query<{ sku: string; stock: number; variant: string | null }>("SELECT sku, stock, variant FROM products ORDER BY id");
+  assert.equal(rows.length, 3);
+  assert.match(rows[0].sku, /^PROD-/);
+  assert.deepEqual(rows.map(row => [row.variant, row.stock]), [[null, 8], ["S / Verde", 4], ["M / Negro", 2]]);
+  assert.equal(rows[2].sku, "REM-M-NEG");
+  assert.equal((await db.query("SELECT * FROM inventory_movements WHERE reference_type = 'product_creation'")).rows.length, 3);
 });

@@ -2,6 +2,7 @@
 
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
 
+import { saleFormSchema, type SaleFormInput } from "@/lib/validations/sale";
 import { refundUnitAmounts } from "@/lib/refund-amount";
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -86,6 +87,20 @@ interface CartItem {
   image: string;
 }
 
+type PendingCheckout = { payload: SaleFormInput; cart: CartItem[]; registerName?: string; shiftNumber?: string };
+const checkoutStorageKey = (operatorId: number) => `pos-pending-checkout:${operatorId}`;
+
+function readPendingCheckout(operatorId: number): PendingCheckout | null {
+  const saved = localStorage.getItem(checkoutStorageKey(operatorId));
+  if (!saved) return null;
+  const record = JSON.parse(saved) as PendingCheckout;
+  const result = saleFormSchema.safeParse(record.payload);
+  if (!result.success || !result.data.checkoutRequestId || result.data.userId !== operatorId || !Array.isArray(record.cart)) {
+    throw new Error("No se pudo leer el intento pendiente.");
+  }
+  return { ...record, payload: result.data };
+}
+
 export default function VentasPage() {
 
   // Pestaña activa: POS / Historial
@@ -120,6 +135,8 @@ export default function VentasPage() {
   const [notes, setNotes] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingCheckout = useRef(false);
+  const [pendingCheckout, setPendingCheckout] = useState<PendingCheckout | null>(null);
 
   // Modal de Comprobante / Ticket recién emitido
   const [receiptOpen, setReceiptOpen] = useState(false);
@@ -206,6 +223,13 @@ export default function VentasPage() {
         setUsers(contextRes.users);
         setAllOpenShifts(contextRes.allOpenShifts);
         setCurrentOperator(contextRes.currentOperator);
+        if (contextRes.currentOperator) {
+          try {
+            setPendingCheckout(readPendingCheckout(contextRes.currentOperator.id));
+          } catch {
+            toast.error("No se pudo leer el cobro pendiente de este navegador.");
+          }
+        }
 
         if (contextRes.userShift) {
           setActiveShift({
@@ -288,6 +312,7 @@ export default function VentasPage() {
 
   // Manejo de Carrito y Control de Stock en tiempo real
   const addToCart = (product: PosProductItem) => {
+    if (pendingCheckout) return;
     if (product.stock <= 0) {
       toast.error(`"${product.name}" está agotado y no puede venderse.`);
       return;
@@ -322,6 +347,7 @@ export default function VentasPage() {
   };
 
   const updateQuantity = (id: number, delta: number) => {
+    if (pendingCheckout) return;
     setCart((prev) =>
       prev
         .map((item) => {
@@ -340,6 +366,7 @@ export default function VentasPage() {
   };
 
   const removeFromCart = (id: number) => {
+    if (pendingCheckout) return;
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
@@ -395,6 +422,25 @@ export default function VentasPage() {
 
   // Procesar Cobro de Venta (Server Action con Reglas de Negocio Estrictas)
   const handleProcessCheckout = async () => {
+    if (submittingCheckout.current) return;
+    if (currentOperator) {
+      try {
+        const saved = readPendingCheckout(currentOperator.id);
+        if (saved) {
+          setPendingCheckout(saved);
+          await submitCheckout(saved);
+          return;
+        }
+        if (pendingCheckout) {
+          toast.error("Vuelve a cargar la página para confirmar el estado del último cobro.");
+          return;
+        }
+      } catch {
+        toast.error("No se puede guardar el intento en este navegador. Revisa el almacenamiento local.");
+        return;
+      }
+    }
+
     if (cart.length === 0) {
       toast.error("El carrito está vacío. Agrega productos para cobrar.");
       return;
@@ -438,9 +484,8 @@ export default function VentasPage() {
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      const salePayload = {
+    const salePayload: SaleFormInput = {
+        checkoutRequestId: crypto.randomUUID(),
         customerName: customerName.trim() || "Público General",
         customerTaxId: customerTaxId.trim() || null,
         paymentMethod,
@@ -459,51 +504,69 @@ export default function VentasPage() {
         })),
       };
 
-      const result = await createSaleAction(salePayload);
+    const attempt: PendingCheckout = {
+      payload: salePayload, cart,
+      registerName: activeShift?.cashRegisterName,
+      shiftNumber: activeShift?.shiftNumber,
+    };
+    try {
+      localStorage.setItem(checkoutStorageKey(currentOperator.id), JSON.stringify(attempt));
+    } catch {
+      toast.error("No se puede guardar el intento en este navegador. La venta sigue en el carrito.");
+      return;
+    }
+    setPendingCheckout(attempt);
+    await submitCheckout(attempt);
+  };
 
-      if (!result.success || !result.data) {
-        toast.error(result.error || "No se pudo procesar la venta.");
-        setIsSubmitting(false);
+  async function submitCheckout(attempt: PendingCheckout) {
+    if (submittingCheckout.current) return;
+    const { payload } = attempt;
+    submittingCheckout.current = true;
+    setIsSubmitting(true);
+    try {
+      const result = await createSaleAction(payload);
+      if (result.confirmationPending) {
+        toast.error("Venta pendiente de confirmar. Reintenta cuando vuelva la conexión.");
         return;
       }
 
-      toast.success(
-        isAdministrativeSale
-          ? `Venta Administrativa ${result.data.saleNumber} registrada exitosamente (fuera de caja).`
-          : `Venta ${result.data.saleNumber} cobrada en ${activeShift?.cashRegisterName}.`
-      );
+      localStorage.removeItem(checkoutStorageKey(payload.userId));
+      setPendingCheckout(null);
 
-      // Guardar ticket y abrir comprobante
+      if (!result.success || !result.data) {
+        setCart(attempt.cart);
+        setCustomerName(payload.customerName);
+        setCustomerTaxId(payload.customerTaxId ?? "");
+        if (payload.paymentMethod !== "other") setPaymentMethod(payload.paymentMethod);
+        setCashGivenInput(payload.cashGiven == null ? "" : String(payload.cashGiven));
+        setNotes(payload.notes ?? "");
+        setDiscountInput(String(payload.discountAmount));
+        toast.error(result.error || "No se pudo procesar la venta.");
+        return;
+      }
+
+      toast.success(`Venta ${result.data.saleNumber} confirmada`);
       setLastTicket({
-        saleId: result.data.saleId,
-        saleNumber: result.data.saleNumber,
-        customerName: result.data.customerName,
-        customerTaxId: customerTaxId.trim() || undefined,
-        totalAmount: result.data.totalAmount,
-        subtotal,
-        discountAmount,
-        paymentMethod: result.data.paymentMethod,
-        cashGiven: result.data.cashGiven,
-        changeGiven: result.data.changeGiven,
-        createdAt: result.data.createdAt,
-        items: result.data.items,
-        isAdministrativeSale,
-        cashRegisterName: isAdministrativeSale ? null : (activeShift?.cashRegisterName || null),
-        shiftNumber: isAdministrativeSale ? null : (activeShift?.shiftNumber || null),
-        cashierName: currentOperator.name,
+        ...result.data,
+        customerTaxId: payload.customerTaxId || undefined,
+        subtotal: result.data.items.reduce((sum, item) => sum + item.subtotal, 0),
+        discountAmount: payload.discountAmount,
+        isAdministrativeSale: payload.isAdministrativeSale,
+        cashRegisterName: attempt.registerName,
+        shiftNumber: attempt.shiftNumber,
+        cashierName: currentOperator?.name,
       });
-
       setReceiptOpen(true);
       clearCart();
-
-      // Recargar catálogo y contexto actualizado
-      loadPosData();
-    } catch (err: any) {
-      toast.error(err.message || "Ocurrió un error inesperado al registrar el cobro.");
+      void loadPosData();
+    } catch {
+      toast.error("Venta pendiente de confirmar. Reintenta cuando vuelva la conexión.");
     } finally {
+      submittingCheckout.current = false;
       setIsSubmitting(false);
     }
-  };
+  }
 
   // Anular venta desde el Historial
   const handleConfirmCancelSale = async () => {
@@ -754,6 +817,17 @@ export default function VentasPage() {
             2. VISTA TERMINAL POS (GRID 12 COLUMNAS)
             ========================================================================= */
         <div className="space-y-4">
+          {pendingCheckout && (
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400 bg-admin-card-bg p-4" aria-label="Venta pendiente">
+              <div>
+                <p className="font-semibold">Venta pendiente de confirmar</p>
+                <p className="text-sm text-admin-muted">Reintenta el mismo cobro para recuperar o confirmar el ticket.</p>
+              </div>
+              <Button onClick={handleProcessCheckout} disabled={isSubmitting}>
+                {isSubmitting ? "Confirmando…" : "Reintentar cobro"}
+              </Button>
+            </section>
+          )}
           {/* BANNER INFORMATIVO / BLOQUEO POR REGLAS DE NEGOCIO */}
           {!activeShift && !isAdministrativeSale && (
             <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-start justify-between gap-3">
@@ -972,6 +1046,7 @@ export default function VentasPage() {
 
                 {cart.length > 0 && (
                   <button
+                    disabled={pendingCheckout !== null}
                     onClick={clearCart}
                     className="text-[11px] font-bold text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                   >
@@ -1268,6 +1343,7 @@ export default function VentasPage() {
                 <Button
                   disabled={
                     cart.length === 0 ||
+                    pendingCheckout !== null ||
                     isSubmitting ||
                     (!isAdministrativeSale && !activeShift)
                   }

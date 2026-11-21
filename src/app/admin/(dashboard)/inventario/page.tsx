@@ -1,5 +1,7 @@
 "use client";
 
+import { CatalogImportDialog } from "@/components/admin/catalog-import-dialog";
+
 import { MetricCard } from "@/components/admin/metric-card";
 
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
@@ -487,6 +489,8 @@ export default function InventarioPage() {
   const costNum = parseFloat(newProductCost) || 0;
   const marginGross = priceNum > 0 ? (((priceNum - costNum) / priceNum) * 100).toFixed(1) : "0.0";
 
+  const [catalogImportOpen, setCatalogImportOpen] = useState(false);
+
   // Cargar productos, categorías y bajas vivos desde Neon DB
   useEffect(() => {
     Promise.all([
@@ -886,8 +890,11 @@ export default function InventarioPage() {
           <p className="admin-page-description">Productos, existencias y movimientos de stock.</p>
         </div>
 
-        {/* Acciones Superiores */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <a href="/admin/inventario/plantilla" download className="admin-return rounded-xl border border-white/40 px-3 py-2">
+            Descargar plantilla Excel
+          </a>
+          <Button variant="outline" onClick={() => setCatalogImportOpen(true)}>Importar productos</Button>
           <Button
             variant="outline"
             size="sm"
@@ -909,6 +916,13 @@ export default function InventarioPage() {
           </Link>
         </div>
       </div>
+
+      {catalogImportOpen && (
+        <CatalogImportDialog
+          onClose={() => setCatalogImportOpen(false)}
+          onImported={async () => setProducts(await getInventoryProducts())}
+        />
+      )}
 
       {/* =========================================================================
           2. LAS 4 TARJETAS KPI DE INVENTARIO BENTO

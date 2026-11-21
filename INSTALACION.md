@@ -41,3 +41,9 @@ Edita `--admin-pigment` en [src/app/admin-theme.css](src/app/admin-theme.css) pa
 ## Migración de devoluciones a proveedores
 
 Antes de publicar una versión con devoluciones a proveedores, aplica [la migración 0002](drizzle/0002_purchase_returns.sql) en la base que usará ese despliegue. Con el historial de Drizzle al día, usa `corepack pnpm exec drizzle-kit migrate`. Para una base existente sin historial, verifica primero que su esquema corresponda a la versión anterior y ejecuta solo la migración nueva en una transacción. La migración crea las tablas de devoluciones y protege las compras que ya tienen una devolución registrada.
+
+## Cobros recuperables y alta de catálogo
+
+Aplica las migraciones [0003 de intentos de cobro](drizzle/0003_checkout_requests.sql) y [0004 de variantes](drizzle/0004_product_variants.sql) antes del despliegue que usa esas funciones. Un intento pendiente de confirmación se conserva en el navegador para el mismo operador. Reintenta desde ese navegador para recuperar el ticket o confirmar el cobro.
+
+En **Inventario**, descarga la plantilla Excel y rellena solo la hoja **Carga**. El archivo admite hasta 500 altas. Valida el archivo antes de confirmar. Las filas existentes se informan como conflictos y las altas confirmadas generan una apertura de Kárdex. Usa el mismo grupo y nombre de selector para las variantes de un modelo. Para las fotos, podés usar la imagen de cada ficha o una URL pública HTTPS.

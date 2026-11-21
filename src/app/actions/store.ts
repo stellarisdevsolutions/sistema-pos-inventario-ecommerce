@@ -1,10 +1,14 @@
 import { db } from "@/db";
-import { products, categories } from "@/db/schema";
-import { eq, desc, asc } from "drizzle-orm";
+import { products, categories, productModels } from "@/db/schema";
+import { and, eq, desc } from "drizzle-orm";
 
 export interface StoreProduct {
   id: number;
   name: string;
+  modelCode?: string | null;
+  variant?: string | null;
+  variantColor?: string | null;
+  variantSelector?: string | null;
   slug: string;
   sku: string | null;
   barcode: string | null;
@@ -36,47 +40,43 @@ export interface StoreCategory {
 const DEFAULT_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80";
 
-/**
- * Obtiene los productos activos para la tienda online desde PostgreSQL / Neon
- */
+type ProductRow = typeof products.$inferSelect & {
+  category: typeof categories.$inferSelect | null;
+  model: typeof productModels.$inferSelect | null;
+};
+
+function toStoreProduct(p: ProductRow, modelImage?: string | null): StoreProduct {
+  const images = p.images ?? [];
+  const imageUrl = p.imageUrl || images[0] || modelImage || DEFAULT_PRODUCT_IMAGE;
+  return {
+    id: p.id, name: p.model?.name ?? p.name, slug: p.slug, sku: p.sku, barcode: p.barcode,
+    modelCode: p.modelCode, variant: p.variant, variantColor: p.variantColor,
+    variantSelector: p.model?.variantSelector,
+    description: p.description, price: Number(p.price), stock: p.stock, minStock: p.minStock,
+    imageUrl, images: [...new Set([imageUrl, ...images])], category: p.category,
+    isActive: p.isActive, isVisibleWeb: p.isVisibleWeb, isFeatured: p.isFeatured,
+  };
+}
+
 export async function getStoreProducts(): Promise<StoreProduct[]> {
   try {
-    const rawProds = await db.query.products.findMany({
-      where: (p, { and, eq }) => and(eq(p.isActive, true), eq(p.isVisibleWeb, true)),
-      with: {
-        category: true,
-      },
-      orderBy: (p, { desc }) => [desc(p.id)],
+    const rows = await db.query.products.findMany({
+      where: and(eq(products.isActive, true), eq(products.isVisibleWeb, true)),
+      with: { category: true, model: true },
+      orderBy: [desc(products.id)],
     });
-
-    return rawProds.map((p) => {
-      const priceNum = typeof p.price === "string" ? parseFloat(p.price) : Number(p.price) || 0;
-      const imagesList = Array.isArray(p.images) && p.images.length > 0 ? p.images : [];
-      const primaryImage = p.imageUrl || imagesList[0] || DEFAULT_PRODUCT_IMAGE;
-
-      return {
-        id: p.id,
-        name: p.name,
-        slug: p.slug || `prod-${p.id}`,
-        sku: p.sku || null,
-        barcode: p.barcode || null,
-        description: p.description || null,
-        price: priceNum,
-        stock: p.stock ?? 0,
-        minStock: p.minStock ?? 5,
-        imageUrl: primaryImage,
-        images: imagesList.length > 0 ? imagesList : [primaryImage],
-        category: p.category
-          ? {
-              id: p.category.id,
-              name: p.category.name,
-              slug: p.category.slug,
-            }
-          : null,
-        isActive: p.isActive ?? true,
-        isVisibleWeb: p.isVisibleWeb ?? true,
-        isFeatured: p.isFeatured ?? false,
-      };
+    const groups = new Map<string, ProductRow[]>();
+    for (const row of rows) {
+      const key = row.modelCode ? "model:" + row.modelCode : "product:" + row.id;
+      const group = groups.get(key) ?? [];
+      group.push(row);
+      groups.set(key, group);
+    }
+    return [...groups.values()].map(group => {
+      const representative = group.find(row => row.stock > 0) ?? group[0];
+      const modelImage = group.find(row => row.imageUrl || row.images[0]);
+      const product = toStoreProduct(representative, modelImage?.imageUrl || modelImage?.images[0]);
+      return { ...product, isFeatured: group.some(row => row.isFeatured) };
     });
   } catch (error) {
     console.error("Error al obtener productos para la tienda:", error);
@@ -98,15 +98,19 @@ export async function getStoreCategories(): Promise<StoreCategory[]> {
         where: (p, { and, eq }) => and(eq(p.isActive, true), eq(p.isVisibleWeb, true)),
         columns: {
           categoryId: true,
+          modelCode: true,
+          id: true,
         },
       }),
     ]);
 
     // Calcular conteo por categoría
-    const countsMap = new Map<number, number>();
+    const countsMap = new Map<number, Set<string>>();
     rawProds.forEach((p) => {
       if (p.categoryId) {
-        countsMap.set(p.categoryId, (countsMap.get(p.categoryId) || 0) + 1);
+        const groupKeys = countsMap.get(p.categoryId) ?? new Set<string>();
+        groupKeys.add(p.modelCode ? "model:" + p.modelCode : "product:" + p.id);
+        countsMap.set(p.categoryId, groupKeys);
       }
     });
 
@@ -116,7 +120,7 @@ export async function getStoreCategories(): Promise<StoreCategory[]> {
       slug: c.slug,
       description: c.description || null,
       imageUrl: c.imageUrl || null,
-      count: countsMap.get(c.id) || 0,
+      count: countsMap.get(c.id)?.size || 0,
     }));
   } catch (error) {
     console.error("Error al obtener categorías de la tienda:", error);
@@ -130,47 +134,25 @@ export async function getStoreCategories(): Promise<StoreCategory[]> {
 export async function getStoreProductBySlug(slug: string): Promise<StoreProduct | null> {
   try {
     const p = await db.query.products.findFirst({
-      where: (p, { eq, or }) =>
-        or(
-          eq(p.slug, slug),
-          !isNaN(Number(slug)) ? eq(p.id, Number(slug)) : undefined
-        ),
-      with: {
-        category: true,
-      },
+      where: (p, { eq, or }) => or(
+        eq(p.slug, slug),
+        /^\d+$/.test(slug) && Number(slug) <= 2147483647 ? eq(p.id, Number(slug)) : undefined
+      ),
+      with: { category: true, model: true },
     });
-
-    if (!p?.isActive || !p.isVisibleWeb) return null;
-
-    const priceNum = typeof p.price === "string" ? parseFloat(p.price) : Number(p.price) || 0;
-    const imagesList = Array.isArray(p.images) && p.images.length > 0 ? p.images : [];
-    const primaryImage = p.imageUrl || imagesList[0] || DEFAULT_PRODUCT_IMAGE;
-
-    return {
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      sku: p.sku || null,
-      barcode: p.barcode || null,
-      description: p.description || null,
-      price: priceNum,
-      stock: p.stock ?? 0,
-      minStock: p.minStock ?? 5,
-      imageUrl: primaryImage,
-      images: imagesList.length > 0 ? imagesList : [primaryImage],
-      category: p.category
-        ? {
-            id: p.category.id,
-            name: p.category.name,
-            slug: p.category.slug,
-          }
-        : null,
-      isActive: p.isActive ?? true,
-      isVisibleWeb: p.isVisibleWeb ?? true,
-      isFeatured: p.isFeatured ?? false,
-    };
+    return p?.isActive && p.isVisibleWeb ? toStoreProduct(p) : null;
   } catch (error) {
     console.error("Error al buscar producto por slug:", error);
     return null;
   }
+}
+
+export async function getStoreVariants(modelCode: string): Promise<StoreProduct[]> {
+  const rows = await db.query.products.findMany({
+    where: and(eq(products.modelCode, modelCode), eq(products.isActive, true), eq(products.isVisibleWeb, true)),
+    with: { category: true, model: true },
+    orderBy: (p, { asc }) => [asc(p.variant), asc(p.id)],
+  });
+  const firstImage = rows.find(row => row.imageUrl || row.images[0]);
+  return rows.map(row => toStoreProduct(row, firstImage?.imageUrl || firstImage?.images[0]));
 }

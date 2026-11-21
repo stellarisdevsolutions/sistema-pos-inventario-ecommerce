@@ -12,6 +12,7 @@ export function createSaleQuery(input: {
   cashGiven: number | null;
   changeGiven: number | null;
   notes: string | null;
+  checkoutFingerprint?: string;
 }) {
   const { sale, operatorId, shiftId, prefix, subtotal, discount, total, cashGiven, changeGiven, notes } = input;
   const lines = JSON.stringify(sale.items.map(({ productId, quantity, unitPrice }) => ({
@@ -30,7 +31,7 @@ export function createSaleQuery(input: {
       WHERE id = ${shiftId} AND user_id = ${operatorId} AND status = 'open' AND actual_cash IS NULL
       FOR UPDATE
     ), locked_products AS MATERIALIZED (
-      SELECT p.id, p.name, p.sku, p.stock, p.cost_price
+      SELECT p.id, p.name, p.variant, p.sku, p.stock, p.cost_price
       FROM products p JOIN lines ON lines.product_id = p.id
       WHERE p.is_active AND p.stock >= lines.quantity AND p.price = lines.unit_price
         AND (${shiftId}::integer IS NULL OR EXISTS (SELECT 1 FROM locked_shift))
@@ -40,12 +41,14 @@ export function createSaleQuery(input: {
       WHERE (SELECT count(*) FROM locked_products) = (SELECT count(*) FROM lines)
     ), sale AS (
       INSERT INTO sales (id, sale_number, customer_id, customer_name, cash_shift_id, user_id, subtotal,
-        discount_amount, total_amount, cash_given, change_given, payment_method, status, channel, notes)
+        discount_amount, total_amount, cash_given, change_given, payment_method, status, channel, notes, checkout_request_id, checkout_fingerprint)
       SELECT id, ${prefix} || lpad(id::text, greatest(4, length(id::text)), '0'), ${sale.customerId ?? null},
         ${sale.customerName}, ${shiftId}, ${operatorId}, ${subtotal.toFixed(2)}, ${discount.toFixed(2)},
         ${total.toFixed(2)}, ${cashGiven?.toFixed(2) ?? null}, ${changeGiven?.toFixed(2) ?? null},
-        ${sale.paymentMethod}::payment_method, 'completed', ${sale.channel}::sale_channel, ${notes}
+        ${sale.paymentMethod}::payment_method, 'completed', ${sale.channel}::sale_channel, ${notes},
+        ${sale.checkoutRequestId ?? null}::uuid, ${input.checkoutFingerprint ?? null}
       FROM numbered
+      ON CONFLICT (user_id, checkout_request_id) DO NOTHING
       RETURNING id, sale_number, customer_name, total_amount, payment_method, cash_shift_id
     ), detail AS (
       INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, unit_cost, subtotal)
@@ -71,7 +74,7 @@ export function createSaleQuery(input: {
       FROM sale WHERE shift.id = sale.cash_shift_id
     )
     SELECT sale.id AS "saleId", sale_number AS "saleNumber", customer_name AS "customerName",
-      detail.id AS "itemId", detail.product_id AS "productId", p.name AS "productName", p.sku AS "productSku",
+      detail.id AS "itemId", detail.product_id AS "productId", concat_ws(' — ', p.name, p.variant) AS "productName", p.sku AS "productSku",
       quantity, unit_price AS "unitPrice", subtotal
     FROM sale CROSS JOIN detail JOIN locked_products p ON p.id = detail.product_id
     ORDER BY detail.id

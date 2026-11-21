@@ -22,6 +22,20 @@
       "when": 1795229397101,
       "tag": "0002_purchase_returns",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795232366150,
+      "tag": "0003_checkout_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795232466712,
+      "tag": "0004_product_variants",
+      "breakpoints": true
     }
   ]
 }

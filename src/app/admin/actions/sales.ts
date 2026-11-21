@@ -1,5 +1,9 @@
 "use server";
 
+import { productName } from "@/lib/product-name";
+
+import { createHash } from "node:crypto";
+
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
@@ -142,7 +146,7 @@ export async function getPosCatalogAction(): Promise<{
 
       return {
         id: p.id,
-        name: p.name,
+        name: productName(p),
         sku: p.sku || `SKU-${p.id}`,
         barcode: p.barcode || "",
         category: categoryName,
@@ -273,10 +277,55 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
     items: SaleTicketItem[];
   };
   error?: string;
+  confirmationPending?: boolean;
 }> {
   try {
     const operatingUser = await requireRole(POS_ROLES);
-    const parsed = saleFormSchema.parse(input);
+    const validation = saleFormSchema.safeParse(input);
+    if (!validation.success) return { success: false, error: validation.error.issues[0]?.message };
+    const parsed = validation.data;
+
+    const checkoutFingerprint = parsed.checkoutRequestId
+      ? createHash("sha256").update(JSON.stringify(parsed)).digest("hex")
+      : undefined;
+
+    async function recoverTicket() {
+      if (!parsed.checkoutRequestId) return null;
+      const sale = await db.query.sales.findFirst({
+        where: (s, { and, eq }) => and(eq(s.userId, operatingUser.id), eq(s.checkoutRequestId, parsed.checkoutRequestId!)),
+        with: { items: { with: { product: true }, orderBy: (item, { asc }) => [asc(item.id)] } },
+      });
+      if (!sale) return null;
+      if (sale.checkoutFingerprint !== checkoutFingerprint) {
+        return { success: false, error: "Este intento ya fue usado con otros datos." };
+      }
+      return {
+        success: true,
+        data: {
+          saleId: sale.id,
+          saleNumber: sale.saleNumber,
+          customerName: sale.customerName,
+          totalAmount: Number(sale.totalAmount),
+          paymentMethod: sale.paymentMethod,
+          cashGiven: sale.cashGiven === null ? null : Number(sale.cashGiven),
+          changeGiven: sale.changeGiven === null ? null : Number(sale.changeGiven),
+          createdAt: sale.createdAt.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" }),
+          items: sale.items.map(item => ({
+            id: item.id, productId: item.productId, productName: item.product ? productName(item.product) : "Producto",
+            productSku: item.product?.sku ?? null, quantity: item.quantity,
+            returnedQuantity: item.returnedQuantity, returnableQuantity: item.quantity - item.returnedQuantity,
+            unitPrice: Number(item.unitPrice), subtotal: Number(item.subtotal),
+          })),
+        },
+      };
+    }
+
+    async function rejectSale(error: string) {
+      return await recoverTicket() ?? { success: false, error };
+    }
+
+    const previous = await recoverTicket();
+    if (previous) return previous;
 
     let finalShiftId: number | null = null;
     let saleNotes = parsed.notes ? parsed.notes.trim() : null;
@@ -286,11 +335,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
       // Regla 3b: Venta Administrativa Directa (fuera de caja)
       // Solo permitida para perfiles de Admin o Supervisor
       if (operatingUser.role !== "admin" && operatingUser.role !== "manager") {
-        return {
-          success: false,
-          error:
-            "Acceso Denegado: Solo administradores y supervisores de tienda están facultados para emitir ventas administrativas directas fuera de caja.",
-        };
+        return await rejectSale("Acceso Denegado: Solo administradores y supervisores de tienda están facultados para emitir ventas administrativas directas fuera de caja.");
       }
 
       finalShiftId = null;
@@ -299,11 +344,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
     } else {
       // Regla 1: Venta POS de mostrador exige turno de caja abierto asignado
       if (!parsed.cashShiftId) {
-        return {
-          success: false,
-          error:
-            "Control de Caja: No cuentas con un turno de caja abierto. Debes aperturar una caja con tu fondo inicial antes de cobrar en mostrador.",
-        };
+        return await rejectSale("Control de Caja: No cuentas con un turno de caja abierto. Debes aperturar una caja con tu fondo inicial antes de cobrar en mostrador.");
       }
 
       const shift = await db.query.cashShifts.findFirst({
@@ -315,21 +356,14 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
       });
 
       if (!shift || shift.status !== "open" || shift.actualCash !== null) {
-        return {
-          success: false,
-          error:
-            "El turno de caja no está disponible para cobrar. Puede estar pendiente de aprobación o cerrado.",
-        };
+        return await rejectSale("El turno de caja no está disponible para cobrar. Puede estar pendiente de aprobación o cerrado.");
       }
 
       // Regla 2: Exclusividad de caja (Anti Cross-Cashier Selling)
       if (shift.userId !== operatingUser.id) {
         const assignedName = shift.user?.name || "otro operador";
         const registerTitle = shift.cashRegister?.name || `Caja #${shift.cashRegisterId}`;
-        return {
-          success: false,
-          error: `Acceso Denegado: La terminal "${registerTitle}" está asignada exclusivamente a "${assignedName}". Por control de arqueo y responsabilidad de fondos, no puedes emitir ventas en la gaveta de otro operador.`,
-        };
+        return await rejectSale(`Acceso Denegado: La terminal "${registerTitle}" está asignada exclusivamente a "${assignedName}". Por control de arqueo y responsabilidad de fondos, no puedes emitir ventas en la gaveta de otro operador.`);
       }
 
       finalShiftId = shift.id;
@@ -346,27 +380,21 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
     for (const item of parsed.items) {
       const prod = productsMap.get(item.productId);
       if (!prod?.isActive) {
-        return {
-          success: false,
-          error: `El producto ID #${item.productId} no fue encontrado en la base de datos.`,
-        };
+        return await rejectSale(`El producto ID #${item.productId} no fue encontrado en la base de datos.`);
       }
       if (Math.round(item.unitPrice * 100) !== Math.round(Number(prod.price) * 100)) {
-        return { success: false, error: `El precio de "${prod.name}" cambió. Actualiza el catálogo.` };
+        return await rejectSale(`El precio de "${prod.name}" cambió. Actualiza el catálogo.`);
       }
       item.unitPrice = Number(prod.price);
       if (prod.stock < item.quantity) {
-        return {
-          success: false,
-          error: `Stock insuficiente para "${prod.name}". Solicitado: ${item.quantity}, Disponible: ${prod.stock}`,
-        };
+        return await rejectSale(`Stock insuficiente para "${prod.name}". Solicitado: ${item.quantity}, Disponible: ${prod.stock}`);
       }
     }
 
     const subtotal = parsed.items.reduce((sum, item) => sum + item.quantity * Math.round(item.unitPrice * 100), 0) / 100;
     const discountAmount = Math.round(parsed.discountAmount * 100) / 100;
     if (discountAmount > subtotal || (discountAmount > 0 && operatingUser.role === "cashier")) {
-      return { success: false, error: "El descuento requiere autorización de un supervisor." };
+      return await rejectSale("El descuento requiere autorización de un supervisor.");
     }
     const taxAmount = 0;
     const totalAmount = Math.round((subtotal - discountAmount + taxAmount) * 100) / 100;
@@ -377,7 +405,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
     if (parsed.paymentMethod === "cash") {
       const given = parsed.cashGiven;
       if (given == null || Math.round(given * 100) < Math.round(totalAmount * 100)) {
-        return { success: false, error: "El efectivo recibido es insuficiente." };
+        return await rejectSale("El efectivo recibido es insuficiente.");
       }
       cashGiven = given;
       changeGiven = Math.max(0, given - totalAmount);
@@ -397,10 +425,11 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
       cashGiven,
       changeGiven,
       notes: saleNotes,
+      checkoutFingerprint,
     }));
     const newSale = rows[0];
     if (!newSale) {
-      return { success: false, error: "Cambió el turno, el precio o el stock. Actualiza la venta y vuelve a intentar." };
+      return await rejectSale("Cambió el turno, el precio o el stock. Actualiza la venta y vuelve a intentar.");
     }
 
     const ticketItems: SaleTicketItem[] = rows.map((row) => ({
@@ -440,6 +469,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
   } catch (error) {
     return {
       success: false,
+      confirmationPending: Boolean(input?.checkoutRequestId),
       error: adminActionError(error, "Error al procesar el cobro de la venta."),
     };
   }
@@ -506,7 +536,7 @@ export async function getSalesHistoryAction(): Promise<{
         return {
           id: it.id,
           productId: it.productId,
-          productName: it.product?.name || "Producto",
+          productName: it.product ? productName(it.product) : "Producto",
           productSku: it.product?.sku || null,
           quantity: it.quantity,
           returnedQuantity: returnedQty,
@@ -770,7 +800,7 @@ export async function refundSaleItemsAction(
 
     for (const { refundItem, originalItem, unitPrice, refundCents } of plannedItems) {
       returnedItemsList.push({
-        name: originalItem.product?.name || "Producto",
+        name: originalItem.product ? productName(originalItem.product) : "Producto",
         quantity: refundItem.quantityToRefund,
         unitPrice,
         subtotal: refundCents / 100,

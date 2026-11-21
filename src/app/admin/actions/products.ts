@@ -3,18 +3,19 @@
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { automaticSku, createCatalogProductsQuery } from "@/db/operations/catalog";
+import { productName } from "@/lib/product-name";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
 import { businessDate } from "@/lib/business-date";
 import { z } from "zod";
 import * as schema from "@/db/schema";
-import { eq, desc, and, gt } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import {
   productFormSchema,
   productDbInsertSchema,
   slugify,
   type ProductFormInput,
 } from "@/lib/validations/product";
-import { CURRENCY_SYMBOL } from "@/lib/currency";
 import { requireRole } from "@/lib/auth/session";
 
 function safeRevalidatePath(path: string) {
@@ -49,7 +50,7 @@ export async function getInventoryProducts() {
 
     return prods.map((p) => ({
       id: p.id,
-      name: p.name,
+      name: productName(p),
       sku: p.sku || `PROD-${p.id.toString().padStart(4, "0")}`,
       barcode: p.barcode || "-",
       category: p.category?.name || "Sin categoría",
@@ -112,10 +113,11 @@ export async function getProductById(id: number) {
         category: true,
         brand: true,
         supplier: true,
+        model: true,
       },
     });
 
-    return product || null;
+    return product ? { ...product, variantSelector: product.model?.variantSelector ?? null } : null;
   } catch (error) {
     console.error(`Error al obtener producto #${id}:`, error);
     return null;
@@ -136,57 +138,16 @@ export async function createProductAction(input: ProductFormInput): Promise<Acti
       return { success: false, error: errorMsg };
     }
 
-    // 2. Transformar datos para inserción en PostgreSQL
-    const insertPayload = productDbInsertSchema.parse(validated.data);
-
-    // Prevención de duplicados accidentales por doble clic / doble submit (últimos 4 segundos)
-    const recentDuplicate = await db.query.products.findFirst({
-      where: and(
-        eq(schema.products.name, insertPayload.name),
-        eq(schema.products.price, insertPayload.price),
-        gt(schema.products.createdAt, new Date(Date.now() - 4000))
-      ),
-    });
-    if (recentDuplicate) {
-      return { success: true, data: recentDuplicate };
+    const payload = productDbInsertSchema.parse(validated.data);
+    if (payload.modelCode) {
+      const model = await db.query.productModels.findFirst({ where: eq(schema.productModels.code, payload.modelCode) });
+      if (model && (model.name !== payload.name || (validated.data.variantSelector && model.variantSelector !== validated.data.variantSelector))) {
+        return { success: false, error: "Usa el nombre y selector del modelo existente o escribe otro código de grupo." };
+      }
     }
-
-    // Asegurar slug único si ya existe otro producto con el mismo slug
-    let finalSlug = insertPayload.slug;
-    const existingSlug = await db.query.products.findFirst({
-      where: eq(schema.products.slug, finalSlug),
-    });
-    if (existingSlug) {
-      finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
-    }
-
-    // 3. Insertar producto en la tabla `products`
-    const [newProduct] = await db
-      .insert(schema.products)
-      .values({
-        ...insertPayload,
-        slug: finalSlug,
-      })
-      .returning();
-
-    // 4. Asiento Génesis en Kárdex (Apertura contable y trazabilidad desde el día cero)
-    // Se registra SIEMPRE al crear el producto (incluso si inicia con 0 uds) para auditar con qué costo y precio nació.
-    const initialUnits = insertPayload.stock || 0;
-    const initialCostFormatted = Number(insertPayload.costPrice || 0).toFixed(2);
-    const initialPriceFormatted = Number(insertPayload.price || 0).toFixed(2);
-
-    await db.insert(schema.inventoryMovements).values({
-      productId: newProduct.id,
-      movementType: "adjustment_in",
-      quantity: initialUnits,
-      previousStock: 0,
-      newStock: initialUnits,
-      unitCost: insertPayload.costPrice,
-      referenceType: "product_creation",
-      referenceId: newProduct.id,
-      reason: `Apertura inicial en Kárdex al crear el producto. Stock inicial: ${initialUnits} uds | Costo de adquisición: ${CURRENCY_SYMBOL} ${initialCostFormatted} | Precio de venta: ${CURRENCY_SYMBOL} ${initialPriceFormatted}`,
-      userId: currentUser.id,
-    });
+    const { rows: [newProduct] } = await db.execute(createCatalogProductsQuery([
+      { ...payload, variantSelector: validated.data.variantSelector || null },
+    ], currentUser.id));
 
     // 5. Revalidar rutas
     safeRevalidatePath("/admin/inventario");
@@ -229,49 +190,47 @@ export async function updateProductAction(
 
     const payload = productDbInsertSchema.parse(validated.data);
 
-    // Mantener slug original o recalcular si el nombre cambió drásticamente
-    let finalSlug = existing.slug;
-    if (existing.name.toLowerCase() !== payload.name.toLowerCase()) {
-      const candidateSlug = slugify(payload.name);
-      const conflict = await db.query.products.findFirst({
-        where: eq(schema.products.slug, candidateSlug),
-      });
-      if (!conflict || conflict.id === id) {
-        finalSlug = candidateSlug;
-      }
-    }
+    const update = db.update(schema.products).set({
+      name: payload.name,
+      description: payload.description,
+      price: payload.price,
+      sku: payload.sku || existing.sku || automaticSku(),
+      barcode: payload.barcode,
+      modelCode: payload.modelCode,
+      variant: payload.variant,
+      variantColor: payload.variantColor,
+      minStock: payload.minStock,
+      imageUrl: payload.imageUrl,
+      images: payload.images,
+      categoryId: payload.categoryId,
+      brandId: payload.brandId,
+      supplierId: payload.supplierId,
+      isActive: payload.isActive,
+      isVisibleWeb: payload.isVisibleWeb,
+      isFeatured: payload.isFeatured,
+      updatedAt: new Date(),
+    }).where(eq(schema.products.id, id)).returning();
 
-    // 3. Actualizar registro en `products`
-    // En la edición directa, el stock físico y el costo de adquisición (CPP) están protegidos
-    // para preservar la integridad del Kárdex y la contabilidad.
-    const [updatedProduct] = await db
-      .update(schema.products)
-      .set({
-        name: payload.name,
-        slug: finalSlug,
-        description: payload.description,
-        price: payload.price, // Precio de venta libremente actualizable
-        costPrice: existing.costPrice, // CPP vigente inmutable por edición directa
-        stock: existing.stock, // Stock auditado inmutable por edición directa
-        minStock: payload.minStock,
-        imageUrl: payload.imageUrl,
-        images: payload.images,
-        categoryId: payload.categoryId,
-        brandId: payload.brandId,
-        supplierId: payload.supplierId,
-        isActive: payload.isActive,
-        isVisibleWeb: payload.isVisibleWeb,
-        isFeatured: payload.isFeatured,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.products.id, id))
-      .returning();
+    let updatedProduct;
+    if (payload.modelCode) {
+      const model = { code: payload.modelCode, name: payload.name, variantSelector: validated.data.variantSelector || null };
+      const [, [updated]] = await db.batch([
+        db.insert(schema.productModels).values(model).onConflictDoUpdate({
+          target: schema.productModels.code,
+          set: { name: model.name, variantSelector: model.variantSelector },
+        }),
+        update,
+      ]);
+      updatedProduct = updated;
+    } else {
+      [updatedProduct] = await update;
+    }
 
     // 5. Revalidar rutas
     safeRevalidatePath("/admin/inventario");
     safeRevalidatePath(`/admin/inventario/${id}/editar`);
     safeRevalidatePath("/catalogo");
-    safeRevalidatePath(`/producto/${finalSlug}`);
+    safeRevalidatePath(`/producto/${existing.slug}`);
 
     return { success: true, data: updatedProduct };
   } catch (error: any) {
@@ -486,7 +445,7 @@ export async function getProductKardexAction(productId?: number) {
           id: m.id,
           date: formattedDate,
           productId: m.productId,
-          product: m.product?.name || `Producto #${m.productId}`,
+          product: m.product ? productName(m.product) : `Producto #${m.productId}`,
           sku: m.product?.sku || `PROD-${m.productId}`,
           type: m.movementType,
           typeLabel,

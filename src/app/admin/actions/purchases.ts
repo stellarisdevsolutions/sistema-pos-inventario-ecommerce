@@ -1,5 +1,7 @@
 "use server";
 
+import { productName } from "@/lib/product-name";
+
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
@@ -137,7 +139,7 @@ export async function getPurchasesAction(): Promise<{
       const formattedItems: PurchaseItemDetail[] = itemsList.map((it) => ({
         id: it.id,
         productId: it.productId,
-        productName: it.product?.name || "Producto no especificado",
+        productName: it.product ? productName(it.product) : "Producto no especificado",
         productSku: it.product?.sku || null,
         productImage: it.product?.imageUrl || null,
         quantity: it.quantity,
@@ -236,7 +238,7 @@ export async function getProductsForPurchaseAction() {
       success: true,
       data: prods.map((p) => ({
         id: p.id,
-        name: p.name,
+        name: productName(p),
         sku: p.sku || `PROD-${p.id}`,
         barcode: p.barcode || "",
         stock: p.stock || 0,

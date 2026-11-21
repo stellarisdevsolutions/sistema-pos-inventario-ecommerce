@@ -1,5 +1,7 @@
 "use server";
 
+import { productName } from "@/lib/product-name";
+
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
@@ -596,7 +598,7 @@ export async function getShiftSalesAction(shiftId: number): Promise<{
       const formattedItems: ShiftSaleTicketItem[] = (s.items || []).map((it) => ({
         id: it.id,
         productId: it.productId,
-        productName: it.product?.name || "Producto",
+        productName: it.product ? productName(it.product) : "Producto",
         quantity: it.quantity,
         unitPrice: parseFloat(it.unitPrice) || 0,
         subtotal: parseFloat(it.subtotal) || 0,

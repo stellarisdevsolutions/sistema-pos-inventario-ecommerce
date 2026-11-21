@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Metadata } from "next";
-import { getStoreProductBySlug, getStoreProducts } from "@/app/actions/store";
+import { getStoreProductBySlug, getStoreProducts, getStoreVariants } from "@/app/actions/store";
 import { ProductDetailClient } from "./product-client";
 
 interface PageProps {
@@ -34,12 +34,12 @@ async function ProductDataLoader({ params }: PageProps) {
     notFound();
   }
 
-  const allProducts = await getStoreProducts();
+  const [allProducts, variants] = await Promise.all([getStoreProducts(), product.modelCode ? getStoreVariants(product.modelCode) : []]);
   const relatedProducts = allProducts.filter(
-    (p) => p.id !== product.id && p.category?.id === product.category?.id
+    (p) => p.id !== product.id && (!product.modelCode || p.modelCode !== product.modelCode) && p.category?.id === product.category?.id
   );
 
-  return <ProductDetailClient product={product} relatedProducts={relatedProducts} />;
+  return <ProductDetailClient product={product} variants={variants} relatedProducts={relatedProducts} />;
 }
 
 export default function ProductDetailPage({ params }: PageProps) {

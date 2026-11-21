@@ -331,15 +331,16 @@ export function HomeClient({ products, categories }: HomeClientProps) {
 
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          if (p.modelCode) { window.location.assign("/producto/" + p.slug); return; }
                           addToCart({
                             id: p.id,
                             name: p.name,
                             price: p.price,
                             image: p.imageUrl,
                             quantity: 1,
-                          })
-                        }
+                          });
+                        }}
                         className="h-9 w-9 rounded-xl bg-slate-950 hover:bg-store-primary text-white flex items-center justify-center transition-all shadow-xs active:scale-95 group-hover:bg-store-primary cursor-pointer"
                         title="Añadir al carrito"
                         aria-label={`Añadir ${p.name} al carrito`}
@@ -518,6 +519,7 @@ export function HomeClient({ products, categories }: HomeClientProps) {
                         disabled={!inStock}
                         onClick={() => {
                           if (inStock) {
+                            if (p.modelCode) { window.location.assign("/producto/" + p.slug); return; }
                             addToCart({
                               id: p.id,
                               name: p.name,

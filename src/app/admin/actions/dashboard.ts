@@ -1,5 +1,7 @@
 "use server";
 
+import { productName } from "@/lib/product-name";
+
 import { adminActionError } from "@/lib/admin-action-error";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
@@ -198,7 +200,7 @@ export async function getDashboardSummaryAction(): Promise<{
         const sub = parseFloat(it.subtotal) || uPrice * it.quantity;
         itemCostTotal += uCost * it.quantity;
         return {
-          name: it.product?.name || "Producto general",
+          name: it.product ? productName(it.product) : "Producto general",
           quantity: it.quantity,
           unitPrice: uPrice,
           unitCost: uCost,
@@ -257,7 +259,7 @@ export async function getDashboardSummaryAction(): Promise<{
       if (stock <= (p.minStock || 5)) {
         criticalStockProducts.push({
           id: p.id,
-          name: p.name,
+          name: productName(p),
           sku: p.sku || `PROD-${p.id}`,
           stock,
           minStock: p.minStock || 5,

@@ -42,6 +42,12 @@ interface ProductFormProps {
   initialData?: {
     id?: number;
     name?: string;
+    sku?: string | null;
+    barcode?: string | null;
+    modelCode?: string | null;
+    variant?: string | null;
+    variantSelector?: string | null;
+    variantColor?: string | null;
     description?: string | null;
     mainImage?: string | null;
     additionalImages?: string[];
@@ -70,12 +76,21 @@ export function ProductForm({
 }: ProductFormProps) {
   const router = useRouter();
 
+  const [sku, setSku] = useState(initialData?.sku || "");
+  const [manualSku, setManualSku] = useState(false);
+  const [barcode, setBarcode] = useState(initialData?.barcode || "");
+  const [modelCode, setModelCode] = useState(initialData?.modelCode || "");
+  const [variant, setVariant] = useState(initialData?.variant || "");
+  const [variantSelector, setVariantSelector] = useState(initialData?.variantSelector || "");
+  const [variantColor, setVariantColor] = useState(initialData?.variantColor || "");
+
   // 1. Información Básica
   const [name, setName] = useState(initialData?.name || "");
   const [description, setDescription] = useState(initialData?.description || "");
 
   // 2. Imágenes
   const [mainImage, setMainImage] = useState<string | null>(initialData?.mainImage || null);
+  const [imageLink, setImageLink] = useState(initialData?.mainImage?.startsWith("https://") ? initialData.mainImage : "");
   const [additionalImages, setAdditionalImages] = useState<string[]>(
     initialData?.additionalImages || []
   );
@@ -143,14 +158,22 @@ export function ProductForm({
     }
 
     isSubmittingRef.current = true;
+    const imageUrl = imageLink.trim();
+    if (imageUrl && (!URL.canParse(imageUrl) || new URL(imageUrl).protocol !== "https:")) {
+      isSubmittingRef.current = false;
+      toast.error("Ingresa una URL pública HTTPS válida para la imagen.");
+      return;
+    }
+
     setIsSubmitting(true);
     const toastId = toast.loading(isEdit ? "Guardando cambios..." : "Creando producto...");
 
     try {
       const payload: ProductFormInput = {
         name: name.trim(),
+        sku, barcode, modelCode, variant, variantSelector, variantColor,
         description: description.trim(),
-        mainImage: mainImage || null,
+        mainImage: imageUrl || mainImage || null,
         additionalImages,
         price: priceNum,
         costPrice: costNum,
@@ -217,6 +240,7 @@ export function ProductForm({
       const res = await uploadProductImageAction(formData);
 
       if (res.success && res.url) {
+        setImageLink("");
         setMainImage(res.url);
         toast.success("Foto optimizada", { id: toastId });
       } else {
@@ -423,6 +447,11 @@ export function ProductForm({
               )}
             </div>
 
+            <label className="grid gap-1 text-xs text-admin-secondary">
+              URL pública de la imagen (opcional)
+              <Input type="url" placeholder="https://…" value={imageLink} maxLength={1500} onChange={event => setImageLink(event.target.value)} />
+            </label>
+
             {/* Galería Adicional */}
             <div className="space-y-2 pt-1 border-t border-admin-card-border">
               <div className="flex items-center justify-between">
@@ -492,6 +521,40 @@ export function ProductForm({
                 required
               />
             </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label htmlFor="product-sku" className="text-xs font-semibold">SKU</label>
+                <div className="flex gap-2">
+                  <Input id="product-sku" readOnly={!manualSku} placeholder="Se genera al guardar" value={sku} maxLength={60} onChange={e => setSku(e.target.value)} />
+                  <Button type="button" variant="outline" aria-label="Editar SKU" aria-pressed={manualSku} onClick={() => setManualSku(!manualSku)}><Pencil className="size-4" /></Button>
+                </div>
+              </div>
+              <label className="grid gap-1 text-xs font-semibold">Código de barras
+                <Input value={barcode} maxLength={60} onChange={e => setBarcode(e.target.value)} />
+              </label>
+            </div>
+            <details open={initialData?.variant ? true : undefined} className="rounded-xl border border-admin-card-border p-3">
+              <summary className="cursor-pointer text-sm font-medium">Variante opcional</summary>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1 text-xs">Grupo del modelo
+                  <Input placeholder="REM-BASICA" value={modelCode} maxLength={60} onChange={e => setModelCode(e.target.value)} />
+                </label>
+                <label className="grid gap-1 text-xs">Nombre del selector
+                  <Input placeholder="Talla y color" value={variantSelector} maxLength={60} onChange={e => setVariantSelector(e.target.value)} />
+                </label>
+                <label className="grid gap-1 text-xs">Variante
+                  <Input placeholder="S / Verde" value={variant} maxLength={100} onChange={e => setVariant(e.target.value)} />
+                </label>
+                <label className="grid gap-1 text-xs">Color visual
+                  <span className="flex gap-2">
+                    <Input placeholder="#2E7D32" value={variantColor} maxLength={7} onChange={e => setVariantColor(e.target.value)} />
+                    <Input aria-label="Elegir tono de la variante" type="color" value={/^#[0-9a-f]{6}$/i.test(variantColor) ? variantColor : "#000000"} onChange={e => setVariantColor(e.target.value)} className="w-10 shrink-0 p-1" />
+                  </span>
+                </label>
+              </div>
+              <p className="mt-2 text-xs text-admin-muted">Usa el mismo grupo para las opciones de un modelo. La foto principal de esta ficha será la de la variante.</p>
+            </details>
 
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-admin-secondary flex items-center gap-1.5">
