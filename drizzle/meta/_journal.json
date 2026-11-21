@@ -15,6 +15,13 @@
       "when": 1795148114233,
       "tag": "0001_unique_open_cash_shifts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795229397101,
+      "tag": "0002_purchase_returns",
+      "breakpoints": true
     }
   ]
 }

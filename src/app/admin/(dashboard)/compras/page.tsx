@@ -1,5 +1,6 @@
 "use client";
 
+import { PurchaseReturnDialog, returnableQuantity } from "@/components/admin/purchase-return-dialog";
 import { MetricCard } from "@/components/admin/metric-card";
 
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
@@ -166,6 +167,7 @@ export default function ComprasPage() {
 
   // Drawer de Detalle / Factura
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseListItem | null>(null);
+  const [returnRequestId, setReturnRequestId] = useState<string | null>(null);
 
   // Modal de Cancelación
   const [purchaseToCancel, setPurchaseToCancel] = useState<PurchaseListItem | null>(null);
@@ -179,6 +181,7 @@ export default function ComprasPage() {
       const res = await getPurchasesAction();
       if (res.success) {
         setPurchases(res.data);
+        setSelectedPurchase(previous => previous ? res.data.find(purchase => purchase.id === previous.id) ?? null : null);
         setKpis(res.kpis);
       } else {
         toast.error("Error al cargar compras", { description: res.error });
@@ -542,7 +545,8 @@ export default function ComprasPage() {
                                   : "text-rose-700 dark:text-rose-400"
                               }
                             >
-                              {p.status === "received" ? "En Almacén" : "Anulada"}
+                              {p.status === "received" ? "Recibida" : p.status === "pending" ? "Pendiente" : "Anulada"}
+                              {p.returns.length > 0 && <span className="ml-1 text-xs text-admin-muted"> · Con devoluciones</span>}
                             </span>
                           </div>
                         </td>
@@ -573,7 +577,7 @@ export default function ComprasPage() {
                               <Eye className="h-4 w-4" />
                             </Button>
 
-                            {p.status !== "cancelled" && (
+                            {p.status !== "cancelled" && !p.returns.length && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -640,7 +644,7 @@ export default function ComprasPage() {
                           : "text-rose-700 dark:text-rose-400"
                       }
                     >
-                      {selectedPurchase.status === "received" ? "En Almacén" : "Anulada"}
+                      {selectedPurchase.status === "received" ? "Recibida" : selectedPurchase.status === "pending" ? "Pendiente" : "Anulada"}
                     </span>
                   </div>
                 </div>
@@ -758,6 +762,7 @@ export default function ComprasPage() {
                         <div className="text-xs font-mono font-bold text-admin-text">
                           {it.quantity} u. x {CURRENCY_SYMBOL} {it.unitCost.toFixed(2)}
                         </div>
+                        {it.returnedQuantity > 0 && <p className="text-xs text-admin-muted">Devueltas: {it.returnedQuantity}</p>}
                         <span className="text-[11px] font-bold text-admin-brand-text font-mono">
                           {CURRENCY_SYMBOL} {it.subtotal.toFixed(2)}
                         </span>
@@ -766,6 +771,31 @@ export default function ComprasPage() {
                   ))}
                 </div>
               </div>
+
+              {selectedPurchase.returns.length > 0 && (
+                <section aria-label="Devoluciones al proveedor" className="space-y-2">
+                  <h3 className="font-semibold text-admin-text">Devoluciones al proveedor</h3>
+                  {selectedPurchase.returns.map(receipt => (
+                    <details key={receipt.id} className="rounded-lg border border-admin-card-border p-3">
+                      <summary className="cursor-pointer text-sm font-medium">
+                        DEV-{receipt.id} · {receipt.createdAt} · {receipt.items.reduce((sum, item) => sum + item.quantity, 0)} u.
+                      </summary>
+                      <div className="mt-2 space-y-1 text-xs text-admin-secondary">
+                        <p>{receipt.reason} · {receipt.userName}</p>
+                        {receipt.creditNoteReference && <p>Nota de crédito: {receipt.creditNoteReference}</p>}
+                        <ul className="divide-y divide-admin-card-border">
+                          {receipt.items.map(item => (
+                            <li key={item.purchaseItemId} className="py-2">
+                              <strong className="block">{item.quantity} u. · {selectedPurchase.items.find(line => line.id === item.purchaseItemId)?.productName}</strong>
+                              Compra {formatCurrencyLocale(item.originalUnitCost)} por unidad · Kárdex {formatCurrencyLocale(item.inventoryUnitCost)} por unidad
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </details>
+                  ))}
+                </section>
+              )}
 
               {/* Observaciones */}
               {selectedPurchase.notes && (
@@ -789,7 +819,7 @@ export default function ComprasPage() {
             </div>
 
             {/* Footer del Drawer */}
-            <div className="p-4 border-t border-admin-card-border bg-admin-raised flex items-center justify-between">
+            <div className="p-4 border-t border-admin-card-border bg-admin-raised flex flex-wrap items-center justify-between gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -799,7 +829,17 @@ export default function ComprasPage() {
                 Cerrar Ficha
               </Button>
 
-              {selectedPurchase.status !== "cancelled" && (
+              {selectedPurchase.status === "received" && selectedPurchase.items.some(item => returnableQuantity(item) > 0) && (
+                <Button
+                  type="button"
+                  onClick={() => setReturnRequestId(crypto.randomUUID())}
+                  className="bg-admin-brand text-admin-on-solid hover:bg-admin-brand-hover"
+                >
+                  Devolver mercancía
+                </Button>
+              )}
+
+              {selectedPurchase.status !== "cancelled" && !selectedPurchase.returns.length && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -815,6 +855,15 @@ export default function ComprasPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedPurchase && returnRequestId && (
+        <PurchaseReturnDialog
+          purchase={selectedPurchase}
+          requestId={returnRequestId}
+          onClose={() => setReturnRequestId(null)}
+          onSaved={loadPurchases}
+        />
       )}
 
       {/* =========================================================================

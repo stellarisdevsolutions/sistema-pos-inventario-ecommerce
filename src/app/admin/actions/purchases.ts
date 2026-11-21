@@ -3,11 +3,11 @@
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { cancelPurchaseQuery, createPurchaseQuery } from "@/db/operations/purchases";
+import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
 import { businessDate } from "@/lib/business-date";
 import * as schema from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { purchaseFormSchema, type PurchaseFormInput } from "@/lib/validations/purchase";
+import { purchaseFormSchema, purchaseReturnSchema, type PurchaseFormInput, type PurchaseReturnInput } from "@/lib/validations/purchase";
 import { requireRole } from "@/lib/auth/session";
 
 function safeRevalidatePath(path: string) {
@@ -25,6 +25,8 @@ export type PurchaseItemDetail = {
   productSku: string | null;
   productImage: string | null;
   quantity: number;
+  returnedQuantity: number;
+  availableStock: number;
   unitCost: number;
   subtotal: number;
 };
@@ -50,6 +52,14 @@ export type PurchaseListItem = {
   itemsCount: number; // Cantidad total de piezas físicas
   linesCount: number; // Cantidad de renglones / productos distintos
   items: PurchaseItemDetail[];
+  returns: {
+    id: number;
+    createdAt: string;
+    userName: string;
+    reason: string;
+    creditNoteReference: string | null;
+    items: { purchaseItemId: number; quantity: number; originalUnitCost: number; inventoryUnitCost: number }[];
+  }[];
 };
 
 export type PurchasesKpiSummary = {
@@ -73,6 +83,7 @@ export async function getPurchasesAction(): Promise<{
 
     const list = await db.query.purchases.findMany({
       with: {
+        returns: { with: { user: true, items: true }, orderBy: (r, { desc }) => [desc(r.id)] },
         supplier: true,
         user: true,
         items: {
@@ -116,6 +127,13 @@ export async function getPurchasesAction(): Promise<{
         year: "numeric",
       });
 
+      const returnedByLine = new Map<number, number>();
+      for (const receipt of p.returns) {
+        for (const item of receipt.items) {
+          returnedByLine.set(item.purchaseItemId, (returnedByLine.get(item.purchaseItemId) ?? 0) + item.quantity);
+        }
+      }
+
       const formattedItems: PurchaseItemDetail[] = itemsList.map((it) => ({
         id: it.id,
         productId: it.productId,
@@ -123,6 +141,8 @@ export async function getPurchasesAction(): Promise<{
         productSku: it.product?.sku || null,
         productImage: it.product?.imageUrl || null,
         quantity: it.quantity,
+        returnedQuantity: returnedByLine.get(it.id) ?? 0,
+        availableStock: it.product?.stock ?? 0,
         unitCost: parseFloat(it.unitCost) || 0,
         subtotal: parseFloat(it.subtotal) || 0,
       }));
@@ -148,6 +168,19 @@ export async function getPurchasesAction(): Promise<{
         itemsCount: totalUnits,
         linesCount: itemsList.length,
         items: formattedItems,
+        returns: p.returns.map(receipt => ({
+          id: receipt.id,
+          createdAt: businessDate(receipt.createdAt),
+          userName: receipt.user?.name ?? "Usuario",
+          reason: receipt.reason,
+          creditNoteReference: receipt.creditNoteReference,
+          items: receipt.items.map(item => ({
+            purchaseItemId: item.purchaseItemId,
+            quantity: item.quantity,
+            originalUnitCost: Number(item.originalUnitCost),
+            inventoryUnitCost: Number(item.inventoryUnitCost),
+          })),
+        })),
       };
     });
 
@@ -293,11 +326,12 @@ export async function cancelPurchaseAction(
       return { success: false, error: "Revisa el identificador de compra y el motivo." };
     }
 
-    const { rows } = await db.execute(cancelPurchaseQuery(
-      purchaseId, currentUser.id, reason?.trim() || "Cancelación de orden"
-    ));
+    const [, { rows }] = await db.batch([
+      db.execute(lockPurchaseQuery(purchaseId)),
+      db.execute(cancelPurchaseQuery(purchaseId, currentUser.id, reason?.trim() || "Cancelación de orden")),
+    ]);
     if (!rows.length) {
-      return { success: false, error: "La compra no se puede anular o ya no hay stock suficiente para revertirla." };
+      return { success: false, error: "La compra ya fue anulada, tiene devoluciones registradas o falta stock para revertirla." };
     }
 
     safeRevalidatePath("/admin/compras");
@@ -310,5 +344,26 @@ export async function cancelPurchaseAction(
       success: false,
       error: adminActionError(error, "Error al anular la orden de compra."),
     };
+  }
+}
+
+export async function returnPurchaseAction(input: PurchaseReturnInput): Promise<{ success: boolean; error?: string }> {
+  try {
+    const actor = await requireRole(["admin", "manager", "warehouse"]);
+    const parsed = purchaseReturnSchema.parse(input);
+    const [, { rows }] = await db.batch([
+      db.execute(lockPurchaseQuery(parsed.purchaseId)),
+      db.execute(returnPurchaseQuery(parsed, actor.id)),
+    ]);
+    if (!rows.length) {
+      return { success: false, error: "Verifica que la compra siga recibida y que las cantidades no superen lo pendiente por devolver ni el stock disponible." };
+    }
+
+    for (const path of ["/admin/compras", "/admin/inventario", "/admin", "/admin/ventas", "/catalogo"]) {
+      safeRevalidatePath(path);
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "No se pudo registrar la devolución al proveedor.") };
   }
 }

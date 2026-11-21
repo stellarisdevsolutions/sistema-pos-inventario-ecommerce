@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test, type TestContext } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { cancelPurchaseQuery, createPurchaseQuery } from "@/db/operations/purchases";
+import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
 import { cancelSaleQuery, createSaleQuery, refundSaleQuery } from "@/db/operations/sales";
 import { saleFormSchema } from "@/lib/validations/sale";
-import { purchaseFormSchema } from "@/lib/validations/purchase";
+import { purchaseFormSchema, purchaseReturnSchema, type PurchaseReturnInput } from "@/lib/validations/purchase";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
 import { approveCashCountQuery, submitCashCountQuery } from "@/db/operations/cash-shifts";
 
@@ -14,7 +15,7 @@ async function createDatabase(context: TestContext) {
   const db = new PGlite();
   context.after(() => db.close());
 
-  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql"]) {
+  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql"]) {
     await db.exec(await readFile(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
   }
   await db.exec(`
@@ -187,4 +188,69 @@ test("cobrar una venta aplica ticket, stock, Kardex y caja en la misma operació
     closed_by_user_id: 2, notes: "Faltante registrado",
   }]);
 
+});
+
+test("devuelve al proveedor al costo vigente sin duplicar salidas ni superar la compra o el stock", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  const query = (statement: ReturnType<typeof returnPurchaseQuery>) => dialect.sqlToQuery(statement);
+  const execute = (statement: ReturnType<typeof returnPurchaseQuery>) => {
+    const { sql, params } = query(statement);
+    return db.query<{ id: number }>(sql, params);
+  };
+
+  await db.exec(`
+    INSERT INTO suppliers (name) VALUES ('Proveedor fixture');
+    INSERT INTO products (name, slug, stock, cost_price, price)
+    VALUES ('Producto', 'producto', 0, 0, 50), ('Otro', 'otro', 0, 0, 50);
+  `);
+  const receive = (items: { productId: number; quantity: number; unitCost: number }[]) =>
+    execute(createPurchaseQuery(purchaseFormSchema.parse({ supplierId: 1, items }), 1, "COM-"));
+  const original = (await receive([
+    { productId: 1, quantity: 10, unitCost: 20 },
+    { productId: 2, quantity: 1, unitCost: 6 },
+  ])).rows[0];
+  const other = (await receive([{ productId: 1, quantity: 5, unitCost: 26 }])).rows[0];
+  const input = (items: PurchaseReturnInput["items"]) => purchaseReturnSchema.parse({
+    purchaseId: original.id,
+    requestId: randomUUID(),
+    reason: "Mercancía dañada",
+    creditNoteReference: "NC-20",
+    items,
+  });
+  const submit = (data: PurchaseReturnInput, userId = 1) => db.transaction(async tx => {
+    const lock = query(lockPurchaseQuery(data.purchaseId));
+    await tx.query(lock.sql, lock.params);
+    const mutation = query(returnPurchaseQuery(data, userId));
+    return tx.query<{ id: number }>(mutation.sql, mutation.params);
+  });
+
+  assert.equal((await submit(input([{ purchaseItemId: 3, quantity: 1 }]))).rows.length, 0);
+  assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 1 }, { purchaseItemId: 2, quantity: 2 }]))).rows.length, 0);
+  const firstReturn = input([{ purchaseItemId: 1, quantity: 3 }]);
+  await assert.rejects(submit(firstReturn, 9999), /foreign key/);
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 15 }]);
+  const { rows: [receipt] } = await submit(firstReturn);
+  assert.deepEqual((await submit(firstReturn)).rows, [receipt]);
+  assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 8 }]))).rows.length, 0);
+  assert.equal((await execute(cancelPurchaseQuery(original.id, 1, "Prueba"))).rows.length, 0);
+  await assert.rejects(
+    db.query("UPDATE purchases SET status = 'cancelled' WHERE id = $1", [original.id]),
+    /Una compra con devoluciones no se puede anular/
+  );
+  assert.deepEqual((await db.query("SELECT status FROM purchases WHERE id = $1", [original.id])).rows, [{ status: "received" }]);
+  assert.deepEqual((await db.query("SELECT quantity, original_unit_cost, inventory_unit_cost FROM purchase_return_items WHERE return_id = $1", [receipt.id])).rows, [
+    { quantity: 3, original_unit_cost: "20.00", inventory_unit_cost: "22.00" },
+  ]);
+  assert.deepEqual((await db.query(`
+    SELECT quantity, previous_stock, new_stock, unit_cost, reference_id
+    FROM inventory_movements WHERE reference_type = 'purchase_return'
+  `)).rows, [{ quantity: -3, previous_stock: 15, new_stock: 12, unit_cost: "22.00", reference_id: receipt.id }]);
+
+  assert.equal((await execute(cancelPurchaseQuery(other.id, 1, "Prueba"))).rows.length, 1);
+  assert.equal((await submit({ ...input([{ purchaseItemId: 3, quantity: 1 }]), purchaseId: other.id })).rows.length, 0);
+  await db.exec("UPDATE products SET stock = 4 WHERE id = 1");
+  assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 5 }]))).rows.length, 0);
+  assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 4 }]))).rows.length, 1);
+  assert.deepEqual((await db.query("SELECT stock, cost_price FROM products WHERE id = 1")).rows, [{ stock: 0, cost_price: "22.00" }]);
 });

@@ -8,6 +8,9 @@ import {
   boolean,
   pgEnum,
   uniqueIndex,
+  index,
+  check,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -240,6 +243,31 @@ export const purchaseItems = pgTable("purchase_items", {
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
 });
 
+export const purchaseReturns = pgTable("purchase_returns", {
+  id: serial("id").primaryKey(),
+  purchaseId: integer("purchase_id").references(() => purchases.id).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  requestId: uuid("request_id").notNull().unique(),
+  reason: text("reason").notNull(),
+  creditNoteReference: text("credit_note_reference"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("purchase_returns_purchase_idx").on(t.purchaseId),
+]);
+
+export const purchaseReturnItems = pgTable("purchase_return_items", {
+  id: serial("id").primaryKey(),
+  returnId: integer("return_id").references(() => purchaseReturns.id).notNull(),
+  purchaseItemId: integer("purchase_item_id").references(() => purchaseItems.id).notNull(),
+  quantity: integer("quantity").notNull(),
+  originalUnitCost: numeric("original_unit_cost", { precision: 12, scale: 2 }).notNull(),
+  inventoryUnitCost: numeric("inventory_unit_cost", { precision: 12, scale: 2 }).notNull(),
+}, (t) => [
+  uniqueIndex("purchase_return_items_line_unique").on(t.returnId, t.purchaseItemId),
+  index("purchase_return_items_purchase_item_idx").on(t.purchaseItemId),
+  check("purchase_return_items_positive_quantity", sql`${t.quantity} > 0`),
+]);
+
 /* =========================================================================
    5. VENTAS Y FACTURACIÓN POS & WEB (SALES)
    ========================================================================= */
@@ -402,6 +430,7 @@ export const purchasesRelations = relations(purchases, ({ one, many }) => ({
     references: [users.id],
   }),
   items: many(purchaseItems),
+  returns: many(purchaseReturns),
 }));
 
 export const purchaseItemsRelations = relations(purchaseItems, ({ one }) => ({
@@ -412,6 +441,25 @@ export const purchaseItemsRelations = relations(purchaseItems, ({ one }) => ({
   product: one(products, {
     fields: [purchaseItems.productId],
     references: [products.id],
+  }),
+}));
+
+export const purchaseReturnsRelations = relations(purchaseReturns, ({ one, many }) => ({
+  purchase: one(purchases, {
+    fields: [purchaseReturns.purchaseId],
+    references: [purchases.id],
+  }),
+  user: one(users, {
+    fields: [purchaseReturns.userId],
+    references: [users.id],
+  }),
+  items: many(purchaseReturnItems),
+}));
+
+export const purchaseReturnItemsRelations = relations(purchaseReturnItems, ({ one }) => ({
+  purchaseReturn: one(purchaseReturns, {
+    fields: [purchaseReturnItems.returnId],
+    references: [purchaseReturns.id],
   }),
 }));
 

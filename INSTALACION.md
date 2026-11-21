@@ -37,3 +37,7 @@ Las contraseñas reales se validan mediante PBKDF2 y las claves de sesión deben
 ## Paleta del panel
 
 Edita `--admin-pigment` en [src/app/admin-theme.css](src/app/admin-theme.css) para recolorear las acciones, los enlaces activos y los acentos del panel y del portal. Los fondos, el texto y los bordes tienen variables propias en `:root` y `.dark`. Los colores de stock, alerta y error distinguen estados operativos. La tienda usa sus propios tokens `--store-*`.
+
+## Migración de devoluciones a proveedores
+
+Antes de publicar una versión con devoluciones a proveedores, aplica [la migración 0002](drizzle/0002_purchase_returns.sql) en la base que usará ese despliegue. Con el historial de Drizzle al día, usa `corepack pnpm exec drizzle-kit migrate`. Para una base existente sin historial, verifica primero que su esquema corresponda a la versión anterior y ejecuta solo la migración nueva en una transacción. La migración crea las tablas de devoluciones y protege las compras que ya tienen una devolución registrada.

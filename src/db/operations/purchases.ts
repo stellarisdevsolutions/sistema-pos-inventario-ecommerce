@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { PurchaseFormInput } from "@/lib/validations/purchase";
+import type { PurchaseFormInput, PurchaseReturnInput } from "@/lib/validations/purchase";
 
 export function createPurchaseQuery(input: PurchaseFormInput, userId: number, prefix: string) {
   const lines = JSON.stringify(input.items.map(({ productId, quantity, unitCost }) => ({
@@ -70,6 +70,7 @@ export function cancelPurchaseQuery(purchaseId: number, userId: number, reason: 
       UPDATE purchases p SET status = 'cancelled'
       FROM target WHERE p.id = target.id
         AND NOT EXISTS (SELECT 1 FROM locked_products WHERE stock < quantity)
+        AND NOT EXISTS (SELECT 1 FROM purchase_returns WHERE purchase_id = target.id)
       RETURNING p.id, p.purchase_number
     ), stock_change AS (
       UPDATE products p SET stock = p.stock - l.quantity, updated_at = now()
@@ -83,5 +84,66 @@ export function cancelPurchaseQuery(purchaseId: number, userId: number, reason: 
       FROM cancelled CROSS JOIN stock_change
     )
     SELECT id FROM cancelled
+  `;
+}
+
+// The next statement in the same read-committed batch sees returns committed while this lock waited.
+export function lockPurchaseQuery(purchaseId: number) {
+  return sql`SELECT id FROM purchases WHERE id = ${purchaseId} FOR UPDATE`;
+}
+
+export function returnPurchaseQuery(input: PurchaseReturnInput, userId: number) {
+  const lines = JSON.stringify(input.items.map(({ purchaseItemId, quantity }) => ({
+    purchase_item_id: purchaseItemId,
+    quantity,
+  })));
+
+  return sql`
+    WITH requested AS MATERIALIZED (
+      SELECT * FROM jsonb_to_recordset(${lines}::jsonb)
+        AS line(purchase_item_id integer, quantity integer)
+    ), existing_return AS MATERIALIZED (
+      SELECT id FROM purchase_returns
+      WHERE request_id = ${input.requestId}::uuid AND purchase_id = ${input.purchaseId} AND user_id = ${userId}
+    ), lines AS MATERIALIZED (
+      SELECT item.id, item.product_id, requested.quantity, item.unit_cost
+      FROM requested
+      JOIN purchase_items item ON item.id = requested.purchase_item_id
+      JOIN purchases purchase ON purchase.id = item.purchase_id
+      WHERE purchase.id = ${input.purchaseId} AND purchase.status = 'received'
+        AND requested.quantity > 0 AND requested.quantity <= item.quantity - COALESCE((
+          SELECT SUM(quantity) FROM purchase_return_items WHERE purchase_item_id = item.id
+        ), 0)
+        AND NOT EXISTS (SELECT 1 FROM existing_return)
+    ), quantities AS (
+      SELECT product_id, SUM(quantity) AS quantity FROM lines GROUP BY product_id
+    ), locked_products AS MATERIALIZED (
+      SELECT p.id, p.stock, p.cost_price, quantities.quantity
+      FROM products p JOIN quantities ON p.id = quantities.product_id
+      ORDER BY p.id FOR UPDATE OF p
+    ), returned AS (
+      INSERT INTO purchase_returns (purchase_id, user_id, request_id, reason, credit_note_reference)
+      SELECT ${input.purchaseId}, ${userId}, ${input.requestId}::uuid, ${input.reason}, ${input.creditNoteReference || null}
+      WHERE EXISTS (SELECT 1 FROM requested)
+        AND (SELECT count(*) FROM lines) = (SELECT count(*) FROM requested)
+        AND NOT EXISTS (SELECT 1 FROM locked_products WHERE stock < quantity)
+      ON CONFLICT (request_id) DO NOTHING
+      RETURNING id
+    ), detail AS (
+      INSERT INTO purchase_return_items (return_id, purchase_item_id, quantity, original_unit_cost, inventory_unit_cost)
+      SELECT returned.id, lines.id, lines.quantity, lines.unit_cost, locked_products.cost_price
+      FROM returned CROSS JOIN lines JOIN locked_products ON locked_products.id = lines.product_id
+    ), stock_change AS (
+      UPDATE products SET stock = products.stock - locked_products.quantity::integer, updated_at = now()
+      FROM returned CROSS JOIN locked_products WHERE products.id = locked_products.id
+      RETURNING products.id, products.stock, locked_products.quantity::integer AS quantity, locked_products.cost_price
+    ), movement AS (
+      INSERT INTO inventory_movements (product_id, movement_type, quantity, previous_stock, new_stock,
+        unit_cost, reference_type, reference_id, reason, user_id)
+      SELECT stock_change.id, 'adjustment_out', -quantity, stock + quantity, stock, cost_price,
+        'purchase_return', returned.id, ${input.reason}, ${userId}
+      FROM returned CROSS JOIN stock_change
+    )
+    SELECT id FROM returned UNION ALL SELECT id FROM existing_return
   `;
 }

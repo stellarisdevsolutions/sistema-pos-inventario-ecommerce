@@ -1,3 +1,4 @@
+import { returnPurchaseAction } from "@/app/admin/actions/purchases";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
@@ -167,6 +168,7 @@ test("las Server Actions rechazan la llamada sin sesión antes de leer o escribi
     createCategoryAction("Categoría"), updateCategoryAction(1, "Categoría"), deleteCategoryAction(1),
     openShiftAction({ cashRegisterId: 1, userId: 1, initialCash: 0 }),
     closeShiftAction({ shiftId: 1 }), submitCashCountAction({ shiftId: 1, actualCash: 0 }),
+    returnPurchaseAction({ purchaseId: 1, requestId: "ad877895-785d-43b8-aab1-85ed429c414c", reason: "Prueba", items: [{ purchaseItemId: 1, quantity: 1 }] }),
     uploadCategoryPhotoAction(new FormData()), uploadProductImageAction(new FormData()),
   ];
   const results = await Promise.all(actions);

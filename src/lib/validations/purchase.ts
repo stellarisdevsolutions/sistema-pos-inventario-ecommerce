@@ -33,3 +33,19 @@ export const purchaseFormSchema = z.object({
 
 export type PurchaseItemInput = z.infer<typeof purchaseItemSchema>;
 export type PurchaseFormInput = z.infer<typeof purchaseFormSchema>;
+
+const positiveInteger = z.number().int().min(1).max(2147483647);
+
+export const purchaseReturnSchema = z.object({
+  purchaseId: positiveInteger,
+  requestId: z.uuid(),
+  reason: z.string().trim().min(1, "Indica el motivo de la devolución.").max(500),
+  creditNoteReference: z.string().trim().max(60).optional(),
+  items: z.array(z.object({ purchaseItemId: positiveInteger, quantity: positiveInteger }))
+    .min(1, "Indica cuántas unidades vas a devolver.")
+    .max(200)
+    .refine((items) => new Set(items.map(item => item.purchaseItemId)).size === items.length,
+      "Cada línea de compra debe aparecer una sola vez."),
+});
+
+export type PurchaseReturnInput = z.infer<typeof purchaseReturnSchema>;

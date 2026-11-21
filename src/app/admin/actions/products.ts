@@ -450,6 +450,8 @@ export async function getProductKardexAction(productId?: number) {
           typeLabel = "Salida por Venta";
         } else if (m.movementType === "adjustment_in") {
           typeLabel = "Ajuste de Entrada (+)";
+        } else if (m.referenceType === "purchase_return") {
+          typeLabel = "Devolución a proveedor";
         } else if (m.movementType === "adjustment_out") {
           if (
             m.referenceType === "purchase" ||
@@ -495,6 +497,8 @@ export async function getProductKardexAction(productId?: number) {
           reference:
             m.referenceType === "product_creation"
               ? `ALTA-#${m.productId}`
+              : m.referenceType === "purchase_return"
+              ? "DEV-" + m.referenceId
               : m.referenceId
               ? `#REF-${m.referenceId}`
               : "Ajuste Directo",
