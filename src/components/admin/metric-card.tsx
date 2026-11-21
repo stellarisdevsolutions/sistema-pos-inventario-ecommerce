@@ -8,7 +8,7 @@ interface MetricCardProps {
   detail: ReactNode;
   icon: LucideIcon;
   tone?: "neutral" | "success" | "warning" | "danger";
-  appearance?: "lead" | "desk";
+  appearance?: "desk";
 }
 
 export function MetricCard({ label, value, detail, icon: Icon, tone, appearance, trend }: MetricCardProps) {

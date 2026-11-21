@@ -10,7 +10,7 @@
   --admin-brand-text: var(--admin-brand);
   --admin-accent: var(--admin-brand);
   --admin-accent-hover: var(--admin-brand-hover);
-  --admin-workspace-bg: #f0edf5;
+  --admin-workspace-bg: #f7f6fa;
   --admin-card-bg: #fff;
   --admin-raised: #f7f5fa;
   --admin-card-border: #e6e0ee;
@@ -168,7 +168,7 @@
   border: 0;
   padding: clamp(12px, 1.6vw, 28px);
 }
-.admin-page-header { border-bottom: 0; padding-bottom: 0; }
+.admin-page-header { border-bottom: 0; padding-block: 4px 0; }
 .admin-page-title { font-size: clamp(1.85rem, 2.65vw, 3rem); letter-spacing: -.055em; line-height: 1.08; }
 .admin-header { min-height: 64px; border-radius: var(--admin-panel-radius); }
 .admin-header-button[aria-label="Buscar módulos"] { border-radius: 99px; background: var(--admin-raised); }
@@ -180,14 +180,14 @@
   background: var(--admin-sidebar-hover) var(--admin-contours) right / auto 100% no-repeat;
   border: 1px solid var(--admin-sidebar-border);
 }
-.admin-cover, .admin-metric[data-appearance="lead"], .admin-financial-card:first-child, .admin-register, .admin-login-brand {
+.admin-register, .admin-login-brand {
   position: relative;
   isolation: isolate;
   border-radius: var(--admin-panel-radius);
   background: var(--admin-gradient);
   color: var(--admin-on-solid);
 }
-:is(.admin-cover,.admin-metric[data-appearance="lead"],.admin-financial-card:first-child,.admin-register,.admin-login-brand)::before {
+:is(.admin-register,.admin-login-brand)::before {
   content: "";
   position: absolute;
   z-index: -1;
@@ -198,11 +198,7 @@
   opacity: .22;
   pointer-events: none;
 }
-.admin-cover { padding: clamp(18px, 2.3vw, 34px); }
-.admin-cover :is(.admin-page-title,.admin-page-description,.admin-return) { color: var(--admin-on-solid); }
-.admin-return { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; }
-.admin-cover button.bg-admin-brand { background: var(--admin-on-solid); color: var(--admin-ink); }
-.admin-cover button.bg-admin-brand:hover { background: var(--admin-brand-light); color: var(--admin-brand-text); }
+.admin-return { color: var(--admin-secondary); display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; }
 @layer components {
 .admin-panel, .admin-metric {
   min-width: 0;
@@ -226,20 +222,23 @@
   color: var(--metric-accent);
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
-.admin-metric[data-appearance="lead"] :is(.admin-metric-label,.admin-metric-detail,svg) { color: var(--admin-on-solid); }
 .admin-metric[data-appearance="desk"]::after {
   content: ""; display: block; height: 44px; margin: 0 -10px -12px;
   background: url('/panel-art/invoice-desk.webp') center 80% / cover no-repeat;
   border-radius: 0 0 12px 12px;
 }
-.admin-financial-card:first-child { --admin-text: var(--admin-on-solid); --admin-muted: var(--admin-on-solid); --admin-secondary: var(--admin-on-solid); }
 .admin-chart-bar { background: linear-gradient(var(--admin-pigment),var(--admin-brand-hover)); }
-.admin-ticket-head {
-  margin: -1.25rem -1.25rem 1rem; padding: 1rem 1.25rem;
-  border-radius: var(--admin-panel-radius) var(--admin-panel-radius) 0 0;
-  background: var(--admin-gradient); --admin-text: var(--admin-on-solid);
+/* Acciones de entrada del punto de venta */
+.pos-start-options { display:grid; gap:12px; max-width: 760px; grid-template-columns: repeat(auto-fit,minmax(min(100%,260px),1fr)); }
+.pos-start-option {
+  display: grid; gap: 6px; padding: clamp(16px,2.2vw,25px); text-align: left; cursor: pointer;
+  color: var(--admin-text); transition: border-color .15s, background .15s;
 }
-.admin-ticket-head span, .admin-ticket-head button { color: var(--admin-sidebar-text); }
+.pos-start-option:hover { border-color: var(--admin-brand); background: var(--admin-brand-subtle); }
+.pos-start-icon {
+  display: inline-flex; flex: none; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 10px; background: var(--admin-brand-light); color: var(--admin-brand-text);
+}
 .admin-main thead tr { background: linear-gradient(110deg,var(--admin-brand-light),var(--admin-card-bg)); }
 .admin-main thead th {
   height: 43px; font-size: .73rem; text-transform: none; letter-spacing: .01em; color: var(--admin-secondary);
@@ -248,10 +247,7 @@
 @media (max-width: 639px) {
   .admin-main { padding: 10px 4px; }
   .admin-header { min-height: 52px; }
-  .admin-cover { padding: 16px; }
   .admin-page-title { font-size: 1.7rem; }
-  .admin-cover > div { max-width: 100%; flex-wrap: wrap; }
-  .admin-cover [data-slot="button"] { padding-inline: 10px; }
   .admin-metric { padding: 12px; }
 }
 .admin-segments {
@@ -269,9 +265,9 @@
 .admin-segment[aria-pressed="true"] svg { color: inherit; }
 .admin-channel-mix {
   height: 6px; margin-top: 12px; border-radius: 8px; overflow: hidden;
-  background: var(--admin-sidebar-border);
+  background: var(--admin-brand-light);
 }
-.admin-channel-mix span { display: block; height: 100%; background: var(--admin-on-solid); }
+.admin-channel-mix span { display: block; height: 100%; background: var(--admin-brand); }
 
 .ticket-book {
   container-type: inline-size; padding: 0 clamp(12px,1.5vw,24px) 20px;
@@ -327,4 +323,3 @@
 .metric-trend { display: flex; align-items: end; justify-content: space-between; gap: 6px; color: var(--admin-brand-text); }
 .metric-trend svg { width: 38%; max-width: 95px; height: 32px; }
 .metric-trend figcaption { font-size: .69rem; color: var(--admin-muted); }
-.admin-metric[data-appearance="lead"] .metric-trend, .admin-metric[data-appearance="lead"] figcaption { color: var(--admin-on-solid); }

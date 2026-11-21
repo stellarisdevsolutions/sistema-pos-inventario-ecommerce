@@ -15,7 +15,7 @@ import { businessDate } from "@/lib/business-date";
 import { refundUnitAmounts } from "@/lib/refund-amount";
 import { demoSupervisorEmails, isDemoLoginEnabled } from "@/lib/auth/demo-login";
 import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
-import { requireRole } from "@/lib/auth/session";
+import { requireRole, type SessionUser } from "@/lib/auth/session";
 
 const POS_ROLES: ("admin" | "manager" | "cashier")[] = ["admin", "manager", "cashier"];
 
@@ -96,21 +96,7 @@ export type SalesKpiSummary = {
 export type PosShiftItem = {
   id: number;
   shiftNumber: string;
-  cashRegisterId: number;
   cashRegisterName: string;
-  cashRegisterCode: string;
-  userId: number;
-  cashierName: string;
-  cashierRole: string;
-  initialCash: number;
-  openedAt: string;
-};
-
-export type PosUserItem = {
-  id: number;
-  name: string;
-  role: string;
-  email: string;
 };
 
 /**
@@ -176,80 +162,40 @@ export async function getPosCatalogAction(): Promise<{
   }
 }
 
-/**
- * 2. Obtiene el contexto completo de POS:
- * - Operador seleccionado y usuarios del sistema
- * - Turnos de caja activos y terminales
- * - Turno específico asignado al operador en curso
- */
 export async function getPosContextAction(): Promise<{
   success: boolean;
-  users: PosUserItem[];
-  currentOperator: PosUserItem | null;
-  allOpenShifts: PosShiftItem[];
+  currentOperator: Pick<SessionUser, "id" | "name" | "role"> | null;
   userShift: PosShiftItem | null;
   shiftPendingReview: boolean;
   error?: string;
 }> {
   try {
-    const currentOperator = await requireRole(POS_ROLES);
-    const allUsers = await db.query.users.findMany({
-      where: (users, { and, eq }) => and(
-        eq(users.isActive, true),
-        currentOperator.role === "cashier" ? eq(users.id, currentOperator.id) : undefined
-      ),
-      columns: { id: true, name: true, role: true, email: true },
-      orderBy: (u, { asc }) => [asc(u.id)],
-    });
-
-    const activeUsers: PosUserItem[] = allUsers.map((u) => ({
-      id: u.id,
-      name: u.name,
-      role: u.role,
-      email: u.email,
-    }));
-
-    const openShifts = await db.query.cashShifts.findMany({
-      where: eq(schema.cashShifts.status, "open"),
-      with: {
-        cashRegister: true,
-        user: true,
-      },
+    const { id, name, role } = await requireRole(POS_ROLES);
+    const shift = await db.query.cashShifts.findFirst({
+      where: and(eq(schema.cashShifts.status, "open"), eq(schema.cashShifts.userId, id)),
+      columns: { id: true, shiftNumber: true, cashRegisterId: true, actualCash: true },
+      with: { cashRegister: { columns: { name: true } } },
       orderBy: (s, { desc }) => [desc(s.id)],
     });
 
-    const formattedShifts: PosShiftItem[] = openShifts.filter(s => s.actualCash === null).map((s) => ({
-      id: s.id,
-      shiftNumber: s.shiftNumber,
-      cashRegisterId: s.cashRegisterId,
-      cashRegisterName: s.cashRegister?.name || `Caja #${s.cashRegisterId}`,
-      cashRegisterCode: s.cashRegister?.code || "CAJA",
-      userId: s.userId,
-      cashierName: s.user?.name || "Operador",
-      cashierRole: s.user?.role || "cashier",
-      initialCash: parseFloat(s.initialCash) || 0,
-      openedAt: s.openedAt.toISOString(),
-    }));
-
-    const userShift = formattedShifts.find((shift) => shift.userId === currentOperator.id) ?? null;
-
+    const shiftPendingReview = !!shift && shift.actualCash !== null;
     return {
       success: true,
-      users: activeUsers,
-      currentOperator,
-      allOpenShifts: formattedShifts,
-      userShift,
-      shiftPendingReview: openShifts.some(s => s.userId === currentOperator.id && s.actualCash !== null),
+      currentOperator: { id, name, role },
+      userShift: shift && !shiftPendingReview ? {
+        id: shift.id,
+        shiftNumber: shift.shiftNumber,
+        cashRegisterName: shift.cashRegister?.name || `Caja #${shift.cashRegisterId}`,
+      } : null,
+      shiftPendingReview,
     };
   } catch (error) {
     return {
       success: false,
-      users: [],
       currentOperator: null,
-      allOpenShifts: [],
       userShift: null,
       shiftPendingReview: false,
-      error: adminActionError(error, "Error al cargar contexto POS."),
+      error: adminActionError(error, "No se pudo verificar tu turno de caja."),
     };
   }
 }

@@ -308,7 +308,7 @@ export function ProductForm({
       {/* =========================================================================
           BARRA SUPERIOR (HEADER DE ACCIONES)
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 admin-page-header admin-cover">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 admin-page-header">
         <div className="flex items-center gap-3">
           <Link href="/admin/inventario" aria-label="Volver al inventario" className="admin-return rounded-xl p-2">
             <ArrowLeft size={18} aria-hidden />

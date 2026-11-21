@@ -884,14 +884,14 @@ export default function InventarioPage() {
       {/* =========================================================================
           1. HEADER DEL MÓDULO (ESTILO BENTO / QUIXOTIC)
           ========================================================================= */}
-      <div className="admin-page-header admin-cover flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <h1 className="admin-page-title">Inventario y Kárdex</h1>
           <p className="admin-page-description">Productos, existencias y movimientos de stock.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <a href="/admin/inventario/plantilla" download className="admin-return rounded-xl border border-white/40 px-3 py-2">
+          <a href="/admin/inventario/plantilla" download className="admin-return rounded-xl border border-admin-card-border bg-admin-card-bg px-3 py-2">
             Descargar plantilla Excel
           </a>
           <Button variant="outline" onClick={() => setCatalogImportOpen(true)}>Importar productos</Button>
@@ -933,7 +933,6 @@ export default function InventarioPage() {
           value={formatCurrencyLocale(products.reduce((sum, p) => sum + p.stock * p.costPrice, 0))}
           detail="Costo de reposición"
           icon={DollarSign}
-          appearance="lead"
         />
         <MetricCard
           label="Unidades físicas"

@@ -229,7 +229,7 @@ export default function UsuariosPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* 1. Header Principal */}
-      <div className="admin-page-header admin-cover flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="admin-page-title">Usuarios y roles</h1>
@@ -253,7 +253,6 @@ export default function UsuariosPage() {
           value={kpis.totalUsers}
           detail="Cuentas registradas"
           icon={User}
-          appearance="lead"
         />
         <MetricCard
           label="Supervisores y administradores"

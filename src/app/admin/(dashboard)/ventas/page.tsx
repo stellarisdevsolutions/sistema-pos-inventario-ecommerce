@@ -1,5 +1,6 @@
 "use client";
 
+import { MetricCard } from "@/components/admin/metric-card";
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
 
 import { saleFormSchema, type SaleFormInput } from "@/lib/validations/sale";
@@ -24,35 +25,21 @@ import {
   Plus,
   Minus,
   Trash2,
-  CreditCard,
   Banknote,
   Receipt,
   Printer,
-  CheckCircle2,
   Clock,
   ArrowRight,
-  User,
-  Zap,
   Package,
   X,
   RefreshCw,
   AlertTriangle,
-  AlertCircle,
-  Sparkles,
-  Filter,
-  ChevronRight,
   Ban,
-  Check,
-  DollarSign,
   Wallet,
-  FileText,
   QrCode,
   Tag,
-  Building2,
   Lock,
-  Unlock,
   ShieldCheck,
-  Store,
   RotateCcw,
   KeyRound,
 } from "lucide-react";
@@ -72,7 +59,6 @@ import {
   type SaleHistoryItem,
   type SalesKpiSummary,
   type PosShiftItem,
-  type PosUserItem,
   type RefundReceiptData,
 } from "@/app/admin/actions/sales";
 
@@ -106,24 +92,22 @@ export default function VentasPage() {
   // Pestaña activa: POS / Historial
   const [activeTab, setActiveTab] = useState<"pos" | "history">("pos");
 
-  // Contexto de operadores y exclusividad de caja
-  const [users, setUsers] = useState<PosUserItem[]>([]);
-  const [currentOperator, setCurrentOperator] = useState<PosUserItem | null>(null);
-  const [allOpenShifts, setAllOpenShifts] = useState<PosShiftItem[]>([]);
+  const [currentOperator, setCurrentOperator] = useState<Awaited<ReturnType<typeof getPosContextAction>>["currentOperator"]>(null);
+  const [activeShift, setActiveShift] = useState<PosShiftItem | null>(null);
   const [shiftPendingReview, setShiftPendingReview] = useState(false);
-  const [isAdministrativeSale, setIsAdministrativeSale] = useState(false);
+  const [administrativeSelected, setAdministrativeSelected] = useState(false);
+  const [loadingContext, setLoadingContext] = useState(true);
+  const [contextError, setContextError] = useState("");
+  const canCreateAdministrativeSale = !shiftPendingReview &&
+    (currentOperator?.role === "admin" || currentOperator?.role === "manager");
+  const isAdministrativeSale = administrativeSelected && canCreateAdministrativeSale && !activeShift;
+  const canSell = !contextError && (!!activeShift || isAdministrativeSale);
 
-  // Estado del catálogo y turno de caja
   const [catalog, setCatalog] = useState<PosProductItem[]>([]);
   const [categories, setCategories] = useState<string[]>(["Todas"]);
   const [selectedCategory, setSelectedCategory] = useState("Todas");
-  const [activeShift, setActiveShift] = useState<{
-    id: number;
-    shiftNumber: string;
-    cashRegisterName: string;
-    cashierName: string;
-  } | null>(null);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
+  const [catalogRevision, setCatalogRevision] = useState(0);
 
   // Estado del Carrito y Venta actual
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -153,7 +137,6 @@ export default function VentasPage() {
     changeGiven: number | null;
     createdAt: string;
     items: SaleTicketItem[];
-    isAdministrativeSale?: boolean;
     cashRegisterName?: string | null;
     shiftNumber?: string | null;
     cashierName?: string;
@@ -202,62 +185,29 @@ export default function VentasPage() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Cargar catálogo y contexto de caja real del operador autenticado
   const loadPosData = async () => {
-    setIsLoadingCatalog(true);
     try {
-      const [catRes, contextRes] = await Promise.all([
-        getPosCatalogAction(),
-        getPosContextAction(),
-      ]);
-
-      if (catRes.success) {
-        setCatalog(catRes.data);
-        setCategories(catRes.categories);
-      } else {
-        toast.error(catRes.error || "No se pudo cargar el catálogo.");
+      const result = await getPosContextAction();
+      if (!result.success || !result.currentOperator) {
+        setContextError(result.error || "No se pudo verificar tu turno de caja.");
+        return;
       }
 
-      if (contextRes.success) {
-        setShiftPendingReview(contextRes.shiftPendingReview);
-        setUsers(contextRes.users);
-        setAllOpenShifts(contextRes.allOpenShifts);
-        setCurrentOperator(contextRes.currentOperator);
-        if (contextRes.currentOperator) {
-          try {
-            setPendingCheckout(readPendingCheckout(contextRes.currentOperator.id));
-          } catch {
-            toast.error("No se pudo leer el cobro pendiente de este navegador.");
-          }
-        }
-
-        if (contextRes.userShift) {
-          setActiveShift({
-            id: contextRes.userShift.id,
-            shiftNumber: contextRes.userShift.shiftNumber,
-            cashRegisterName: contextRes.userShift.cashRegisterName,
-            cashierName: contextRes.userShift.cashierName,
-          });
-          setIsAdministrativeSale(false);
-        } else {
-          setActiveShift(null);
-          // Si el operador es admin o supervisor y no tiene caja propia abierta, activar modo administrativo
-          if (
-            !contextRes.shiftPendingReview &&
-            (contextRes.currentOperator?.role === "admin" || contextRes.currentOperator?.role === "manager")
-          ) {
-            setIsAdministrativeSale(true);
-          } else {
-            setIsAdministrativeSale(false);
-          }
-        }
-      } else {
-        toast.error(contextRes.error || "Error al cargar contexto de caja.");
+      setContextError("");
+      setCurrentOperator(result.currentOperator);
+      setShiftPendingReview(result.shiftPendingReview);
+      setActiveShift(result.userShift);
+      if (result.userShift || result.shiftPendingReview) setAdministrativeSelected(false);
+      try {
+        setPendingCheckout(readPendingCheckout(result.currentOperator.id));
+      } catch {
+        toast.error("No se pudo leer el cobro pendiente de este navegador.");
       }
+      setCatalogRevision(revision => revision + 1);
     } catch {
-      toast.error("Error al conectar con la base de datos.");
+      setContextError("No se pudo verificar tu turno de caja.");
     } finally {
-      setIsLoadingCatalog(false);
+      setLoadingContext(false);
     }
   };
 
@@ -282,6 +232,25 @@ export default function VentasPage() {
   useEffect(() => {
     loadPosData();
   }, []);
+
+  useEffect(() => {
+    if (!canSell || activeTab !== "pos") return;
+    let current = true;
+    setIsLoadingCatalog(true);
+    getPosCatalogAction()
+      .then(result => {
+        if (!current) return;
+        if (result.success) {
+          setCatalog(result.data);
+          setCategories(result.categories);
+        } else {
+          toast.error(result.error || "No se pudo cargar el catálogo.");
+        }
+      })
+      .catch(() => { if (current) toast.error("No se pudo cargar el catálogo."); })
+      .finally(() => { if (current) setIsLoadingCatalog(false); });
+    return () => { current = false; };
+  }, [canSell, activeTab, catalogRevision]);
 
   useEffect(() => {
     if (activeTab === "history") {
@@ -451,29 +420,8 @@ export default function VentasPage() {
       return;
     }
 
-    // Regla 1 & 3: Validación de apertura de caja
-    if (!isAdministrativeSale && !activeShift) {
-      if (currentOperator.role === "admin" || currentOperator.role === "manager") {
-        toast.error(
-          "No tienes un turno de caja abierto asignado. Como administrador, puedes activar 'Venta Administrativa Directa' o abrir una caja en Control de Cajas."
-        );
-      } else {
-        toast.error(
-          "Terminal Bloqueada: No tienes un turno de caja abierto asignado a tu nombre. Abre una caja con tu fondo inicial antes de cobrar."
-        );
-      }
-      return;
-    }
-
-    // Regla 3: Venta administrativa solo para perfiles autorizados
-    if (
-      isAdministrativeSale &&
-      currentOperator.role !== "admin" &&
-      currentOperator.role !== "manager"
-    ) {
-      toast.error(
-        "Acceso Denegado: Solo administradores y supervisores pueden emitir ventas administrativas directas fuera de caja."
-      );
+    if (!canSell) {
+      toast.error("Elige cómo iniciar la venta.");
       return;
     }
 
@@ -552,7 +500,6 @@ export default function VentasPage() {
         customerTaxId: payload.customerTaxId || undefined,
         subtotal: result.data.items.reduce((sum, item) => sum + item.subtotal, 0),
         discountAmount: payload.discountAmount,
-        isAdministrativeSale: payload.isAdministrativeSale,
         cashRegisterName: attempt.registerName,
         shiftNumber: attempt.shiftNumber,
         cashierName: currentOperator?.name,
@@ -750,72 +697,20 @@ export default function VentasPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-8">
-      {/* =========================================================================
-          1. HEADER CON INDICADOR DE CAJA, SWITCHER DE OPERADOR Y SELECTOR DE PESTAÑAS
-          ========================================================================= */}
-      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="admin-page-title">Punto de venta</h1>
-
-            {/* Estado del turno de caja del operador seleccionado */}
-            {activeShift ? (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 rounded-xl">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {activeShift.shiftNumber} · {activeShift.cashRegisterName}
-              </span>
-            ) : isAdministrativeSale ? (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-admin-brand-text bg-admin-brand-subtle border border-admin-brand-light px-2.5 py-1 rounded-xl">
-                <Building2 className="h-3 w-3" />
-                Venta administrativa
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800 px-2.5 py-1 rounded-xl">
-                <Lock className="h-3 w-3" />
-                {shiftPendingReview ? "Arqueo pendiente" : "Sin turno abierto"}
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-admin-muted mt-1">
-            Cobra ventas y consulta los tickets del mostrador.
-          </p>
-        </div>
-
-        {/* Pestañas Terminal POS vs Historial & Enlace a Control de Cajas */}
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <Link
-            href="/admin/cajas"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-admin-secondary bg-admin-card-bg border border-admin-card-border hover:bg-admin-raised transition-colors"
-          >
-            <Wallet className="h-3.5 w-3.5 text-admin-brand-text" />
-            <span>Control de Cajas</span>
-          </Link>
-
-          <div className="admin-segments">
-            <button
-              onClick={() => setActiveTab("pos")}
-              aria-pressed={activeTab === "pos"}
-              className="admin-segment"
-            >
-              <ShoppingCart className="h-3.5 w-3.5" />
-              <span>Terminal POS</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("history")}
-              aria-pressed={activeTab === "history"}
-              className="admin-segment"
-            >
-              <Receipt className="h-3.5 w-3.5" />
-              <span>Historial de Ventas</span>
-            </button>
+      <header className="admin-page-header flex flex-wrap items-center justify-between gap-4">
+        <h1 className="admin-page-title">Punto de venta</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {activeTab === "pos" && isAdministrativeSale && cart.length === 0 && !pendingCheckout && (
+            <Button variant="outline" onClick={() => setAdministrativeSelected(false)}>Volver a opciones</Button>
+          )}
+          <div className="admin-segments" role="group" aria-label="Vista de ventas">
+            <button type="button" onClick={() => setActiveTab("pos")} aria-pressed={activeTab === "pos"} className="admin-segment">Vender</button>
+            <button type="button" onClick={() => setActiveTab("history")} aria-pressed={activeTab === "history"} className="admin-segment">Historial</button>
           </div>
         </div>
-      </div>
+      </header>
 
       {activeTab === "pos" ? (
-        /* =========================================================================
-            2. VISTA TERMINAL POS (GRID 12 COLUMNAS)
-            ========================================================================= */
         <div className="space-y-4">
           {pendingCheckout && (
             <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400 bg-admin-card-bg p-4" aria-label="Venta pendiente">
@@ -828,64 +723,37 @@ export default function VentasPage() {
               </Button>
             </section>
           )}
-          {/* BANNER INFORMATIVO / BLOQUEO POR REGLAS DE NEGOCIO */}
-          {!activeShift && !isAdministrativeSale && (
-            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 flex items-center justify-center shrink-0">
-                  <Lock className="h-4 w-4" />
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
-                    Terminal Bloqueada para {currentOperator?.name || "este operador"}
-                  </p>
-                  <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed max-w-2xl">
-                    {shiftPendingReview ? "Tu conteo está pendiente de aprobación. La caja se libera cuando un supervisor aprueba el cierre." : "Abre un turno a tu nombre para cobrar en mostrador."}
-                  </p>
-                </div>
-              </div>
-              <Link href="/admin/cajas">
-                <Button size="sm" className="h-8 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-xl">
-                  {shiftPendingReview ? "Ver estado en Cajas" : "Abrir mi caja"}
-                </Button>
-              </Link>
+          {loadingContext ? (
+            <p role="status" className="py-3 text-sm text-admin-muted">Verificando tu turno…</p>
+          ) : contextError ? (
+            <div className="flex flex-wrap items-center gap-3 py-3" role="alert">
+              <p className="text-sm text-admin-danger">{contextError}</p>
+              <Button variant="outline" onClick={() => { setLoadingContext(true); void loadPosData(); }}>Reintentar</Button>
             </div>
+          ) : !canSell && !pendingCheckout && (
+            <section aria-label="Opciones para iniciar una venta" className="pos-start-options">
+              <Link href="/admin/cajas" className="admin-panel pos-start-option">
+                <span className="pos-start-icon"><Banknote size={19} aria-hidden /></span>
+                <strong>{shiftPendingReview ? "Ver arqueo" : "Abrir caja"}</strong>
+                <span className="text-sm text-admin-muted">
+                  {shiftPendingReview ? "Tu cierre está pendiente de aprobación." : "Inicia tu turno para cobrar en mostrador."}
+                </span>
+              </Link>
+              {canCreateAdministrativeSale && (
+                <button type="button" className="admin-panel pos-start-option" onClick={() => setAdministrativeSelected(true)}>
+                  <span className="pos-start-icon"><Receipt size={19} aria-hidden /></span>
+                  <strong>Crear venta administrativa</strong>
+                  <span className="text-sm text-admin-muted">Registra una venta fuera de los turnos de caja.</span>
+                </button>
+              )}
+            </section>
           )}
 
-          {isAdministrativeSale && (
-            <div className="p-3.5 rounded-xl bg-admin-brand-subtle border border-admin-brand-light flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center shrink-0">
-                  <Building2 className="h-4 w-4" />
-                </div>
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-bold text-admin-brand-text">
-                      Modo: Venta Administrativa Directa ({currentOperator?.name})
-                    </p>
-                    <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-admin-brand-text">
-                      <span className="h-1.5 w-1.5 rounded-full bg-admin-brand" />
-                      <span>Directa</span>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-admin-brand-text leading-relaxed max-w-3xl">
-                    {allOpenShifts.length > 0
-                      ? `Exclusividad activa: Hay ${allOpenShifts.length} terminal(es) en uso por cajeros (${allOpenShifts.map((s) => s.cashRegisterName + ' por ' + s.cashierName).join(', ')}). Tus cobros no ingresarán a ninguna gaveta física de mostrador.`
-                      : `Cobro administrativo habilitado. No afecta fondos ni arqueos de cajeros de mostrador.`}
-                  </p>
-                </div>
-              </div>
-              <Link href="/admin/cajas">
-                <Button variant="outline" size="sm" className="h-8 text-xs rounded-xl border-admin-brand-light text-admin-brand-text">
-                  Abrir Caja Propia
-                </Button>
-              </Link>
-            </div>
-          )}
-
+          {canSell && !loadingContext && (
+          <>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* LADO IZQUIERDO: CATÁLOGO DE PRODUCTOS (7 Columnas) */}
-            <div className="lg:col-span-7 space-y-4">
+            <div className="min-w-0 lg:col-span-7 space-y-4">
               {/* Buscador + Escáner de Códigos de Barra */}
               <div className="admin-panel p-4 space-y-3">
               <div className="relative">
@@ -895,7 +763,8 @@ export default function VentasPage() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={handleBarcodeSearchKeyDown}
-                  placeholder="Escanear código de barras o escribir producto, SKU... (Enter para agregar)"
+                  aria-label="Buscar productos"
+                  placeholder="Buscar producto, SKU o código de barras"
                   className="pl-9 pr-10 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:ring-2 focus:ring-admin-brand/20 focus:border-admin-brand"
                 />
                 {searchTerm && (
@@ -1028,71 +897,36 @@ export default function VentasPage() {
           </div>
 
           {/* LADO DERECHO: TICKET DE CAJA / REGISTRADORA (5 Columnas) */}
-          <div id="pos-ticket-panel" className="lg:col-span-5">
-            <div className="sticky top-20 admin-panel p-5 space-y-4">
-              {/* Header del Ticket */}
-              <div className="admin-ticket-head flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-9 w-9 rounded-xl bg-admin-brand-subtle text-admin-brand-text flex items-center justify-center">
-                    <Receipt className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-xs font-semibold text-admin-text">Ticket en Curso</h2>
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      {cart.length} {cart.length === 1 ? "artículo" : "artículos"} seleccionados
-                    </span>
-                  </div>
-                </div>
-
+          <div id="pos-ticket-panel" className={cn("min-w-0 lg:col-span-5", cart.length > 0 && "pb-24 lg:pb-0")}>
+            <div className="lg:sticky lg:top-20 admin-panel p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
+                <h2 className="text-base font-semibold text-admin-text">Ticket</h2>
                 {cart.length > 0 && (
-                  <button
-                    disabled={pendingCheckout !== null}
-                    onClick={clearCart}
-                    className="text-[11px] font-bold text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                  >
+                  <button type="button" disabled={pendingCheckout !== null} onClick={clearCart}
+                    className="text-sm text-admin-muted enabled:hover:text-admin-danger enabled:cursor-pointer">
                     Vaciar
                   </button>
                 )}
               </div>
 
-              {/* Selector de Cliente y NIT/CI */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Cliente
+              <details className="rounded-lg border border-admin-card-border px-3 py-2">
+                <summary className="cursor-pointer text-sm text-admin-secondary">Datos del cliente (opcional)</summary>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <label className="grid gap-1 text-xs text-admin-secondary">Nombre
+                    <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Público general" />
                   </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                    <Input
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Público General..."
-                      className="pl-8 h-9 text-xs rounded-xl bg-admin-raised border-admin-card-border"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    NIT / CI (Opcional)
+                  <label className="grid gap-1 text-xs text-admin-secondary">NIT o CI
+                    <Input value={customerTaxId} onChange={e => setCustomerTaxId(e.target.value)} />
                   </label>
-                  <Input
-                    value={customerTaxId}
-                    onChange={(e) => setCustomerTaxId(e.target.value)}
-                    placeholder="Sin NIT"
-                    className="h-9 text-xs rounded-xl bg-admin-raised border-admin-card-border"
-                  />
                 </div>
-              </div>
+              </details>
 
               {/* Lista de Productos en Ticket */}
               <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1.5 custom-scrollbar">
                 {cart.length === 0 ? (
                   <div className="text-center py-8 text-slate-400 text-xs">
                     <ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                    El carrito de venta está vacío.
-                    <br />
-                    Haz clic en los productos o escanea un código para agregarlos.
+                    Agrega un producto para empezar.
                   </div>
                 ) : (
                   cart.map((item) => (
@@ -1156,7 +990,8 @@ export default function VentasPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setPaymentMethod("cash")}
+                    aria-pressed={paymentMethod === "cash"}
+                  onClick={() => setPaymentMethod("cash")}
                     className={cn(
                       "h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer",
                       paymentMethod === "cash"
@@ -1170,7 +1005,8 @@ export default function VentasPage() {
 
                   <button
                     type="button"
-                    onClick={() => setPaymentMethod("transfer")}
+                    aria-pressed={paymentMethod === "transfer"}
+                  onClick={() => setPaymentMethod("transfer")}
                     className={cn(
                       "h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer",
                       paymentMethod === "transfer"
@@ -1179,7 +1015,7 @@ export default function VentasPage() {
                     )}
                   >
                     <QrCode className="h-3.5 w-3.5" />
-                    <span>QR Simple / Bancario</span>
+                    <span>QR / transferencia</span>
                   </button>
                 </div>
               </div>
@@ -1260,61 +1096,6 @@ export default function VentasPage() {
                 </div>
               )}
 
-              {/* Selector de Destino de Fondos y Gobernanza de Caja */}
-              <div className="space-y-2 pt-2 border-t border-admin-card-border">
-                {/* Indicador de Destino de Fondos */}
-                <div className="p-2.5 rounded-xl bg-admin-raised border border-admin-card-border flex items-center justify-between text-xs">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Destino Fondos:
-                  </span>
-                  {isAdministrativeSale ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-admin-brand-text">
-                      <Building2 className="h-3.5 w-3.5 text-admin-brand-text" />
-                      Venta Adm. Directa
-                    </span>
-                  ) : activeShift ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                      <Wallet className="h-3.5 w-3.5 text-emerald-500" />
-                      {activeShift.cashRegisterName}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
-                      <Lock className="h-3.5 w-3.5" />
-                      Sin Gaveta (Bloqueado)
-                    </span>
-                  )}
-                </div>
-
-                {/* Si es Admin o Supervisor: Switch para alternar Venta Administrativa vs Caja */}
-                {(currentOperator?.role === "admin" || currentOperator?.role === "manager") && (
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <div className="space-y-0.5 pr-2">
-                      <span className="text-[11px] font-bold text-admin-text flex items-center gap-1.5">
-                        <Building2 className="h-3 w-3 text-admin-brand-text" />
-                        Venta Administrativa Directa
-                      </span>
-                      <p className="text-[9px] text-slate-400">
-                        Cobro fuera de caja física (no afecta arqueo de cajeros)
-                      </p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={isAdministrativeSale}
-                      onChange={(e) => {
-                        if (!e.target.checked && !activeShift) {
-                          toast.error(
-                            "No puedes desactivar Venta Administrativa sin tener un turno abierto a tu nombre. Abre una caja primero."
-                          );
-                          return;
-                        }
-                        setIsAdministrativeSale(e.target.checked);
-                      }}
-                      className="h-4 w-4 rounded accent-purple-600 cursor-pointer shrink-0"
-                    />
-                  </div>
-                )}
-              </div>
-
               {/* Resumen Financiero y Botón Primario Cobrar */}
               <div className="pt-3 border-t border-admin-card-border space-y-3">
                 <div className="space-y-1">
@@ -1341,43 +1122,11 @@ export default function VentasPage() {
                 </div>
 
                 <Button
-                  disabled={
-                    cart.length === 0 ||
-                    pendingCheckout !== null ||
-                    isSubmitting ||
-                    (!isAdministrativeSale && !activeShift)
-                  }
+                  disabled={cart.length === 0 || pendingCheckout !== null || isSubmitting}
                   onClick={handleProcessCheckout}
-                  className={cn(
-                    "w-full h-12 rounded-xl text-white text-sm font-semibold gap-2 active:scale-95 transition-all cursor-pointer disabled:opacity-50",
-                    !isAdministrativeSale && !activeShift
-                      ? "bg-slate-400 dark:bg-slate-700 cursor-not-allowed"
-                      : isAdministrativeSale
-                      ? "bg-admin-brand hover:bg-admin-brand shadow-purple-600/25"
-                      : "bg-admin-brand hover:bg-admin-brand-hover"
-                  )}
+                  className="w-full h-12 rounded-xl bg-admin-brand text-admin-on-solid text-sm font-semibold hover:bg-admin-brand-hover"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      <span>Procesando venta...</span>
-                    </>
-                  ) : !isAdministrativeSale && !activeShift ? (
-                    <>
-                      <Lock className="h-4 w-4 stroke-[2.5]" />
-                      <span>Terminal Bloqueada · Requiere Caja</span>
-                    </>
-                  ) : isAdministrativeSale ? (
-                    <>
-                      <Building2 className="h-4 w-4 stroke-[2.5]" />
-                      <span>Emitir Venta Administrativa ({formatCurrency(total)})</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
-                      <span>Cobrar en {activeShift?.cashRegisterName} ({formatCurrency(total)})</span>
-                    </>
-                  )}
+                  {isSubmitting ? <><RefreshCw className="h-4 w-4 animate-spin" /> Procesando…</> : `Cobrar ${formatCurrency(total)}`}
                 </Button>
               </div>
             </div>
@@ -1392,7 +1141,7 @@ export default function VentasPage() {
                   {cart.length}
                 </div>
                 <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Ticket en curso</p>
+                  <p className="text-xs text-admin-inverse-muted">Total</p>
                   <p className="text-sm font-semibold text-white">{formatCurrency(total)}</p>
                 </div>
               </div>
@@ -1403,10 +1152,12 @@ export default function VentasPage() {
                 }}
                 className="bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid font-bold text-xs h-9 rounded-xl gap-1.5 cursor-pointer"
               >
-                <span>Cobrar Ticket</span>
+                <span>Ver ticket</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </div>
+          )}
+          </>
           )}
         </div>
       ) : (
@@ -1414,70 +1165,14 @@ export default function VentasPage() {
             3. HISTORIAL DE VENTAS Y TICKETS (CON AUDITORÍA DE CAJAS VS ADM. DIRECTA)
             ========================================================================= */
         <div className="space-y-4">
-          {/* Tarjetas de Métricas Rápidas: Desglose Cajas vs Venta Administrativa */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="admin-panel p-4">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Total Facturado
-              </span>
-              <p className="text-lg font-semibold text-admin-text mt-1">
-                {formatCurrency(historyKpis.totalRevenue)}
-              </p>
-              <span className="text-[10px] text-slate-400 font-medium">
-                {historyKpis.totalSalesCount} transacciones
-              </span>
-            </div>
-
-            <div className="admin-panel p-4">
-              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                <Wallet className="h-3 w-3" />
-                Cajas Mostrador
-              </span>
-              <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
-                {formatCurrency(historyKpis.posShiftSalesRevenue)}
-              </p>
-              <span className="text-[10px] text-slate-400 font-medium">
-                {historyKpis.posShiftSalesCount} ventas en gaveta
-              </span>
-            </div>
-
-            <div className="admin-panel p-4">
-              <span className="text-[10px] font-bold text-admin-brand-text uppercase tracking-wider flex items-center gap-1">
-                <Building2 className="h-3 w-3" />
-                Ventas Adm. Directas
-              </span>
-              <p className="text-lg font-semibold text-admin-brand-text mt-1">
-                {formatCurrency(historyKpis.administrativeSalesRevenue)}
-              </p>
-              <span className="text-[10px] text-slate-400 font-medium">
-                {historyKpis.administrativeSalesCount} ventas fuera de caja
-              </span>
-            </div>
-
-            <div className="admin-panel p-4">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Ventas de Hoy
-              </span>
-              <p className="text-lg font-semibold text-admin-brand-text mt-1">
-                {formatCurrency(historyKpis.todayRevenue)}
-              </p>
-              <span className="text-[10px] text-slate-400 font-medium">
-                Ingresos registrados hoy
-              </span>
-            </div>
-
-            <div className="admin-panel p-4 col-span-2 sm:col-span-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Ticket Promedio
-              </span>
-              <p className="text-lg font-semibold text-admin-text mt-1">
-                {formatCurrency(historyKpis.averageTicket)}
-              </p>
-              <span className="text-[10px] text-slate-400 font-medium">
-                Por comprobante emitido
-              </span>
-            </div>
-          </div>
+          <section className="admin-metrics" aria-label="Resumen de ventas">
+            <MetricCard label="Total vendido" value={formatCurrency(historyKpis.totalRevenue)}
+              detail={`${historyKpis.totalSalesCount} transacciones`} icon={Wallet} />
+            <MetricCard label="Ventas de hoy" value={formatCurrency(historyKpis.todayRevenue)}
+              detail="Ingresos del día" icon={Clock} />
+            <MetricCard label="Ticket promedio" value={formatCurrency(historyKpis.averageTicket)}
+              detail="Por comprobante" icon={Receipt} />
+          </section>
 
           {/* Filtros de Búsqueda del Historial */}
           <div className="admin-panel p-4 flex flex-col sm:flex-row items-center gap-3">
@@ -1498,9 +1193,9 @@ export default function VentasPage() {
                 onChange={(e) => setHistoryOriginFilter(e.target.value as any)}
                 className="h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-admin-secondary font-medium cursor-pointer"
               >
-                <option value="all">Todos los Orígenes</option>
-                <option value="pos">Cajas Mostrador (Turnos)</option>
-                <option value="administrative">Ventas Administrativas Directas</option>
+                <option value="all">Todos los orígenes</option>
+                <option value="pos">En caja</option>
+                <option value="administrative">Fuera de caja</option>
               </select>
 
               {/* Filtro por método */}
@@ -1579,17 +1274,7 @@ export default function VentasPage() {
                           {sale.createdAt}
                         </td>
                         <td className="py-3.5 px-4">
-                          {sale.isAdministrativeSale ? (
-                            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-admin-brand-text">
-                              <span className="h-1.5 w-1.5 rounded-full bg-admin-brand" />
-                              <span>Adm. Directa</span>
-                            </div>
-                          ) : (
-                            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-admin-secondary">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              <span>{sale.cashRegisterName || "Caja"}</span>
-                            </div>
-                          )}
+                          {sale.isAdministrativeSale ? "Fuera de caja" : sale.cashRegisterName || "Caja"}
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="font-bold text-admin-text block">{sale.cashierName}</span>
@@ -1777,24 +1462,17 @@ export default function VentasPage() {
 
             {/* Datos del Cliente, Operador y Caja */}
             <div className="space-y-0.5 text-[11px] text-slate-600 pb-2 border-b border-dashed border-slate-200">
-              {lastTicket?.isAdministrativeSale ? (
-                <div className="my-1 py-1 px-2 rounded bg-admin-brand-subtle text-admin-brand-text font-bold text-[10px] text-center border border-admin-brand-light">
-                  *** VENTA ADMINISTRATIVA DIRECTA ***
-                  <span className="block font-normal text-[9px] text-admin-brand-text">
-                    Cobro directo sin afectación de gaveta física
-                  </span>
-                </div>
-              ) : (
+              {lastTicket?.cashRegisterName && (
                 <>
                   <div className="flex justify-between text-[10px] text-slate-500">
                     <span>Terminal / Caja:</span>
                     <span className="font-bold text-slate-800">
-                      {lastTicket?.cashRegisterName || activeShift?.cashRegisterName || "Caja Mostrador"}
+                      {lastTicket.cashRegisterName}
                     </span>
                   </div>
                   <div className="flex justify-between text-[10px] text-slate-500">
                     <span>Turno:</span>
-                    <span>{lastTicket?.shiftNumber || activeShift?.shiftNumber}</span>
+                    <span>{lastTicket.shiftNumber}</span>
                   </div>
                 </>
               )}
@@ -1933,11 +1611,7 @@ export default function VentasPage() {
             </div>
 
             <div className="space-y-0.5 text-[11px] text-slate-600 pb-2 border-b border-dashed border-slate-200">
-              {ticketToReprint?.isAdministrativeSale ? (
-                <div className="my-1 py-1 px-2 rounded bg-admin-brand-subtle text-admin-brand-text font-bold text-[10px] text-center border border-admin-brand-light">
-                  *** VENTA ADMINISTRATIVA DIRECTA ***
-                </div>
-              ) : (
+              {ticketToReprint?.cashRegisterName && (
                 <div className="flex justify-between text-[10px] text-slate-500">
                   <span>Caja / Turno:</span>
                   <span className="font-bold text-slate-800">

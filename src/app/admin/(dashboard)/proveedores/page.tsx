@@ -395,7 +395,7 @@ export default function ProveedoresPage() {
       {/* =========================================================================
           1. HEADER CON TÍTULO, SUBTÍTULO Y BOTÓN REGISTRAR
           ========================================================================= */}
-      <div className="admin-page-header admin-cover flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="admin-page-title">Proveedores</h1>
@@ -422,7 +422,6 @@ export default function ProveedoresPage() {
           value={totalSuppliersCount}
           detail="Directorio comercial"
           icon={Building2}
-          appearance="lead"
         />
         <MetricCard
           label="Proveedores activos"

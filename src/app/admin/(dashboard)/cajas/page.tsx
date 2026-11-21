@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { MetricCard } from "@/components/admin/metric-card";
 
 import { useState, useEffect, useMemo } from "react";
@@ -92,7 +93,7 @@ export default function CajasPage() {
   // Modal: Apertura de Turno
   const [openShiftModalOpen, setOpenShiftModalOpen] = useState(false);
   const [selectedRegisterToOpen, setSelectedRegisterToOpen] = useState<CashRegisterItem | null>(null);
-  const [selectedCashierId, setSelectedCashierId] = useState<number>(3);
+  const [selectedCashierId, setSelectedCashierId] = useState<number>(0);
   const [initialCashInput, setInitialCashInput] = useState<string>("150.00");
   const [openNotes, setOpenNotes] = useState("");
   const [isOpeningShift, setIsOpeningShift] = useState(false);
@@ -170,14 +171,7 @@ export default function CajasPage() {
         setKpis(res.kpis);
         setUsers(res.users);
 
-        // Preseleccionar supervisor y cajero por defecto
 
-        if (user?.role === "cashier") {
-          setSelectedCashierId(user.id);
-        } else {
-          const defaultCashier = res.users.find((u) => u.role === "cashier") || res.users[0];
-          if (defaultCashier) setSelectedCashierId(defaultCashier.id);
-        }
       } else {
         toast.error(res.error || "No se pudieron cargar las cajas.");
       }
@@ -330,6 +324,9 @@ export default function CajasPage() {
     });
   }, [closedShifts, historySearch, historyStatusFilter]);
 
+  const ownShift = user ? registers.find(register => register.activeShift?.userId === user.id)?.activeShift : null;
+  const hasOwnOpenShift = Boolean(ownShift && !ownShift.pendingReview);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-8">
       {/* =========================================================================
@@ -343,20 +340,26 @@ export default function CajasPage() {
           <p className="admin-page-description">Abre turnos, registra arqueos y consulta cierres.</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Botón para crear nueva caja física */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setNewRegisterCode(`POS-0${registers.length + 1}`);
-              setCreateRegisterModalOpen(true);
-            }}
-            className="h-10 px-3.5 rounded-xl border-admin-card-border text-xs font-bold gap-1.5 hover:bg-admin-raised cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Nueva Caja Física</span>
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {hasOwnOpenShift && (
+            <Link href="/admin/ventas" className="inline-flex min-h-10 items-center justify-center rounded-xl bg-admin-brand px-4 text-sm font-medium text-admin-on-solid hover:bg-admin-brand-hover">
+              Ir al punto de venta
+            </Link>
+          )}
+          {user && user.role !== "cashier" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setNewRegisterCode(`POS-0${registers.length + 1}`);
+                setCreateRegisterModalOpen(true);
+              }}
+              className="h-10 px-3.5 rounded-xl border-admin-card-border text-xs font-bold gap-1.5 hover:bg-admin-raised cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Nueva Caja Física</span>
+            </Button>
+          )}
 
           {/* Botón rápido para refrescar */}
           <Button
@@ -384,7 +387,6 @@ export default function CajasPage() {
           value={formatCurrency(kpis.activeInitialCash)}
           detail={`${kpis.activeShiftsCount} ${kpis.activeShiftsCount === 1 ? "caja abierta" : "cajas abiertas"}`}
           icon={Banknote}
-          appearance="lead"
         />
         <MetricCard
           label="Ventas en efectivo hoy"
@@ -578,8 +580,10 @@ export default function CajasPage() {
 
                   <Button
                     variant="outline"
+                    disabled={!user || !reg.isActive || (user.role === "cashier" && !!ownShift)}
                     onClick={() => {
                       setSelectedRegisterToOpen(reg);
+                      setSelectedCashierId(user?.id ?? 0);
                       setInitialCashInput("150.00");
                       setOpenShiftModalOpen(true);
                     }}
@@ -865,7 +869,7 @@ export default function CajasPage() {
                   onChange={(e) => setSelectedCashierId(Number(e.target.value))}
                   className="w-full h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border font-medium"
                 >
-                  {users.map((u) => (
+                  {users.filter(user => user.role !== "warehouse").map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name} ({u.role})
                     </option>

@@ -304,7 +304,6 @@ export default function ComprasPage() {
           value={formatCurrencyLocale(kpis.monthlyInvestment)}
           detail={`Compras en el mes en curso (${CURRENCY_NAME})`}
           icon={DollarSign}
-          appearance="lead"
         />
         <MetricCard
           label="Facturas del mes"

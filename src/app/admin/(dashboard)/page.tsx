@@ -242,7 +242,6 @@ export default function AdminDashboardPage() {
             </>
           }
           icon={TrendingUp}
-          appearance="lead"
         />
         <MetricCard
           label="Ganancia bruta"

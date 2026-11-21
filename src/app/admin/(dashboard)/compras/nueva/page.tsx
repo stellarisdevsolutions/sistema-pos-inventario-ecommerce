@@ -264,7 +264,7 @@ export default function NuevaCompraPage() {
       {/* =========================================================================
           1. HEADER CON RETORNO Y TÍTULO
           ========================================================================= */}
-      <div className="admin-page-header admin-cover flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+      <div className="admin-page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
         <div className="space-y-1">
           <Link
             href="/admin/compras"
