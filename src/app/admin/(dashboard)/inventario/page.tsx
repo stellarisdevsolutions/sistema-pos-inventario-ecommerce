@@ -8,6 +8,8 @@ import { ProductThumbnail } from "@/components/admin/product-thumbnail";
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { businessDate } from "@/lib/business-date";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import {
   getInventoryProducts,
@@ -25,7 +27,7 @@ import { uploadCategoryPhotoAction } from "@/app/admin/actions/upload";
 import { optimizeImageToWebP } from "@/lib/image-optimizer";
 import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -34,7 +36,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -48,30 +49,17 @@ import {
 import {
   Plus,
   Search,
-  Filter,
   MoreVertical,
   Edit,
   Trash2,
   AlertTriangle,
   Package,
-  Layers,
   DollarSign,
-  TrendingUp,
   Boxes,
   CheckCircle2,
-  ArrowUpRight,
   BookOpen,
-  FileSpreadsheet,
   ShieldAlert,
-  ArrowDownRight,
-  User,
   X,
-  ExternalLink,
-  Barcode,
-  History,
-  ArrowRight,
-  Printer,
-  Sparkles,
   FolderTree,
   Pencil,
   Loader2,
@@ -86,236 +74,19 @@ import {
 import { cn } from "@/lib/utils";
 import InventarioLoading from "./loading";
 
-// =========================================================================
-// MOCK DATA DE PRODUCTOS
-// =========================================================================
-interface Product {
-  id: number;
-  name: string;
-  sku: string;
-  barcode: string;
-  category: string;
-  price: number;
-  costPrice: number;
-  stock: number;
-  minStock: number;
-  status: "in_stock" | "low_stock" | "out_of_stock";
-  image: string;
-  isActive?: boolean;
-  description?: string | null;
+type Product = Awaited<ReturnType<typeof getInventoryProducts>>["data"][number];
+type KardexMovement = Awaited<ReturnType<typeof getProductKardexAction>>["data"][number];
+type AdjustmentItem = Awaited<ReturnType<typeof getInventoryAdjustmentsAction>>["data"][number];
+
+const movementFilters = [
+  ["all", "Todos"], ["in", "Entradas"], ["out", "Salidas"], ["damaged", "Bajas"],
+] as const;
+
+function QuantityChange({ quantity }: { quantity: number }) {
+  return <span className={cn("font-semibold tabular-nums", quantity > 0 && "text-admin-success", quantity < 0 && "text-admin-danger")}>
+    {quantity > 0 ? "+" : ""}{quantity}
+  </span>;
 }
-
-const initialProducts: Product[] = [
-  {
-    id: 1,
-    name: "GadgetHub Watch X1 Pro",
-    sku: "WAT-X1-PRO",
-    barcode: "750100234501",
-    category: "Smartwatches",
-    price: 199.99,
-    costPrice: 95.0,
-    stock: 3,
-    minStock: 8,
-    status: "low_stock",
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&auto=format&fit=crop&q=80",
-  },
-  {
-    id: 2,
-    name: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    barcode: "750100234502",
-    category: "Audio",
-    price: 129.9,
-    costPrice: 55.0,
-    stock: 24,
-    minStock: 6,
-    status: "in_stock",
-    image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=150&auto=format&fit=crop&q=80",
-  },
-  {
-    id: 3,
-    name: "Teclado Mecánico RGB Wireless",
-    sku: "KEY-RGB-WL",
-    barcode: "750100234503",
-    category: "Gaming",
-    price: 89.0,
-    costPrice: 38.0,
-    stock: 2,
-    minStock: 10,
-    status: "low_stock",
-    image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=150&auto=format&fit=crop&q=80",
-  },
-  {
-    id: 4,
-    name: "Base de Carga Rápida Qi 3 en 1",
-    sku: "CHG-QI-03",
-    barcode: "750100234504",
-    category: "Accesorios",
-    price: 49.99,
-    costPrice: 19.0,
-    stock: 0,
-    minStock: 12,
-    status: "out_of_stock",
-    image: "https://images.unsplash.com/photo-1622445262464-84b1456045b6?w=150&auto=format&fit=crop&q=80",
-  },
-  {
-    id: 5,
-    name: "Cámara Ultra 4K Creator Kit",
-    sku: "CAM-4K-KIT",
-    barcode: "750100234505",
-    category: "Video",
-    price: 349.0,
-    costPrice: 180.0,
-    stock: 15,
-    minStock: 4,
-    status: "in_stock",
-    image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=150&auto=format&fit=crop&q=80",
-  },
-];
-
-// =========================================================================
-// MOCK DATA DE KÁRDEX (LIBRO MAYOR INMUTABLE)
-// =========================================================================
-interface KardexMovement {
-  id: number;
-  date: string;
-  product: string;
-  sku: string;
-  type: string;
-  typeLabel: string;
-  quantity: number;
-  previousStock: number;
-  newStock: number;
-  unitCost: number;
-  reference: string;
-  user: string;
-  reason?: string;
-}
-
-const kardexMovements: KardexMovement[] = [
-  {
-    id: 501,
-    date: "Hoy, 11:20 AM",
-    product: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    type: "sale_out",
-    typeLabel: "Venta en Mostrador (POS)",
-    quantity: -1,
-    previousStock: 25,
-    newStock: 24,
-    unitCost: 55.0,
-    reference: "Ticket VTA-2026-1001",
-    user: "Sofía Cajera",
-  },
-  {
-    id: 502,
-    date: "Hoy, 09:45 AM",
-    product: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    type: "damaged_out",
-    typeLabel: "Baja por Daño Físico",
-    quantity: -1,
-    previousStock: 26,
-    newStock: 25,
-    unitCost: 55.0,
-    reference: "Acta BAJA-2026-001",
-    user: "Lucas Almacenero",
-  },
-  {
-    id: 503,
-    date: "Ayer, 04:30 PM",
-    product: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    type: "purchase_in",
-    typeLabel: "Recepción de Compra",
-    quantity: 20,
-    previousStock: 6,
-    newStock: 26,
-    unitCost: 55.0,
-    reference: "Factura COM-2026-081",
-    user: "Lucas Almacenero",
-  },
-  {
-    id: 504,
-    date: "Ayer, 02:15 PM",
-    product: "Teclado Mecánico RGB Wireless",
-    sku: "KEY-RGB-WL",
-    type: "sale_out",
-    typeLabel: "Venta en Mostrador (POS)",
-    quantity: -2,
-    previousStock: 4,
-    newStock: 2,
-    unitCost: 38.0,
-    reference: "Ticket VTA-2026-0998",
-    user: "Sofía Cajera",
-  },
-  {
-    id: 505,
-    date: "28 Oct, 10:00 AM",
-    product: "GadgetHub Watch X1 Pro",
-    sku: "WAT-X1-PRO",
-    type: "sale_out",
-    typeLabel: "Venta Tienda Online",
-    quantity: -1,
-    previousStock: 4,
-    newStock: 3,
-    unitCost: 95.0,
-    reference: "Orden WEB-2026-442",
-    user: "Sistema E-commerce",
-  },
-];
-
-// =========================================================================
-// MODELO Y DATOS DE BAJAS / MERMAS
-// =========================================================================
-interface AdjustmentItem {
-  id: number;
-  adjustmentNumber: string;
-  date: string;
-  productId: number;
-  productName: string;
-  sku: string;
-  quantity: number;
-  reason: string;
-  reasonLabel: string;
-  totalLoss: number;
-  reportedBy: string;
-  authorizedBy: string;
-  notes: string;
-}
-
-const initialAdjustments: AdjustmentItem[] = [
-  {
-    id: 301,
-    adjustmentNumber: "BAJA-2026-001",
-    date: "Hoy, 09:45 AM",
-    productId: 2,
-    productName: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    quantity: 1,
-    reason: "damaged",
-    reasonLabel: "Rotura física en transporte",
-    totalLoss: 55.0,
-    reportedBy: "Lucas Almacenero",
-    authorizedBy: "Martín Supervisor",
-    notes: "Auricular izquierdo quebrado por golpe en descarga de camión",
-  },
-  {
-    id: 300,
-    adjustmentNumber: "BAJA-2026-000",
-    date: "26 Oct, 03:00 PM",
-    productId: 4,
-    productName: "Base de Carga Rápida Qi 3 en 1",
-    sku: "CHG-QI-03",
-    quantity: 1,
-    reason: "defective",
-    reasonLabel: "Defecto de fábrica (No enciende)",
-    totalLoss: 19.0,
-    reportedBy: "Sofía Cajera",
-    authorizedBy: "Administrador General",
-    notes: "Cliente reportó falla al abrir caja; derivado a reclamo de garantía con proveedor",
-  },
-];
 
 function getPaginationItems(currentPage: number, totalPages: number): (number | "...")[] {
   if (totalPages <= 6) {
@@ -413,16 +184,10 @@ function PaginationBar({
 }
 
 export default function InventarioPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [dbCategories, setDbCategories] = useState<{ id: number; name: string; imageUrl?: string | null }[]>([]);
-  const [categoriesList, setCategoriesList] = useState<string[]>([
-    "Sin categoría",
-    "Smartwatches",
-    "Audio",
-    "Gaming",
-    "Accesorios",
-    "Video",
-  ]);
+  const [categoriesList, setCategoriesList] = useState<string[]>(["Sin categoría"]);
+  const [inventoryError, setInventoryError] = useState("");
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryImage, setNewCategoryImage] = useState<string | null>(null);
@@ -440,21 +205,23 @@ export default function InventarioPage() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [togglingProductId, setTogglingProductId] = useState<number | null>(null);
   const [kardexFilterType, setKardexFilterType] = useState<"all" | "in" | "out" | "damaged">("all");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [selectedProductForKardex, setSelectedProductForKardex] = useState<Product | null>(null);
   const [selectedProductForDetails, setSelectedProductForDetails] = useState<Product | null>(null);
-  const [showSkeleton, setShowSkeleton] = useState(false);
+  const [loadingInventory, setLoadingInventory] = useState(true);
 
   // Estados de Kárdex en vivo desde PostgreSQL
   const [realKardexMovements, setRealKardexMovements] = useState<KardexMovement[]>([]);
   const [productDrawerMovements, setProductDrawerMovements] = useState<KardexMovement[]>([]);
   const [loadingDrawerKardex, setLoadingDrawerKardex] = useState(false);
-  const [loadingTabKardex, setLoadingTabKardex] = useState(false);
+  const [loadingTabKardex, setLoadingTabKardex] = useState(true);
+  const [kardexError, setKardexError] = useState("");
+  const [productKardexError, setProductKardexError] = useState("");
 
   // Estados de Bajas & Mermas en vivo desde PostgreSQL
   const [adjustments, setAdjustments] = useState<AdjustmentItem[]>([]);
-  const [loadingAdjustments, setLoadingAdjustments] = useState(false);
+  const [loadingAdjustments, setLoadingAdjustments] = useState(true);
+  const [adjustmentError, setAdjustmentError] = useState("");
 
   // Estados del Modal de Baja / Merma
   const [adjustmentProductId, setAdjustmentProductId] = useState<number | null>(null);
@@ -475,87 +242,82 @@ export default function InventarioPage() {
   const [adjustmentsPage, setAdjustmentsPage] = useState(1);
   const adjustmentsPageSize = 10;
 
-  // Estados del formulario nuevo producto
-  const [newProductName, setNewProductName] = useState("");
-  const [newProductSku, setNewProductSku] = useState("");
-  const [newProductBarcode, setNewProductBarcode] = useState("");
-  const [newProductPrice, setNewProductPrice] = useState("59.90");
-  const [newProductCost, setNewProductCost] = useState("32.00");
-  const [newProductStock, setNewProductStock] = useState("35");
-  const [newProductMinStock, setNewProductMinStock] = useState("8");
-
-  // Cálculo de margen bruto en vivo
-  const priceNum = parseFloat(newProductPrice) || 0;
-  const costNum = parseFloat(newProductCost) || 0;
-  const marginGross = priceNum > 0 ? (((priceNum - costNum) / priceNum) * 100).toFixed(1) : "0.0";
-
   const [catalogImportOpen, setCatalogImportOpen] = useState(false);
 
-  // Cargar productos, categorías y bajas vivos desde Neon DB
+  const loadProducts = async () => {
+    try {
+      const result = await getInventoryProducts();
+      if (result.success) {
+        setProducts(result.data);
+        setInventoryError("");
+      } else {
+        setProducts([]);
+        setInventoryError(result.error);
+      }
+    } catch {
+      setProducts([]);
+      setInventoryError("No se pudo cargar el inventario.");
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
   useEffect(() => {
-    Promise.all([
-      getInventoryProducts(),
-      getInventoryFormData(),
-      getInventoryAdjustmentsAction(),
-    ]).then(([dbProducts, formData, adjRes]) => {
-      if (dbProducts && dbProducts.length > 0) {
-        setProducts(dbProducts);
-      }
-      if (formData && formData.categories && formData.categories.length > 0) {
-        setDbCategories(formData.categories);
-        const uniqueNames = Array.from(
-          new Set(["Sin categoría", ...formData.categories.map((c) => c.name)])
-        );
-        setCategoriesList(uniqueNames);
-      }
-      if (adjRes && adjRes.success && adjRes.data && adjRes.data.length > 0) {
-        setAdjustments(adjRes.data as unknown as AdjustmentItem[]);
-      }
-    });
+    void loadProducts();
+    void getInventoryFormData().then(({ categories }) => {
+      setDbCategories(categories);
+      setCategoriesList([...new Set(["Sin categoría", ...categories.map(category => category.name)])]);
+    }).catch(() => toast.error("No se pudieron cargar las categorías."));
   }, []);
 
-  // Cargar movimientos de Kárdex reales desde PostgreSQL para el Drawer de producto
   useEffect(() => {
-    if (selectedProductForKardex) {
-      setLoadingDrawerKardex(true);
-      getProductKardexAction(selectedProductForKardex.id).then((res) => {
-        if (res.success && res.data) {
-          setProductDrawerMovements(res.data as unknown as KardexMovement[]);
-        } else {
-          setProductDrawerMovements([]);
-        }
-        setLoadingDrawerKardex(false);
-      });
-    } else {
-      setProductDrawerMovements([]);
-    }
+    if (!selectedProductForKardex) return;
+    let current = true;
+    setLoadingDrawerKardex(true);
+    setProductKardexError("");
+    setProductDrawerMovements([]);
+    getProductKardexAction(selectedProductForKardex.id).then(result => {
+      if (!current) return;
+      if (result.success) setProductDrawerMovements(result.data);
+      else setProductKardexError(result.error || "No se pudieron cargar los movimientos.");
+    }).catch(() => {
+      if (current) setProductKardexError("No se pudieron cargar los movimientos.");
+    }).finally(() => { if (current) setLoadingDrawerKardex(false); });
+    return () => { current = false; };
   }, [selectedProductForKardex]);
 
-  // Cargar movimientos de Kárdex reales para la pestaña de Libro Mayor General
   useEffect(() => {
-    if (activeTab === "kardex") {
-      setLoadingTabKardex(true);
-      getProductKardexAction().then((res) => {
-        if (res.success && res.data && res.data.length > 0) {
-          setRealKardexMovements(res.data as unknown as KardexMovement[]);
-        }
-        setLoadingTabKardex(false);
-      });
-    }
+    if (activeTab !== "kardex") return;
+    let current = true;
+    setLoadingTabKardex(true);
+    setKardexError("");
+    getProductKardexAction().then(result => {
+      if (!current) return;
+      setRealKardexMovements(result.data);
+      if (!result.success) setKardexError(result.error || "No se pudieron cargar los movimientos.");
+    }).catch(() => {
+      if (current) setKardexError("No se pudieron cargar los movimientos.");
+    }).finally(() => { if (current) setLoadingTabKardex(false); });
+    return () => { current = false; };
   }, [activeTab]);
 
-  // Cargar bajas y mermas para la pestaña correspondiente
-  useEffect(() => {
-    if (activeTab === "adjustments") {
-      setLoadingAdjustments(true);
-      getInventoryAdjustmentsAction().then((res) => {
-        if (res.success && res.data && res.data.length > 0) {
-          setAdjustments(res.data as unknown as AdjustmentItem[]);
-        }
-        setLoadingAdjustments(false);
-      });
+  const loadAdjustments = async () => {
+    setLoadingAdjustments(true);
+    setAdjustmentError("");
+    try {
+      const result = await getInventoryAdjustmentsAction();
+      setAdjustments(result.data);
+      if (!result.success) setAdjustmentError(result.error || "No se pudieron cargar las bajas.");
+    } catch {
+      setAdjustmentError("No se pudieron cargar las bajas.");
+    } finally {
+      setLoadingAdjustments(false);
     }
-  }, [activeTab]);
+  };
+
+  useEffect(() => {
+    void loadAdjustments();
+  }, []);
 
   const handleCategoryPhotoSelect = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -735,12 +497,12 @@ export default function InventarioPage() {
           getProductKardexAction(),
           getInventoryAdjustmentsAction(),
         ]);
-        if (updatedProds && updatedProds.length > 0) setProducts(updatedProds);
+        if (updatedProds.success) setProducts(updatedProds.data);
         if (updatedKardex.success && updatedKardex.data) {
-          setRealKardexMovements(updatedKardex.data as unknown as KardexMovement[]);
+          setRealKardexMovements(updatedKardex.data);
         }
         if (updatedAdj.success && updatedAdj.data) {
-          setAdjustments(updatedAdj.data as unknown as AdjustmentItem[]);
+          setAdjustments(updatedAdj.data);
         }
       } else {
         toast.error("Error al registrar baja", { description: res.error });
@@ -842,6 +604,7 @@ export default function InventarioPage() {
   };
 
   // Paginación de catálogo
+  const firstAvailableProduct = products.find(product => product.stock > 0);
   const totalCatalogPages = Math.ceil(filteredProducts.length / catalogPageSize) || 1;
   const paginatedProducts = filteredProducts.slice(
     (catalogPage - 1) * catalogPageSize,
@@ -849,10 +612,9 @@ export default function InventarioPage() {
   );
 
   // Filtrado de kárdex
-  const activeKardexSource = realKardexMovements.length > 0 ? realKardexMovements : kardexMovements;
-  const filteredKardex = activeKardexSource.filter((m) => {
+  const filteredKardex = realKardexMovements.filter((m) => {
     if (kardexFilterType === "in") return m.type === "purchase_in" || m.type === "return_in" || m.type === "adjustment_in";
-    if (kardexFilterType === "out") return m.type === "sale_out" || m.type === "adjustment_out";
+    if (kardexFilterType === "out") return m.quantity < 0;
     if (kardexFilterType === "damaged") return m.type === "damaged_out";
     return true;
   });
@@ -865,28 +627,26 @@ export default function InventarioPage() {
   );
 
   // Fuente de Bajas & Mermas y Paginación
-  const activeAdjustmentsSource = adjustments.length > 0 ? adjustments : initialAdjustments;
-  const totalAdjustmentsPages = Math.ceil(activeAdjustmentsSource.length / adjustmentsPageSize) || 1;
-  const paginatedAdjustments = activeAdjustmentsSource.slice(
+  const currentMonth = businessDate().slice(0, 7);
+  const monthAdjustments = adjustments.filter(adjustment => adjustment.businessDate.startsWith(currentMonth));
+  const totalAdjustmentsPages = Math.ceil(adjustments.length / adjustmentsPageSize) || 1;
+  const paginatedAdjustments = adjustments.slice(
     (adjustmentsPage - 1) * adjustmentsPageSize,
     adjustmentsPage * adjustmentsPageSize
   );
 
-  // Movimientos de kárdex para el Drawer de producto específico
-  const productSpecificKardex = productDrawerMovements;
-
-  if (showSkeleton) {
+  if (loadingInventory) {
     return <InventarioLoading />;
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto select-none">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* =========================================================================
           1. HEADER DEL MÓDULO (ESTILO BENTO / QUIXOTIC)
           ========================================================================= */}
       <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
-          <h1 className="admin-page-title">Inventario y Kárdex</h1>
+          <h1 className="admin-page-title">Inventario</h1>
           <p className="admin-page-description">Productos, existencias y movimientos de stock.</p>
         </div>
 
@@ -905,14 +665,12 @@ export default function InventarioPage() {
             <span>Categorías</span>
           </Button>
 
-          <Link href="/admin/inventario/nuevo">
-            <Button
-              size="sm"
-              className="h-10 px-5 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-semibold gap-2 transition-all active:scale-95 cursor-pointer"
-            >
-              <Plus className="h-4 w-4 stroke-[2.5]" />
-              <span>Nuevo Producto</span>
-            </Button>
+          <Link href="/admin/inventario/nuevo" className={buttonVariants({
+            size: "sm",
+            className: "inventory-primary-action h-10 gap-2 rounded-xl px-5",
+          })}>
+            <Plus className="h-4 w-4" aria-hidden />
+            Nuevo producto
           </Link>
         </div>
       </div>
@@ -920,37 +678,43 @@ export default function InventarioPage() {
       {catalogImportOpen && (
         <CatalogImportDialog
           onClose={() => setCatalogImportOpen(false)}
-          onImported={async () => setProducts(await getInventoryProducts())}
+          onImported={loadProducts}
         />
       )}
 
       {/* =========================================================================
           2. LAS 4 TARJETAS KPI DE INVENTARIO BENTO
           ========================================================================= */}
+      {inventoryError && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-admin-danger">
+          {inventoryError}
+          <Button variant="outline" onClick={() => { setLoadingInventory(true); void loadProducts(); }}>Reintentar</Button>
+        </div>
+      )}
       <section className="admin-metrics" aria-label="Indicadores de inventario">
         <MetricCard
           label="Valor en bodega"
-          value={formatCurrencyLocale(products.reduce((sum, p) => sum + p.stock * p.costPrice, 0))}
-          detail="Costo de reposición"
+          value={inventoryError ? "—" : formatCurrencyLocale(products.reduce((sum, p) => sum + p.stock * p.costPrice, 0))}
+          detail="Stock a costo promedio"
           icon={DollarSign}
         />
         <MetricCard
           label="Unidades físicas"
-          value={products.reduce((sum, p) => sum + p.stock, 0)}
-          detail={`${categoriesList.filter((c) => c !== "Sin categoría").length} categorías activas`}
+          value={inventoryError ? "—" : products.reduce((sum, p) => sum + p.stock, 0)}
+          detail={inventoryError ? "Datos no disponibles" : `${categoriesList.filter((c) => c !== "Sin categoría").length} categorías activas`}
           icon={Boxes}
         />
         <MetricCard
           label="Stock crítico"
-          value={products.filter((p) => p.stock <= p.minStock).length}
+          value={inventoryError ? "—" : products.filter((p) => p.stock <= p.minStock).length}
           detail="Productos en el mínimo o por debajo"
           icon={AlertTriangle}
           tone="warning"
         />
         <MetricCard
           label="Mermas del mes"
-          value={formatCurrencyLocale(activeAdjustmentsSource.reduce((sum, a) => sum + a.totalLoss, 0))}
-          detail={`${activeAdjustmentsSource.length} actas de baja`}
+          value={loadingAdjustments || adjustmentError ? "—" : formatCurrencyLocale(monthAdjustments.reduce((sum, a) => sum + a.totalLoss, 0))}
+          detail={loadingAdjustments ? "Cargando…" : adjustmentError ? "Datos no disponibles" : `${monthAdjustments.length} ${monthAdjustments.length === 1 ? "acta de baja" : "actas de baja"}`}
           icon={ShieldAlert}
           tone="danger"
         />
@@ -959,14 +723,14 @@ export default function InventarioPage() {
       {/* =========================================================================
           3. SELECTOR DE PESTAÑAS (SEGMENTED CONTROL MODERNO)
           ========================================================================= */}
-      <div className="admin-segments">
+      <div className="admin-segments" role="group" aria-label="Vistas de inventario">
         <button
           onClick={() => setActiveTab("catalog")}
           aria-pressed={activeTab === "catalog"}
           className="admin-segment"
         >
           <Package className="h-4 w-4" />
-          <span>Stock & Catálogo</span>
+          <span>Productos</span>
         </button>
 
         <button
@@ -983,8 +747,8 @@ export default function InventarioPage() {
           aria-pressed={activeTab === "adjustments"}
           className="admin-segment"
         >
-          <ShieldAlert className="h-4 w-4 text-rose-500" />
-          <span>Bajas & Mermas</span>
+          <ShieldAlert className="h-4 w-4" />
+          <span>Bajas y mermas</span>
         </button>
       </div>
 
@@ -1003,7 +767,8 @@ export default function InventarioPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Buscar por nombre o slug..."
+                  aria-label="Buscar productos"
+                  placeholder="Buscar por producto, SKU o código de barras"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -1192,16 +957,16 @@ export default function InventarioPage() {
               ========================================================================= */}
           {viewMode === "list" ? (
             /* VISTA 1: TABLA EN LISTA */
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="overflow-x-auto" role="region" aria-label="Tabla de productos" tabIndex={0}>
+              <table className="inventory-table inventory-catalog-table">
                 <thead>
                   <tr className="border-b border-admin-card-border bg-admin-raised text-admin-muted font-bold uppercase tracking-wider text-[11px]">
-                    <th className="py-3.5 px-5">Producto</th>
-                    <th className="py-3.5 px-5 text-right">Precio</th>
-                    <th className="py-3.5 px-5 text-center">Stock</th>
-                    <th className="py-3.5 px-5 text-center">Disponibilidad</th>
-                    <th className="py-3.5 px-5 text-center">Estado</th>
-                    <th className="py-3.5 px-5 text-right">Acciones</th>
+                    <th scope="col" className="py-3.5 px-5">Producto</th>
+                    <th scope="col" className="py-3.5 px-5 text-right">Precio</th>
+                    <th scope="col" className="py-3.5 px-5 text-center">Stock</th>
+                    <th scope="col" className="py-3.5 px-5 text-center">Disponibilidad</th>
+                    <th scope="col" className="py-3.5 px-5 text-center">Estado</th>
+                    <th scope="col" className="py-3.5 px-5 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-admin-card-border text-admin-secondary">
@@ -1211,10 +976,10 @@ export default function InventarioPage() {
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Package className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                           <p className="text-sm font-semibold text-admin-secondary">
-                            No se encontraron productos
+                            {inventoryError ? "Inventario no disponible" : hasActiveFilters ? "No hay productos para estos filtros" : "Aún no hay productos registrados"}
                           </p>
                           <p className="text-xs text-slate-400">
-                            Prueba cambiando el término de búsqueda o limpiando los filtros aplicados.
+                            {!inventoryError && (hasActiveFilters ? "Prueba con otra búsqueda." : "Agrega un producto o importa tu catálogo.")}
                           </p>
                           {hasActiveFilters && (
                             <Button
@@ -1255,9 +1020,10 @@ export default function InventarioPage() {
                                 className="h-12 w-12 rounded-xl object-cover border border-admin-card-border shrink-0"
                               />
                               <div className="flex flex-col min-w-0">
-                                <p className="font-bold text-sm text-admin-text leading-snug line-clamp-1">
+                                <button type="button" onClick={event => { event.stopPropagation(); setSelectedProductForDetails(p); }}
+                                  className="text-left text-sm font-semibold leading-snug text-admin-text hover:text-admin-brand-text hover:underline">
                                   {p.name}
-                                </p>
+                                </button>
                                 <div className="flex items-center gap-1.5 mt-1">
                                   <span className="text-xs text-admin-muted font-medium">
                                     {p.category}
@@ -1412,7 +1178,7 @@ export default function InventarioPage() {
                                     className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-secondary"
                                   >
                                     <Package className="h-4 w-4 mr-2 text-slate-500" />
-                                    Ver Información
+                                    Ver ficha
                                   </DropdownMenuItem>
                                   <Link href={`/admin/inventario/${p.id}/editar`}>
                                     <DropdownMenuItem className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-secondary">
@@ -1452,10 +1218,10 @@ export default function InventarioPage() {
                 <div className="py-12 text-center flex flex-col items-center justify-center gap-2">
                   <Package className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                   <p className="text-sm font-semibold text-admin-secondary">
-                    No se encontraron productos
+                    {inventoryError ? "Inventario no disponible" : hasActiveFilters ? "No hay productos para estos filtros" : "Aún no hay productos registrados"}
                   </p>
                   <p className="text-xs text-slate-400">
-                    Prueba cambiando el término de búsqueda o limpiando los filtros aplicados.
+                    {!inventoryError && (hasActiveFilters ? "Prueba con otra búsqueda." : "Agrega un producto o importa tu catálogo.")}
                   </p>
                   {hasActiveFilters && (
                     <Button
@@ -1548,7 +1314,7 @@ export default function InventarioPage() {
                                     className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-secondary"
                                   >
                                     <Package className="h-4 w-4 mr-2 text-slate-500" />
-                                    Ver Información
+                                    Ver ficha
                                   </DropdownMenuItem>
                                   <Link href={`/admin/inventario/${p.id}/editar`}>
                                     <DropdownMenuItem className="rounded-xl px-2.5 py-2 font-semibold cursor-pointer text-admin-secondary">
@@ -1670,719 +1436,225 @@ export default function InventarioPage() {
           />
         </div>
       ) : activeTab === "kardex" ? (
-        /* PESTAÑA 2: KÁRDEX AUDITORÍA GENERAL (LIBRO MAYOR) */
-        <div className="admin-panel overflow-hidden">
-          {/* Header de la auditoría */}
-          <div className="p-4 border-b border-admin-card-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-sm text-admin-text">
-                  Libro Mayor de Inventario (Kárdex General)
-                </h3>
-                <Badge className="bg-admin-raised text-admin-secondary font-mono text-[10px]">
-                  Método Oficial: Costo Promedio Ponderado (CPP)
-                </Badge>
-              </div>
-              <p className="text-xs text-admin-muted mt-0.5">
-                Registro inmutable de entradas por compras, salidas por ventas (POS/Web) y actas de merma.
-              </p>
+        <section className="admin-panel overflow-hidden" aria-labelledby="inventory-movements-title">
+          <header className="inventory-section-header">
+            <h2 id="inventory-movements-title">Movimientos</h2>
+            <div className="admin-segments" role="group" aria-label="Tipo de movimiento">
+              {movementFilters.map(([value, label]) => (
+                <button key={value} type="button" className="admin-segment" aria-pressed={kardexFilterType === value}
+                  onClick={() => { setKardexFilterType(value); setKardexPage(1); }}>
+                  {label}
+                </button>
+              ))}
             </div>
-
-            {/* Filtros por tipo de movimiento */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Button
-                variant={kardexFilterType === "all" ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setKardexFilterType("all");
-                  setKardexPage(1);
-                }}
-                className={cn(
-                  "rounded-xl text-xs font-bold h-8 cursor-pointer",
-                  kardexFilterType === "all" ? "bg-admin-brand text-white hover:bg-admin-brand-hover" : ""
-                )}
-              >
-                Todos ({activeKardexSource.length})
-              </Button>
-              <Button
-                variant={kardexFilterType === "in" ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setKardexFilterType("in");
-                  setKardexPage(1);
-                }}
-                className={cn(
-                  "rounded-xl text-xs font-bold h-8 text-emerald-600 border-emerald-200 hover:bg-emerald-50 cursor-pointer",
-                  kardexFilterType === "in" ? "bg-emerald-600 text-white border-emerald-600" : ""
-                )}
-              >
-                + Entradas (Compras)
-              </Button>
-              <Button
-                variant={kardexFilterType === "out" ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setKardexFilterType("out");
-                  setKardexPage(1);
-                }}
-                className={cn(
-                  "rounded-xl text-xs font-bold h-8 text-admin-brand-text border-admin-brand-light hover:bg-admin-brand-subtle cursor-pointer",
-                  kardexFilterType === "out" ? "bg-admin-brand text-white border-admin-brand hover:bg-admin-brand-hover" : ""
-                )}
-              >
-                - Salidas (Ventas)
-              </Button>
-              <Button
-                variant={kardexFilterType === "damaged" ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setKardexFilterType("damaged");
-                  setKardexPage(1);
-                }}
-                className={cn(
-                  "rounded-xl text-xs font-bold h-8 text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer",
-                  kardexFilterType === "damaged" ? "bg-rose-600 text-white border-rose-600" : ""
-                )}
-              >
-                - Bajas (Mermas)
-              </Button>
-            </div>
-          </div>
-
-          {/* Tabla de Kárdex */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-admin-card-border bg-admin-raised text-admin-muted font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-4">Fecha / Hora</th>
-                  <th className="py-3 px-4">Producto Afectado</th>
-                  <th className="py-3 px-4">Tipo Movimiento</th>
-                  <th className="py-3 px-4 text-center">Variación</th>
-                  <th className="py-3 px-4 text-center">Saldo Físico (Ant ➜ Nuevo)</th>
-                  <th className="py-3 px-4 text-right">Costo Unitario</th>
-                  <th className="py-3 px-4">Comprobante de Respaldo</th>
-                  <th className="py-3 px-4">Responsable</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-admin-card-border text-admin-secondary">
-                {paginatedKardex.map((m) => (
-                  <tr key={m.id} className="hover:bg-admin-raised transition-colors">
-                    <td className="py-3.5 px-4 font-mono text-[11px] text-admin-muted">
-                      {m.date}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <p className="font-bold text-admin-text">{m.product}</p>
-                      <p className="text-[10px] text-slate-400 font-mono">{m.sku}</p>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="inline-flex items-center gap-2 text-xs">
-                        <span
-                          className={cn(
-                            "h-2 w-2 rounded-full shrink-0",
-                            m.type === "purchase_in"
-                              ? "bg-emerald-500"
-                              : m.type === "sale_out"
-                              ? "bg-admin-brand"
-                              : m.typeLabel.includes("Anulación")
-                              ? "bg-amber-500"
-                              : "bg-rose-500"
-                          )}
-                        />
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {m.typeLabel}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-semibold">
-                      <span
-                        className={cn(
-                          "px-2 py-0.5 rounded-lg font-mono text-xs",
-                          m.quantity > 0
-                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                            : m.type === "damaged_out"
-                            ? "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
-                            : "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
-                        )}
-                      >
-                        {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-mono">
-                      <span className="text-slate-400">{m.previousStock}</span>
-                      <span className="mx-1.5 text-slate-300 dark:text-slate-600">➜</span>
-                      <span className="font-semibold text-admin-text">{m.newStock} uds</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
-                      {CURRENCY_SYMBOL} {m.unitCost.toFixed(2)}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {m.reference}
-                      </span>
-                      {m.reason && (
-                        <p className="text-[10px] text-slate-400 mt-1 max-w-xs truncate" title={m.reason}>
-                          {m.reason}
-                        </p>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-[11px] text-admin-secondary">
-                      {m.user}
-                    </td>
+          </header>
+          {loadingTabKardex ? (
+            <p role="status" className="inventory-table-message">Cargando movimientos…</p>
+          ) : kardexError ? (
+            <p role="alert" className="inventory-table-message">{kardexError}</p>
+          ) : paginatedKardex.length === 0 ? (
+            <p className="inventory-table-message">No hay movimientos para este filtro.</p>
+          ) : (
+            <div className="overflow-x-auto" role="region" aria-label="Tabla de movimientos de inventario" tabIndex={0}>
+              <table className="inventory-table inventory-movement-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Fecha</th>
+                    <th scope="col">Producto</th>
+                    <th scope="col">Movimiento</th>
+                    <th scope="col" className="inventory-number">Unidades</th>
+                    <th scope="col" className="inventory-number">Saldo</th>
+                    <th scope="col" className="inventory-number">Costo unitario</th>
+                    <th scope="col">Referencia</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Paginación Libro Mayor de Kárdex con Cuadritos Web */}
-          <PaginationBar
-            currentPage={kardexPage}
-            totalPages={totalKardexPages}
-            totalItems={filteredKardex.length}
-            pageSize={kardexPageSize}
-            itemName="movimientos"
-            onPageChange={setKardexPage}
-          />
-        </div>
+                </thead>
+                <tbody>
+                  {paginatedKardex.map(movement => (
+                    <tr key={movement.id}>
+                      <td className="inventory-date">{movement.date}</td>
+                      <td><strong>{movement.product}</strong><small>{movement.sku}</small></td>
+                      <td>{movement.typeLabel}</td>
+                      <td className="inventory-number"><QuantityChange quantity={movement.quantity} /></td>
+                      <td className="inventory-number whitespace-nowrap"><span className="text-admin-muted">{movement.previousStock} → </span><strong>{movement.newStock}</strong></td>
+                      <td className="inventory-number whitespace-nowrap">{formatCurrencyLocale(movement.unitCost)}</td>
+                      <td>
+                        {(movement.reason || movement.user) ? (
+                          <details className="inventory-reference">
+                            <summary>{movement.reference}</summary>
+                            {movement.reason && <p>{movement.reason}</p>}
+                            {movement.user && <small>{movement.user}</small>}
+                          </details>
+                        ) : movement.reference}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {!loadingTabKardex && !kardexError && (
+            <PaginationBar currentPage={kardexPage} totalPages={totalKardexPages} totalItems={filteredKardex.length}
+              pageSize={kardexPageSize} itemName="movimientos" onPageChange={setKardexPage} />
+          )}
+        </section>
       ) : (
-        /* PESTAÑA 3: BAJAS & MERMAS POR DAÑO */
-        <div className="admin-panel overflow-hidden">
-          <div className="p-4 border-b border-admin-card-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-sm text-admin-text">
-                  Actas de Baja & Pérdidas por Merma
-                </h3>
-                <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 text-[10px] font-bold">
-                  Auditoría Financiera
-                </Badge>
-              </div>
-              <p className="text-xs text-admin-muted mt-0.5">
-                Control estricto de productos quebrados, averiados o defectuosos autorizados por supervisión.
-              </p>
-            </div>
-
-            <Button
-              size="sm"
-              onClick={() => {
-                setAdjustmentProductId(products[0]?.id || null);
-                setAdjustmentQuantity("1");
-                setAdjustmentReason("damaged");
-                setAdjustmentNotes("");
-                setIsAdjustmentModalOpen(true);
-              }}
-              className="h-9 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold gap-1.5 cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Registrar Nueva Baja</span>
+        <section className="admin-panel overflow-hidden" aria-labelledby="inventory-losses-title">
+          <header className="inventory-section-header">
+            <h2 id="inventory-losses-title">Bajas registradas</h2>
+            <Button size="sm" disabled={inventoryError !== "" || !firstAvailableProduct}
+              onClick={() => { if (firstAvailableProduct) handleOpenAdjustmentForProduct(firstAvailableProduct); }}
+              className="inventory-primary-action rounded-xl">
+              <Plus size={16} aria-hidden /> Registrar baja
             </Button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-admin-card-border bg-admin-raised text-admin-muted font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-4">Folio de Acta</th>
-                  <th className="py-3 px-4">Fecha</th>
-                  <th className="py-3 px-4">Producto Afectado</th>
-                  <th className="py-3 px-4">Causa / Justificación</th>
-                  <th className="py-3 px-4 text-center">Unidades</th>
-                  <th className="py-3 px-4 text-right">Pérdida Monetaria</th>
-                  <th className="py-3 px-4">Reportado Por</th>
-                  <th className="py-3 px-4">Autorizado Por</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-admin-card-border text-admin-secondary">
-                {paginatedAdjustments.map((a) => (
-                  <tr key={a.id} className="hover:bg-admin-raised transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-semibold text-rose-600 dark:text-rose-400">
-                      {a.adjustmentNumber}
-                    </td>
-                    <td className="py-3.5 px-4 text-[11px] text-admin-muted font-mono">
-                      {a.date}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <p className="font-bold text-admin-text">{a.productName}</p>
-                      <p className="text-[10px] text-slate-400 font-mono">{a.sku}</p>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 text-[10px] font-bold">
-                        {a.reasonLabel}
-                      </Badge>
-                      <p className="text-[10px] text-admin-muted mt-0.5">{a.notes}</p>
-                    </td>
-                    <td className="py-3.5 px-4 text-center font-semibold">
-                      <span className="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-mono">
-                        {a.quantity} ud
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-semibold text-rose-600 dark:text-rose-400 text-sm">
-                      {CURRENCY_SYMBOL} {a.totalLoss.toFixed(2)}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-admin-secondary">
-                      {a.reportedBy}
-                    </td>
-                    <td className="py-3.5 px-4 text-admin-brand-text font-semibold">
-                      ✓ {a.authorizedBy}
-                    </td>
+          </header>
+          {loadingAdjustments ? (
+            <p role="status" className="inventory-table-message">Cargando bajas…</p>
+          ) : adjustmentError ? (
+            <p role="alert" className="inventory-table-message">{adjustmentError}</p>
+          ) : paginatedAdjustments.length === 0 ? (
+            <p className="inventory-table-message">Aún no hay bajas registradas.</p>
+          ) : (
+            <div className="overflow-x-auto" role="region" aria-label="Tabla de bajas de inventario" tabIndex={0}>
+              <table className="inventory-table inventory-movement-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Folio</th>
+                    <th scope="col">Fecha</th>
+                    <th scope="col">Producto</th>
+                    <th scope="col">Motivo</th>
+                    <th scope="col" className="inventory-number">Unidades</th>
+                    <th scope="col" className="inventory-number">Pérdida</th>
+                    <th scope="col">Responsables</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Paginación Bajas & Mermas con Cuadritos Web */}
-          <PaginationBar
-            currentPage={adjustmentsPage}
-            totalPages={totalAdjustmentsPages}
-            totalItems={activeAdjustmentsSource.length}
-            pageSize={adjustmentsPageSize}
-            itemName="actas de baja"
-            onPageChange={setAdjustmentsPage}
-          />
-        </div>
+                </thead>
+                <tbody>
+                  {paginatedAdjustments.map(adjustment => (
+                    <tr key={adjustment.id}>
+                      <td className="whitespace-nowrap">{adjustment.adjustmentNumber}</td>
+                      <td className="inventory-date">{adjustment.date}</td>
+                      <td><strong>{adjustment.productName}</strong>{adjustment.sku && <small>{adjustment.sku}</small>}</td>
+                      <td>
+                        {adjustment.notes ? (
+                          <details className="inventory-reference">
+                            <summary>{adjustment.reasonLabel}</summary>
+                            <p>{adjustment.notes}</p>
+                          </details>
+                        ) : adjustment.reasonLabel}
+                      </td>
+                      <td className="inventory-number">{adjustment.quantity}</td>
+                      <td className="inventory-number whitespace-nowrap text-admin-danger">{formatCurrencyLocale(adjustment.totalLoss)}</td>
+                      <td>
+                        {adjustment.reportedBy || "—"}
+                        {adjustment.authorizedBy && <small>Autorizó {adjustment.authorizedBy}</small>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {!loadingAdjustments && !adjustmentError && (
+            <PaginationBar currentPage={adjustmentsPage} totalPages={totalAdjustmentsPages} totalItems={adjustments.length}
+              pageSize={adjustmentsPageSize} itemName="bajas" onPageChange={setAdjustmentsPage} />
+          )}
+        </section>
       )}
 
-      {/* =========================================================================
-          5. DRAWER LATERAL DE DETALLES E INFORMACIÓN DEL PRODUCTO (SOLO LECTURA)
-          Se activa al hacer clic en cualquier fila de la lista o tarjeta de cuadros
-          ========================================================================= */}
-      {selectedProductForDetails && (
-        <div
-          onClick={() => setSelectedProductForDetails(null)}
-          className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-200 cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg sm:max-w-xl bg-admin-card-bg border-l border-admin-card-border h-full flex flex-col justify-between animate-in slide-in-from-right duration-300 cursor-default"
-          >
-            {/* Header del Drawer */}
-            <div className="p-5 border-b border-admin-card-border flex items-center justify-between bg-admin-raised">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-admin-brand text-white flex items-center justify-center">
-                  <Package className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-admin-text">
-                    Detalles del Producto
-                  </h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Ficha informativa y especificaciones
-                  </p>
+      <Sheet open={!!selectedProductForDetails} onOpenChange={open => { if (!open) setSelectedProductForDetails(null); }}>
+        {selectedProductForDetails && (
+          <SheetContent className="inventory-sheet" showCloseButton={false}>
+            <SheetHeader className="inventory-sheet-header">
+              <div className="flex min-w-0 items-center gap-3">
+                <ProductThumbnail src={selectedProductForDetails.image} alt="" className="size-14 shrink-0 rounded-lg border border-admin-card-border object-contain" />
+                <div className="min-w-0">
+                  <SheetTitle className="break-words text-lg font-semibold text-admin-text">{selectedProductForDetails.name}</SheetTitle>
+                  <SheetDescription className="text-admin-muted">{selectedProductForDetails.category}</SheetDescription>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedProductForDetails(null)}
-                className="h-9 w-9 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <SheetClose render={<Button variant="ghost" size="icon" aria-label="Cerrar ficha" />}><X size={17} aria-hidden /></SheetClose>
+            </SheetHeader>
+            <div className="inventory-sheet-body space-y-5">
+              <dl className="inventory-facts">
+                <div><dt>Stock disponible</dt><dd>{selectedProductForDetails.stock}</dd></div>
+                <div><dt>Precio de venta</dt><dd>{formatCurrencyLocale(selectedProductForDetails.price)}</dd></div>
+                <div><dt>Costo promedio</dt><dd>{formatCurrencyLocale(selectedProductForDetails.costPrice)}</dd></div>
+              </dl>
+              <dl className="inventory-detail-list">
+                <div><dt>SKU</dt><dd>{selectedProductForDetails.sku}</dd></div>
+                {selectedProductForDetails.barcode !== "-" && <div><dt>Código de barras</dt><dd>{selectedProductForDetails.barcode}</dd></div>}
+                <div><dt>Stock mínimo</dt><dd>{selectedProductForDetails.minStock}</dd></div>
+                <div><dt>Estado</dt><dd>{selectedProductForDetails.isActive ? "Activo" : "Inactivo"}</dd></div>
+              </dl>
+              {selectedProductForDetails.description?.trim() && (
+                <section className="space-y-1">
+                  <h3 className="text-sm font-semibold">Descripción</h3>
+                  <p className="whitespace-pre-line break-words text-sm text-admin-secondary">{selectedProductForDetails.description}</p>
+                </section>
+              )}
             </div>
+            <SheetFooter className="inventory-sheet-footer">
+              <Button variant="outline" onClick={() => {
+                setSelectedProductForKardex(selectedProductForDetails);
+                setSelectedProductForDetails(null);
+              }}>Ver Kárdex</Button>
+              <Link href={`/admin/inventario/${selectedProductForDetails.id}/editar`}
+                className="inline-flex items-center justify-center rounded-lg bg-admin-brand px-3 py-1.5 text-sm font-medium text-admin-on-solid hover:bg-admin-brand-hover">
+                Editar producto
+              </Link>
+            </SheetFooter>
+          </SheetContent>
+        )}
+      </Sheet>
 
-            {/* Contenido con Scroll */}
-            <div className="p-5 space-y-5 overflow-y-auto flex-1">
-              {/* Fotografía e Identificación Principal con Formato 4:3 */}
-              <div className="rounded-xl border border-admin-card-border overflow-hidden bg-admin-raised">
-                <div className="relative aspect-[4/3] w-full bg-admin-raised">
-                  <ProductThumbnail
-                    src={selectedProductForDetails.image}
-                    alt={selectedProductForDetails.name}
-                    className="h-full w-full object-cover"
-                  />
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
-                    <Badge
-                      className={cn(
-                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border backdrop-blur-md",
-                        selectedProductForDetails.status === "in_stock"
-                          ? "bg-emerald-500/90 text-white border-emerald-400"
-                          : selectedProductForDetails.status === "low_stock"
-                          ? "bg-amber-500/90 text-white border-amber-400"
-                          : "bg-rose-500/90 text-white border-rose-400"
-                      )}
-                    >
-                      {selectedProductForDetails.status === "in_stock"
-                        ? "En stock"
-                        : selectedProductForDetails.status === "low_stock"
-                        ? "Bajo stock"
-                        : "Agotado"}
-                    </Badge>
-                    <Badge
-                      className={cn(
-                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border backdrop-blur-md",
-                        (selectedProductForDetails.isActive ?? true)
-                          ? "bg-admin-brand/90 text-white border-admin-brand"
-                          : "bg-slate-600/90 text-white border-slate-500"
-                      )}
-                    >
-                      {(selectedProductForDetails.isActive ?? true) ? "Habilitado" : "Pausado"}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="p-4">
-                  <span className="text-xs font-bold text-admin-brand-text block uppercase tracking-wider">
-                    {selectedProductForDetails.category}
-                  </span>
-                  <h3 className="text-base font-bold text-admin-text mt-1 leading-snug">
-                    {selectedProductForDetails.name}
-                  </h3>
-                </div>
+      <Sheet open={!!selectedProductForKardex} onOpenChange={open => { if (!open) setSelectedProductForKardex(null); }}>
+        {selectedProductForKardex && (
+          <SheetContent className="inventory-sheet" showCloseButton={false}>
+            <SheetHeader className="inventory-sheet-header">
+              <div className="min-w-0">
+                <SheetTitle className="text-lg font-semibold text-admin-text">Kárdex del producto</SheetTitle>
+                <SheetDescription className="break-words text-admin-muted">{selectedProductForKardex.name} · {selectedProductForKardex.sku}</SheetDescription>
               </div>
-
-              {/* Bloque de Descripción del Producto */}
-              <div className="space-y-1.5">
-                <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block px-1">
-                  Descripción del Producto
-                </span>
-                <div className="p-4 rounded-xl bg-admin-raised border border-admin-card-border text-xs text-admin-secondary leading-relaxed whitespace-pre-line">
-                  {selectedProductForDetails.description && selectedProductForDetails.description.trim() ? (
-                    selectedProductForDetails.description
-                  ) : (
-                    <span className="text-slate-400 italic">Sin descripción registrada para este producto.</span>
-                  )}
+              <SheetClose render={<Button variant="ghost" size="icon" aria-label="Cerrar Kárdex" />}><X size={17} aria-hidden /></SheetClose>
+            </SheetHeader>
+            <div className="inventory-sheet-body">
+              {loadingDrawerKardex ? (
+                <p role="status" className="inventory-table-message">Cargando movimientos…</p>
+              ) : productKardexError ? (
+                <p role="alert" className="inventory-table-message">{productKardexError}</p>
+              ) : productDrawerMovements.length === 0 ? (
+                <p className="inventory-table-message">Aún no hay movimientos para este producto.</p>
+              ) : (
+                <div className="overflow-x-auto" role="region" aria-label="Movimientos del producto" tabIndex={0}>
+                  <table className="inventory-table inventory-product-ledger">
+                    <thead><tr>
+                      <th scope="col">Movimiento</th>
+                      <th scope="col" className="inventory-number">Unidades</th>
+                      <th scope="col" className="inventory-number">Saldo</th>
+                    </tr></thead>
+                    <tbody>
+                      {productDrawerMovements.map(movement => (
+                        <tr key={movement.id}>
+                          <td>
+                            <strong>{movement.typeLabel}</strong><small>{movement.date}</small>
+                            <details className="inventory-reference mt-1">
+                              <summary>{movement.reference}</summary>
+                              {movement.reason && <p>{movement.reason}</p>}
+                              <small>{formatCurrencyLocale(movement.unitCost)} por unidad</small>
+                              {movement.user && <small>{movement.user}</small>}
+                            </details>
+                          </td>
+                          <td className="inventory-number"><QuantityChange quantity={movement.quantity} /></td>
+                          <td className="inventory-number">{movement.newStock}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-
-              {/* Bloque Financiero y Precios */}
-              <div className="space-y-2">
-                <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block px-1">
-                  Valores Financieros
-                </span>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Precio Venta</span>
-                    <span className="text-base font-bold text-emerald-600 font-mono tracking-tight mt-0.5 block">
-                      {CURRENCY_SYMBOL} {selectedProductForDetails.price.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Costo Adquisición</span>
-                    <span className="text-base font-bold text-admin-secondary font-mono tracking-tight mt-0.5 block">
-                      {CURRENCY_SYMBOL} {selectedProductForDetails.costPrice.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Margen Bruto</span>
-                    <span className="text-base font-bold text-admin-brand-text font-mono tracking-tight mt-0.5 block">
-                      {selectedProductForDetails.price > 0
-                        ? (
-                            ((selectedProductForDetails.price - selectedProductForDetails.costPrice) /
-                              selectedProductForDetails.price) *
-                            100
-                          ).toFixed(1)
-                        : "0.0"}
-                      %
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bloque de Existencias Físicas */}
-              <div className="space-y-2">
-                <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block px-1">
-                  Existencias en Almacén
-                </span>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Stock Físico Actual</span>
-                    <span className="text-xl font-bold text-admin-text font-mono mt-0.5 block">
-                      {selectedProductForDetails.stock}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Alerta Stock Bajo</span>
-                    <span className="text-xl font-bold text-amber-600 font-mono mt-0.5 block">
-                      {selectedProductForDetails.minStock}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Valorización en Bodega de este Producto */}
-                <div className="p-3.5 rounded-xl bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-[10px] text-admin-brand-text font-bold uppercase tracking-wider block">
-                      Valor Total en Bodega (Costo)
-                    </span>
-                    <span className="text-sm font-bold text-admin-text font-mono">
-                      {CURRENCY_SYMBOL}{" "}
-                      {(
-                        selectedProductForDetails.stock * selectedProductForDetails.costPrice
-                      ).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-admin-brand-text font-bold uppercase tracking-wider block">
-                      Potencial Venta
-                    </span>
-                    <span className="text-sm font-bold text-emerald-600 font-mono">
-                      {CURRENCY_SYMBOL}{" "}
-                      {(
-                        selectedProductForDetails.stock * selectedProductForDetails.price
-                      ).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
-
-            {/* Footer con Acciones */}
-            <div className="p-4 border-t border-admin-card-border bg-admin-raised flex items-center justify-between gap-2.5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedProductForDetails(null)}
-                className="rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Cerrar
-              </Button>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const prod = selectedProductForDetails;
-                    setSelectedProductForDetails(null);
-                    setSelectedProductForKardex(prod);
-                  }}
-                  className="rounded-xl text-xs font-semibold text-admin-brand-text gap-1.5 cursor-pointer"
-                >
-                  <BookOpen className="h-4 w-4" />
-                  <span>Ver Kárdex</span>
-                </Button>
-
-                <Link href={`/admin/inventario/${selectedProductForDetails.id}/editar`}>
-                  <Button
-                    size="sm"
-                    className="rounded-xl text-xs font-semibold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
-                  >
-                    <Edit className="h-4 w-4" />
-                    <span>Editar</span>
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          6. DRAWER LATERAL DE KÁRDEX ESPECÍFICO POR PRODUCTO (DRILL-DOWN)
-          Se activa al pulsar "Ver Kárdex" en cualquier fila del catálogo
-          ========================================================================= */}
-      {selectedProductForKardex && (
-        <div
-          onClick={() => setSelectedProductForKardex(null)}
-          className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-200 cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl bg-admin-card-bg border-l border-admin-card-border h-full flex flex-col justify-between animate-in slide-in-from-right duration-300 cursor-default"
-          >
-            {/* Header del Drawer */}
-            <div className="p-5 border-b border-admin-card-border flex items-center justify-between bg-admin-raised">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-admin-brand text-white flex items-center justify-center">
-                  <BookOpen className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-semibold text-admin-text">
-                      Kárdex de Producto
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5">
-                    SKU: {selectedProductForKardex.sku} • EAN: {selectedProductForKardex.barcode}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedProductForKardex(null)}
-                className="h-9 w-9 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Contenido con Scroll */}
-            <div className="p-6 space-y-6 overflow-y-auto flex-1">
-              {/* Tarjeta Resumen del Producto */}
-              <div className="p-4 rounded-xl bg-admin-raised border border-admin-card-border flex items-center gap-4">
-                <ProductThumbnail
-                  src={selectedProductForKardex.image}
-                  alt={selectedProductForKardex.name}
-                  className="h-16 w-16 rounded-xl object-cover border border-admin-card-border shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm text-admin-text truncate">
-                    {selectedProductForKardex.name}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-slate-500">Categoría:</span>
-                    <Badge variant="outline" className="text-[10px] font-bold">
-                      {selectedProductForKardex.category}
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-admin-card-border text-center">
-                    <div>
-                      <span className="block text-[9px] uppercase font-mono text-slate-400">Stock Actual</span>
-                      <span className="font-semibold text-sm text-admin-text">
-                        {selectedProductForKardex.stock} uds
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[9px] uppercase font-mono text-slate-400">Costo Adquisición</span>
-                      <span className="font-semibold text-sm text-admin-secondary font-mono">
-                        {CURRENCY_SYMBOL} {selectedProductForKardex.costPrice.toFixed(2)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[9px] uppercase font-mono text-slate-400">Precio Venta</span>
-                      <span className="font-semibold text-sm text-emerald-600 font-mono">
-                        {CURRENCY_SYMBOL} {selectedProductForKardex.price.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Historial de Movimientos de este Producto */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Historial Cronológico de Movimientos
-                  </h4>
-                  <span className="text-[11px] font-mono text-slate-400">
-                    {productSpecificKardex.length} registros encontrados
-                  </span>
-                </div>
-
-                {loadingDrawerKardex ? (
-                  <div className="p-8 text-center flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-admin-card-border">
-                    <Loader2 className="h-6 w-6 text-admin-brand-text animate-spin" />
-                    <span className="text-xs text-slate-500 font-bold">Cargando movimientos...</span>
-                  </div>
-                ) : productSpecificKardex.length > 0 ? (
-                  <div className="space-y-3">
-                    {productSpecificKardex.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-3.5 admin-panel space-y-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-mono text-slate-500">{item.date}</span>
-                          <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
-                            <span
-                              className={cn(
-                                "h-2 w-2 rounded-full",
-                                item.type === "purchase_in" || item.typeLabel.includes("Apertura")
-                                  ? "bg-emerald-500"
-                                  : item.type === "sale_out"
-                                  ? "bg-admin-brand"
-                                  : item.typeLabel.includes("Anulación")
-                                  ? "bg-amber-500"
-                                  : "bg-rose-500"
-                              )}
-                            />
-                            <span
-                              className={cn(
-                                item.type === "purchase_in" || item.typeLabel.includes("Apertura")
-                                  ? "text-emerald-700 dark:text-emerald-300"
-                                  : item.type === "sale_out"
-                                  ? "text-admin-brand-text"
-                                  : item.typeLabel.includes("Anulación")
-                                  ? "text-amber-700 dark:text-amber-300"
-                                  : "text-rose-700 dark:text-rose-300"
-                              )}
-                            >
-                              {item.typeLabel}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-1">
-                          <div>
-                            <span className="text-xs text-slate-400">Comprobante:</span>
-                            <p className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
-                              {item.reference}
-                            </p>
-                          </div>
-
-                          <div className="text-center">
-                            <span className="text-xs text-slate-400">Variación:</span>
-                            <p
-                              className={cn(
-                                "font-mono font-semibold text-xs",
-                                item.quantity > 0 ? "text-emerald-600" : "text-admin-text"
-                              )}
-                            >
-                              {item.quantity > 0 ? `+${item.quantity}` : item.quantity} uds
-                            </p>
-                          </div>
-
-                          <div className="text-right">
-                            <span className="text-xs text-slate-400">Saldo Resultante:</span>
-                            <p className="font-mono font-semibold text-xs text-admin-brand-text">
-                              {item.newStock} uds
-                            </p>
-                          </div>
-                        </div>
-
-                        {item.reason && (
-                          <p className="text-[10px] text-admin-muted bg-admin-raised p-2 rounded-xl border border-admin-card-border leading-relaxed">
-                            {item.reason}
-                          </p>
-                        )}
-
-                        <div className="pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-slate-400">
-                          <span>Operador: {item.user}</span>
-                          <span>Costo Unit: {CURRENCY_SYMBOL} {item.unitCost.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-8 text-center rounded-xl border border-dashed border-admin-card-border text-slate-400 text-xs">
-                    No se registran movimientos recientes de kárdex para este ítem.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Footer del Drawer */}
-            <div className="p-4 border-t border-admin-card-border bg-admin-raised flex items-center justify-between">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedProductForKardex(null)}
-                className="rounded-xl h-10 text-xs font-bold"
-              >
-                Cerrar Kárdex
-              </Button>
-
-              <Button
-                size="sm"
-                className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-2 cursor-pointer"
-                onClick={() =>
-                  toast.success("Ficha de Auditoría exportada", {
-                    description: "El reporte oficial del Kárdex CPP fue generado exitosamente.",
-                  })
-                }
-              >
-                <Printer className="h-4 w-4" />
-                <span>Exportar Ficha de Auditoría</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+          </SheetContent>
+        )}
+      </Sheet>
 
       {/* =========================================================================
           MODAL: GESTIÓN CENTRALIZADA DE CATEGORÍAS (OPCIÓN B)
@@ -2705,10 +1977,10 @@ export default function InventarioPage() {
               </div>
               <div>
                 <DialogTitle className="text-lg font-semibold text-admin-text tracking-tight">
-                  Registrar Acta de Baja & Merma
+                  Registrar baja
                 </DialogTitle>
                 <DialogDescription className="text-xs text-admin-muted">
-                  Descuenta existencias físicas y asienta la salida por daño en el Kárdex contable.
+                  La baja descuenta unidades y queda registrada en el Kárdex.
                 </DialogDescription>
               </div>
             </div>
@@ -2797,7 +2069,7 @@ export default function InventarioPage() {
             {/* 3. Observaciones / Detalle */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-admin-secondary">
-                Detalle del Incidente / Acta *
+                Descripción del incidente *
               </label>
               <textarea
                 rows={2}
@@ -2807,14 +2079,6 @@ export default function InventarioPage() {
                 className="w-full px-3 py-2 text-xs rounded-lg border border-admin-card-border bg-admin-card-bg text-admin-text placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
                 required
               />
-            </div>
-
-            {/* Alerta de Auditoría Contable */}
-            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-[11px] text-rose-800 dark:text-rose-300 leading-tight">
-              <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-              <span>
-                Esta acción generará un asiento formal <strong>inmutable</strong> en el Kárdex (tipo <code>damaged_out</code>) y restará el stock inmediatamente en la base de datos.
-              </span>
             </div>
 
             <DialogFooter className="pt-2 border-t border-admin-card-border flex items-center justify-end gap-2">
