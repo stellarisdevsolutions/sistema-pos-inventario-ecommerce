@@ -27,7 +27,7 @@ export function createSaleQuery(input: {
         AS item(product_id integer, quantity integer, unit_price numeric)
     ), locked_shift AS MATERIALIZED (
       SELECT id FROM cash_shifts
-      WHERE id = ${shiftId} AND user_id = ${operatorId} AND status = 'open'
+      WHERE id = ${shiftId} AND user_id = ${operatorId} AND status = 'open' AND actual_cash IS NULL
       FOR UPDATE
     ), locked_products AS MATERIALIZED (
       SELECT p.id, p.name, p.sku, p.stock, p.cost_price
@@ -84,7 +84,7 @@ export function cancelSaleQuery(saleId: number, operatorId: number, reason: stri
       SELECT * FROM sales WHERE id = ${saleId} AND status = 'completed' AND refunded_amount = 0 FOR UPDATE
     ), locked_shift AS MATERIALIZED (
       SELECT shift.id, shift.expected_cash FROM cash_shifts shift JOIN target ON shift.id = target.cash_shift_id
-      WHERE shift.status = 'open'
+      WHERE shift.status = 'open' AND shift.actual_cash IS NULL
       FOR UPDATE OF shift
     ), cancelled AS (
       UPDATE sales SET status = 'cancelled', notes = concat_ws(' | ', target.notes, ${reason}::text)
@@ -146,7 +146,7 @@ export function refundSaleQuery(input: {
       FOR UPDATE
     ), locked_shift AS MATERIALIZED (
       SELECT id FROM cash_shifts
-      WHERE id = ${cashShiftId} AND user_id = ${operatorId} AND status = 'open'
+      WHERE id = ${cashShiftId} AND user_id = ${operatorId} AND status = 'open' AND actual_cash IS NULL
         AND expected_cash >= ${money}::numeric AND EXISTS (SELECT 1 FROM target)
       FOR UPDATE
     ), lines AS MATERIALIZED (

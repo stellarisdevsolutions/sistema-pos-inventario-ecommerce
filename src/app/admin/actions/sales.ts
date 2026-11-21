@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { cancelSaleQuery, createSaleQuery, refundSaleQuery } from "@/db/operations/sales";
 import * as schema from "@/db/schema";
-import { eq, desc, and, inArray, or } from "drizzle-orm";
+import { isNull, eq, desc, and, inArray, or } from "drizzle-orm";
 import { saleFormSchema, refundSaleSchema, type SaleFormInput, type RefundSaleItemsInput } from "@/lib/validations/sale";
 import { businessDate } from "@/lib/business-date";
 import { refundUnitAmounts } from "@/lib/refund-amount";
@@ -184,6 +184,7 @@ export async function getPosContextAction(): Promise<{
   currentOperator: PosUserItem | null;
   allOpenShifts: PosShiftItem[];
   userShift: PosShiftItem | null;
+  shiftPendingReview: boolean;
   error?: string;
 }> {
   try {
@@ -213,7 +214,7 @@ export async function getPosContextAction(): Promise<{
       orderBy: (s, { desc }) => [desc(s.id)],
     });
 
-    const formattedShifts: PosShiftItem[] = openShifts.map((s) => ({
+    const formattedShifts: PosShiftItem[] = openShifts.filter(s => s.actualCash === null).map((s) => ({
       id: s.id,
       shiftNumber: s.shiftNumber,
       cashRegisterId: s.cashRegisterId,
@@ -234,6 +235,7 @@ export async function getPosContextAction(): Promise<{
       currentOperator,
       allOpenShifts: formattedShifts,
       userShift,
+      shiftPendingReview: openShifts.some(s => s.userId === currentOperator.id && s.actualCash !== null),
     };
   } catch (error) {
     return {
@@ -242,6 +244,7 @@ export async function getPosContextAction(): Promise<{
       currentOperator: null,
       allOpenShifts: [],
       userShift: null,
+      shiftPendingReview: false,
       error: adminActionError(error, "Error al cargar contexto POS."),
     };
   }
@@ -311,11 +314,11 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
         },
       });
 
-      if (!shift || shift.status !== "open") {
+      if (!shift || shift.status !== "open" || shift.actualCash !== null) {
         return {
           success: false,
           error:
-            "El turno de caja seleccionado no existe o ya ha sido cerrado mediante arqueo.",
+            "El turno de caja no está disponible para cobrar. Puede estar pendiente de aprobación o cerrado.",
         };
       }
 
@@ -725,6 +728,7 @@ export async function refundSaleItemsAction(
           where: and(
             eq(schema.cashShifts.id, input.cashShiftId),
             eq(schema.cashShifts.status, "open"),
+            isNull(schema.cashShifts.actualCash),
             eq(schema.cashShifts.userId, operator.id)
           ),
         })

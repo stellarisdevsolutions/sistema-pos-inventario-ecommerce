@@ -70,3 +70,11 @@ Al cierre del día, el balance total del negocio se audita en bloques independie
    $$\sum (\text{Transferencias/QR Bancarios}) + \sum (\text{Efectivo en Mano de Administración})$$
 3. **Ingreso Total del Negocio:**
    $$\text{Total Cajas Físicas} + \text{Total Ventas Administrativas}$$
+
+## Arqueo ciego y aprobación del cierre
+
+1. El operador registra el efectivo contado en **Cajas → Registrar conteo**. El formulario y la vista de caja del operador no muestran el importe esperado antes de enviar el conteo.
+2. El turno queda pendiente de aprobación. La terminal sigue reservada y el saldo del turno queda bloqueado para nuevos cobros, anulaciones y devoluciones en efectivo.
+3. Un supervisor o administrador abre **Revisar arqueo**, compara lo esperado con lo contado y registra un motivo si hay faltante o sobrante. Al aprobar, el sistema guarda la diferencia, identifica a quien aprobó y libera la caja.
+
+Un turno abierto con conteo registrado representa una aprobación pendiente. Se usan los campos existentes del turno. En instalaciones con un solo responsable, un administrador o supervisor puede aprobar su propio turno después de guardar su conteo. Los comprobantes operativos del POS siguen disponibles para sus funciones de venta y devolución.

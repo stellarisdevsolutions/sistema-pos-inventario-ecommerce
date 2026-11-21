@@ -15,11 +15,16 @@ export const openShiftSchema = z.object({
     .nullable(),
 });
 
-export const closeShiftSchema = z.object({
+export const submitCashCountSchema = z.object({
   shiftId: z.number().int().positive("Identificador de turno inválido"),
   actualCash: z
     .number()
-    .min(0, "El conteo físico de dinero en gaveta no puede ser negativo"),
+    .min(0, "El conteo físico de dinero en gaveta no puede ser negativo")
+    .max(9999999999.99)
+    .refine((amount) => Number(amount.toFixed(2)) === amount, "Usa hasta dos decimales"),
+});
+
+export const closeShiftSchema = submitCashCountSchema.pick({ shiftId: true }).extend({
   notes: z
     .string()
     .trim()
@@ -49,5 +54,6 @@ export const createCashRegisterSchema = z.object({
 });
 
 export type OpenShiftInput = z.infer<typeof openShiftSchema>;
+export type SubmitCashCountInput = z.infer<typeof submitCashCountSchema>;
 export type CloseShiftInput = z.infer<typeof closeShiftSchema>;
 export type CreateCashRegisterInput = z.infer<typeof createCashRegisterSchema>;

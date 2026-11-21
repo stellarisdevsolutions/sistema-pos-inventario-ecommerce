@@ -4,11 +4,14 @@ import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq, desc, and, count } from "drizzle-orm";
+import { approveCashCountQuery, submitCashCountQuery } from "@/db/operations/cash-shifts";
+import { eq, desc, and, count, or, ne, isNotNull } from "drizzle-orm";
 import { requireRole } from "@/lib/auth/session";
 import {
   openShiftSchema,
   closeShiftSchema,
+  submitCashCountSchema,
+  type SubmitCashCountInput,
   createCashRegisterSchema,
   type OpenShiftInput,
   type CloseShiftInput,
@@ -31,11 +34,9 @@ export type ActiveShiftDetail = {
   cashRegisterCode: string;
   userId: number;
   cashierName: string;
-  initialCash: number;
-  cashSales: number;
-  cardSales: number;
-  transferSales: number;
-  expectedCash: number;
+  pendingReview: boolean;
+  totals: { initialCash: number; cashSales: number; electronicSales: number } | null;
+  review: { expectedCash: number; actualCash: number; difference: number } | null;
   openedAt: string;
   rawOpenedAt: string;
   notes: string | null;
@@ -96,7 +97,8 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
   error?: string;
 }> {
   try {
-    await requireRole(["admin", "manager", "cashier"]);
+    const operator = await requireRole(["admin", "manager", "cashier"]);
+    const canReview = operator.role !== "cashier";
 
     // 1. Obtener cajas físicas registradas
     const registersList = await db.query.cashRegisters.findMany({
@@ -138,11 +140,16 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
       const cashNum = parseFloat(active.cashSales) || 0;
       const cardNum = parseFloat(active.cardSales) || 0;
       const transferNum = parseFloat(active.transferSales) || 0;
-      const expectedNum = parseFloat(active.expectedCash) || (initialNum + cashNum);
+      const pendingReview = active.actualCash !== null;
+      const showTotals = canReview && (active.userId !== operator.id || pendingReview);
+      const expectedCash = Number(active.expectedCash);
+      const actualCash = Number(active.actualCash);
 
-      activeInitialCash += initialNum;
-      todayCashSales += cashNum;
-      todayCardTransferSales += (cardNum + transferNum);
+      if (showTotals) {
+        activeInitialCash += initialNum;
+        todayCashSales += cashNum;
+        todayCardTransferSales += cardNum + transferNum;
+      }
 
       const openedDate = new Date(active.openedAt);
       const formattedDate = openedDate.toLocaleDateString("es-BO", {
@@ -166,11 +173,11 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
           cashRegisterCode: r.code,
           userId: active.userId,
           cashierName: active.user?.name || "Cajero",
-          initialCash: initialNum,
-          cashSales: cashNum,
-          cardSales: cardNum,
-          transferSales: transferNum,
-          expectedCash: expectedNum,
+          pendingReview,
+          totals: showTotals ? { initialCash: initialNum, cashSales: cashNum, electronicSales: cardNum + transferNum } : null,
+          review: canReview && pendingReview ? {
+            expectedCash, actualCash, difference: Number((actualCash - expectedCash).toFixed(2)),
+          } : null,
           openedAt: formattedDate,
           rawOpenedAt: active.openedAt.toISOString(),
           notes: active.notes,
@@ -248,10 +255,11 @@ export async function getClosedShiftsHistoryAction(): Promise<{
   error?: string;
 }> {
   try {
-    await requireRole(["admin", "manager", "cashier"]);
+    const operator = await requireRole(["admin", "manager", "cashier"]);
 
     const list = await db.query.cashShifts.findMany({
-      where: eq(schema.cashShifts.status, "closed"),
+      where: and(eq(schema.cashShifts.status, "closed"),
+        operator.role === "cashier" ? eq(schema.cashShifts.userId, operator.id) : undefined),
       with: {
         cashRegister: true,
         user: true,
@@ -424,88 +432,37 @@ export async function openShiftAction(input: OpenShiftInput): Promise<{
  * - Registra la firma y observación del supervisor
  * - Archiva el turno como "closed"
  */
-export async function closeShiftAction(input: CloseShiftInput): Promise<{
-  success: boolean;
-  data?: {
-    shiftNumber: string;
-    expectedCash: number;
-    actualCash: number;
-    difference: number;
-    status: "balanced" | "surplus" | "shortage";
-  };
-  error?: string;
-}> {
+export async function submitCashCountAction(input: SubmitCashCountInput) {
   try {
-    const parsed = closeShiftSchema.parse(input);
-    const sessionUser = await requireRole(["admin", "manager", "cashier"]);
+    const operator = await requireRole(["admin", "manager", "cashier"]);
+    const { shiftId, actualCash } = submitCashCountSchema.parse(input);
+    const result = await db.execute(submitCashCountQuery(shiftId, operator.id, actualCash.toFixed(2)));
+    if (!result.rows.length) return { success: false, error: "Solo puedes enviar una vez el conteo de tu turno abierto." };
 
-    const shift = await db.query.cashShifts.findFirst({
-      where: eq(schema.cashShifts.id, parsed.shiftId),
-    });
+    safeRevalidatePath("/admin/cajas");
+    safeRevalidatePath("/admin/ventas");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al guardar el conteo físico.") };
+  }
+}
 
-    if (!shift) {
-      return { success: false, error: "El turno especificado no existe." };
+export async function closeShiftAction(input: CloseShiftInput) {
+  try {
+    const supervisor = await requireRole(["admin", "manager"]);
+    const { shiftId, notes } = closeShiftSchema.parse(input);
+    const result = await db.execute(approveCashCountQuery(shiftId, supervisor.id, notes || null));
+    if (!result.rows.length) {
+      return { success: false, error: "El turno ya no está pendiente de aprobación o falta explicar la diferencia." };
     }
-
-    if (shift.status === "closed") {
-      return { success: false, error: "Este turno ya se encuentra cerrado y arqueado." };
-    }
-
-    if (sessionUser.role === "cashier" && shift.userId !== sessionUser.id) {
-      return { success: false, error: "Solo puedes cerrar tu propio turno." };
-    }
-
-    const expectedCashNum = parseFloat(shift.expectedCash) || 0;
-    const actualCashNum = parsed.actualCash;
-    const differenceNum = parseFloat((actualCashNum - expectedCashNum).toFixed(2));
-
-    let status: "balanced" | "surplus" | "shortage" = "balanced";
-    if (Math.abs(differenceNum) < 0.01) {
-      status = "balanced";
-    } else if (differenceNum > 0) {
-      status = "surplus";
-    } else {
-      status = "shortage";
-    }
-
-    const [closed] = await db
-      .update(schema.cashShifts)
-      .set({
-        actualCash: actualCashNum.toFixed(2),
-        difference: differenceNum.toFixed(2),
-        closedByUserId: sessionUser.id,
-        closedAt: new Date(),
-        status: "closed",
-        notes: parsed.notes || shift.notes,
-      })
-      .where(and(
-        eq(schema.cashShifts.id, parsed.shiftId),
-        eq(schema.cashShifts.status, "open"),
-        eq(schema.cashShifts.expectedCash, shift.expectedCash)
-      ))
-      .returning({ id: schema.cashShifts.id });
-
-    if (!closed) return { success: false, error: "El turno cambió. Vuelve a cargar el arqueo." };
 
     safeRevalidatePath("/admin/cajas");
     safeRevalidatePath("/admin/ventas");
     safeRevalidatePath("/admin");
-
-    return {
-      success: true,
-      data: {
-        shiftNumber: shift.shiftNumber,
-        expectedCash: expectedCashNum,
-        actualCash: actualCashNum,
-        difference: differenceNum,
-        status,
-      },
-    };
+    safeRevalidatePath("/admin/reportes");
+    return { success: true };
   } catch (error) {
-    return {
-      success: false,
-      error: adminActionError(error, "Error al procesar el arqueo y cierre de caja."),
-    };
+    return { success: false, error: adminActionError(error, "Error al aprobar el cierre.") };
   }
 }
 
@@ -591,13 +548,16 @@ export async function getShiftSalesAction(shiftId: number): Promise<{
 }> {
   try {
     const user = await requireRole(["admin", "manager", "cashier"]);
-    if (user.role === "cashier") {
-      const shift = await db.query.cashShifts.findFirst({
-        where: and(eq(schema.cashShifts.id, shiftId), eq(schema.cashShifts.userId, user.id)),
-        columns: { id: true },
-      });
-      if (!shift) throw new Error("Solo puedes consultar las ventas de tus turnos.");
-    }
+    const shift = await db.query.cashShifts.findFirst({
+      where: and(eq(schema.cashShifts.id, shiftId), user.role === "cashier"
+        ? and(eq(schema.cashShifts.userId, user.id), eq(schema.cashShifts.status, "closed"))
+        : or(ne(schema.cashShifts.userId, user.id), eq(schema.cashShifts.status, "closed"), isNotNull(schema.cashShifts.actualCash))),
+      columns: { id: true },
+    });
+    if (!shift) return {
+      success: false, sales: [], totalRevenue: 0, cashSalesTotal: 0, electronicSalesTotal: 0, ticketsCount: 0,
+      error: "Los tickets del arqueo estarán disponibles cuando tengas permiso para revisar el turno.",
+    };
 
     const list = await db.query.sales.findMany({
       where: eq(schema.sales.cashShiftId, shiftId),

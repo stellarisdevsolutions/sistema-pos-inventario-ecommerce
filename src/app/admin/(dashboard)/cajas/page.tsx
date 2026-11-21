@@ -48,6 +48,7 @@ import {
   getClosedShiftsHistoryAction,
   openShiftAction,
   closeShiftAction,
+  submitCashCountAction,
   createCashRegisterAction,
   getShiftSalesAction,
   type CashRegisterItem,
@@ -81,7 +82,7 @@ export default function CajasPage() {
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
 
-  // Modal: Arqueo Ciego & Cierre de Caja
+  // Modal: {shiftToClose?.review ? "Revisar y aprobar cierre" : "Registrar conteo de efectivo"}
   const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
   const [shiftToClose, setShiftToClose] = useState<ActiveShiftDetail | null>(null);
   const [actualCashCounted, setActualCashCounted] = useState<string>("");
@@ -214,13 +215,6 @@ export default function CajasPage() {
     }
   }, [activeTab]);
 
-  // Cálculos para el modal de Arqueo
-  const countedNum = parseFloat(actualCashCounted) || 0;
-  const difference = useMemo(() => {
-    if (!shiftToClose) return 0;
-    return parseFloat((countedNum - shiftToClose.expectedCash).toFixed(2));
-  }, [countedNum, shiftToClose]);
-
   // Manejar apertura de turno
   const handleOpenShift = async () => {
     if (!selectedRegisterToOpen) return;
@@ -255,24 +249,20 @@ export default function CajasPage() {
   const handleCloseShift = async () => {
     if (!shiftToClose) return;
 
-    if (actualCashCounted.trim() === "") {
-      toast.error("Debes ingresar el conteo físico de dinero en gaveta.");
+    const review = shiftToClose.review;
+    if (review ? review.difference !== 0 && !supervisorNote.trim() : !actualCashCounted.trim()) {
+      toast.error(review ? "Explica la diferencia para aprobar el cierre." : "Ingresa el efectivo contado.");
       return;
     }
 
     setIsClosingShift(true);
     try {
-      const res = await closeShiftAction({
-        shiftId: shiftToClose.id,
-        actualCash: countedNum,
-        notes: supervisorNote.trim() || null,
-      });
+      const res = review
+        ? await closeShiftAction({ shiftId: shiftToClose.id, notes: supervisorNote.trim() })
+        : await submitCashCountAction({ shiftId: shiftToClose.id, actualCash: Number(actualCashCounted) });
 
-      if (res.success && res.data) {
-        const { status } = res.data;
-        toast.success(`Turno #${shiftToClose.shiftNumber} cerrado exitosamente`, {
-          description: `Arqueo conciliado (${status === "balanced" ? "Cuadrado exacto" : status === "surplus" ? "Sobrante" : "Faltante"}).`,
-        });
+      if (res.success) {
+        toast.success(review ? "Cierre aprobado" : "Conteo enviado para revisión");
         setCloseShiftModalOpen(false);
         setShiftToClose(null);
         setActualCashCounted("");
@@ -387,6 +377,7 @@ export default function CajasPage() {
       {/* =========================================================================
           2. KPIS FINANCIEROS DE CONTROL DE CAJAS
           ========================================================================= */}
+      {user && user.role !== "cashier" && !registers.some(r => r.activeShift?.userId === user.id && !r.activeShift.pendingReview) && (
       <section className="admin-metrics" aria-label="Indicadores de cajas">
         <MetricCard
           label="Fondo inicial en gavetas"
@@ -415,6 +406,7 @@ export default function CajasPage() {
           icon={ShieldCheck}
         />
       </section>
+      )}
 
       {/* =========================================================================
           3. SELECTOR DE PESTAÑAS (TERMINALES vs HISTORIAL)
@@ -493,7 +485,7 @@ export default function CajasPage() {
                         </div>
                         <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
                           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                          <span>Turno Abierto</span>
+                          <span>{active.pendingReview ? "Pendiente de aprobación" : "Turno abierto"}</span>
                         </div>
                       </div>
 
@@ -515,69 +507,33 @@ export default function CajasPage() {
                         </span>
                       </div>
 
-                      {/* Métricas del turno activo */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                        <div className="p-3 rounded-xl bg-admin-sidebar-hover border border-admin-inverse-border">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                            Fondo
-                          </span>
-                          <p className="text-sm font-semibold text-slate-200 mt-0.5 truncate">
-                            {formatCurrency(active.initialCash)}
-                          </p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-admin-sidebar-hover border border-admin-inverse-border">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                            Efectivo
-                          </span>
-                          <p className="text-sm font-semibold text-emerald-400 mt-0.5 truncate">
-                            +{formatCurrency(active.cashSales)}
-                          </p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-admin-sidebar-hover border border-admin-inverse-border">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                            Tarjetas/QR
-                          </span>
-                          <p className="text-sm font-semibold text-admin-brand-text mt-0.5 truncate">
-                            {formatCurrency(active.cardSales + active.transferSales)}
-                          </p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-admin-brand-subtle border border-admin-brand-light">
-                          <span className="text-[10px] font-bold text-admin-brand-text uppercase tracking-wider block">
-                            Esperado
-                          </span>
-                          <p className="text-sm font-semibold text-white mt-0.5 truncate">
-                            {formatCurrency(active.expectedCash)}
-                          </p>
-                        </div>
-                      </div>
+                      {active.totals && (
+                        <dl className="grid grid-cols-3 gap-3 text-xs">
+                          <div><dt>Fondo inicial</dt><dd>{formatCurrency(active.totals.initialCash)}</dd></div>
+                          <div><dt>Ventas en efectivo</dt><dd>{formatCurrency(active.totals.cashSales)}</dd></div>
+                          <div><dt>Tarjeta y QR</dt><dd>{formatCurrency(active.totals.electronicSales)}</dd></div>
+                        </dl>
+                      )}
                     </div>
 
                     {/* Botones de Acción del Turno Activo */}
                     <div className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      <Button
-                        variant="outline"
-                        type="button"
-                        onClick={() =>
-                          handleViewShiftSales(active.id, active.shiftNumber, reg.name)
-                        }
-                        className="h-11 rounded-xl border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-100 text-xs font-bold gap-2 cursor-pointer transition-all"
-                      >
-                        <Receipt className="h-4 w-4 text-admin-brand-text" />
-                        <span>Ver Tickets ({formatCurrency(active.cashSales + active.cardSales + active.transferSales)})</span>
-                      </Button>
-
-                      <Button
-                        type="button"
-                        onClick={() => {
+                      {active.totals && (
+                        <Button variant="outline" type="button" onClick={() => handleViewShiftSales(active.id, active.shiftNumber, reg.name)}>
+                          <Receipt className="h-4 w-4" /> Ver tickets
+                        </Button>
+                      )}
+                      {(active.review || (!active.pendingReview && active.userId === user?.id)) && (
+                        <Button type="button" onClick={() => {
                           setShiftToClose(active);
                           setActualCashCounted("");
+                          setSupervisorNote("");
                           setCloseShiftModalOpen(true);
-                        }}
-                        className="h-11 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid font-semibold text-xs gap-2 cursor-pointer active:scale-98 transition-all"
-                      >
-                        <Banknote className="h-4 w-4" />
-                        <span>Cerrar Turno & Arqueo</span>
-                      </Button>
+                        }}>
+                          <Banknote className="h-4 w-4" />
+                          {active.review ? "Revisar arqueo" : "Registrar conteo"}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );
@@ -811,106 +767,35 @@ export default function CajasPage() {
           <DialogHeader className="pb-3 border-b border-admin-card-border">
             <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-admin-brand-text" />
-              Arqueo Ciego & Cierre de Caja
+              {shiftToClose?.review ? "Revisar y aprobar cierre" : "Registrar conteo de efectivo"}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
               Turno #{shiftToClose?.shiftNumber} — Operado por {shiftToClose?.cashierName} en {shiftToClose?.cashRegisterCode}.
             </DialogDescription>
           </DialogHeader>
 
-          {shiftToClose && (
-            <div className="space-y-4 py-3 text-xs">
-              {/* Desglose Financiero del Turno */}
-              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
+          {shiftToClose?.review ? (
+            <div className="space-y-4 py-3 text-sm">
+              <dl className="grid grid-cols-3 gap-3 rounded-xl bg-admin-raised p-3">
+                <div><dt>Esperado</dt><dd>{formatCurrency(shiftToClose.review.expectedCash)}</dd></div>
+                <div><dt>Contado</dt><dd>{formatCurrency(shiftToClose.review.actualCash)}</dd></div>
                 <div>
-                  <span className="text-slate-400 font-medium">Fondo Inicial:</span>
-                  <p className="font-bold text-admin-text text-sm">
-                    {formatCurrency(shiftToClose.initialCash)}
-                  </p>
+                  <dt>{shiftToClose.review.difference < 0 ? "Faltante" : shiftToClose.review.difference > 0 ? "Sobrante" : "Diferencia"}</dt>
+                  <dd>{formatCurrency(Math.abs(shiftToClose.review.difference))}</dd>
                 </div>
-                <div>
-                  <span className="text-slate-400 font-medium">Ventas Efectivo:</span>
-                  <p className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                    +{formatCurrency(shiftToClose.cashSales)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">Ventas Tarjeta / QR:</span>
-                  <p className="font-bold text-admin-brand-text text-sm">
-                    {formatCurrency(shiftToClose.cardSales + shiftToClose.transferSales)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">Efectivo Esperado en Gaveta:</span>
-                  <p className="font-semibold text-admin-text text-base">
-                    {formatCurrency(shiftToClose.expectedCash)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Input de Conteo Físico Real */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-admin-secondary">
-                  Dinero Físico en Gaveta (Contado por el cajero):
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
-                    {CURRENCY_SYMBOL}
-                  </span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    className="pl-9 h-11 text-base font-semibold rounded-xl border-admin-card-border focus:border-admin-brand"
-                    value={actualCashCounted}
-                    onChange={(e) => setActualCashCounted(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Verificación de Cuadre en Vivo */}
-              <div
-                className={cn(
-                  "p-3 rounded-xl border flex items-center justify-between font-bold transition-colors",
-                  Math.abs(difference) < 0.01
-                    ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                    : difference > 0
-                    ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                    : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  {Math.abs(difference) < 0.01 ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    <AlertTriangle className="h-4 w-4" />
-                  )}
-                  <span>
-                    {Math.abs(difference) < 0.01
-                      ? "¡Caja Cuadrada Perfecta!"
-                      : difference > 0
-                      ? `Sobrante de dinero: +${formatCurrency(difference)}`
-                      : `Faltante de dinero: -${formatCurrency(Math.abs(difference))}`}
-                  </span>
-                </div>
-                <span className="text-sm font-semibold">
-                  {difference === 0 ? formatCurrency(0) : `${difference > 0 ? "+" : ""}${formatCurrency(difference)}`}
-                </span>
-              </div>
-
-              {/* Observación / Justificación del Arqueo */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-admin-secondary">
-                  Observación del cierre:
-                </label>
-                <Input
-                  placeholder="Ej. Conforme con el recuento sin discrepancias..."
-                  className="h-10 text-xs rounded-xl border-admin-card-border"
-                  value={supervisorNote}
-                  onChange={(e) => setSupervisorNote(e.target.value)}
-                />
-              </div>
+              </dl>
+              <label className="grid gap-2" htmlFor="cash-review-note">
+                {shiftToClose.review.difference === 0 ? "Observación opcional" : "Motivo de la diferencia"}
+                <Input id="cash-review-note" maxLength={500} value={supervisorNote} onChange={(e) => setSupervisorNote(e.target.value)} />
+              </label>
+            </div>
+          ) : (
+            <div className="space-y-3 py-3 text-sm">
+              <p>Cuenta el dinero de la gaveta. Al enviar el conteo, el turno queda bloqueado para cobros hasta que un supervisor apruebe el cierre.</p>
+              <label className="grid gap-2" htmlFor="physical-cash-count">
+                Efectivo contado ({CURRENCY_SYMBOL})
+                <Input id="physical-cash-count" type="number" step="0.01" min="0" value={actualCashCounted} onChange={(e) => setActualCashCounted(e.target.value)} />
+              </label>
             </div>
           )}
 
@@ -938,7 +823,7 @@ export default function CajasPage() {
               ) : (
                 <>
                   <Check className="h-3.5 w-3.5" />
-                  <span>Confirmar y Cerrar Turno</span>
+                  <span>{shiftToClose?.review ? "Aprobar cierre" : "Enviar conteo"}</span>
                 </>
               )}
             </Button>

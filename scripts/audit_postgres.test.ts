@@ -8,6 +8,7 @@ import { cancelSaleQuery, createSaleQuery, refundSaleQuery } from "@/db/operatio
 import { saleFormSchema } from "@/lib/validations/sale";
 import { purchaseFormSchema } from "@/lib/validations/purchase";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
+import { approveCashCountQuery, submitCashCountQuery } from "@/db/operations/cash-shifts";
 
 async function createDatabase(context: TestContext) {
   const db = new PGlite();
@@ -155,4 +156,35 @@ test("cobrar una venta aplica ticket, stock, Kardex y caja en la misma operació
   assert.equal((await db.query(cancel.sql, cancel.params)).rows.length, 0);
   assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 2 }]);
   assert.deepEqual((await db.query("SELECT expected_cash FROM cash_shifts")).rows, [{ expected_cash: "70.00" }]);
+  const runShiftUpdate = (statement: ReturnType<typeof submitCashCountQuery>) => {
+    const query = dialect.sqlToQuery(statement);
+    return db.query(query.sql, query.params);
+  };
+  assert.equal((await runShiftUpdate(approveCashCountQuery(1, 2, null))).rows.length, 0);
+  assert.equal((await runShiftUpdate(submitCashCountQuery(1, 2, "65.00"))).rows.length, 0);
+  assert.equal((await runShiftUpdate(submitCashCountQuery(1, 1, "65.00"))).rows.length, 1);
+  assert.equal((await runShiftUpdate(submitCashCountQuery(1, 1, "70.00"))).rows.length, 0);
+
+  assert.equal((await execute(1)).rows.length, 0);
+  await assert.rejects(
+    db.exec("INSERT INTO cash_shifts (shift_number, cash_register_id, user_id) VALUES ('B', 1, 2)"),
+    /cash_shifts_open_register_unique/
+  );
+  const secondRefund = dialect.sqlToQuery(refundSaleQuery({
+    saleId: sale.id, operatorId: 1, supervisorId: 2, cashShiftId: 1,
+    amount: 20, note: "Fixture devolución", items: [{ id: item.id, returnedQuantity: 1, quantity: 1 }],
+  }));
+  assert.equal((await db.query(secondRefund.sql, secondRefund.params)).rows.length, 0);
+
+  assert.equal((await runShiftUpdate(approveCashCountQuery(1, 2, null))).rows.length, 0);
+  assert.equal((await runShiftUpdate(approveCashCountQuery(1, 2, "Faltante registrado"))).rows.length, 1);
+  assert.equal((await runShiftUpdate(approveCashCountQuery(1, 2, "Otro motivo"))).rows.length, 0);
+  assert.deepEqual((await db.query(`
+    SELECT status, expected_cash, actual_cash, difference, closed_by_user_id, notes
+    FROM cash_shifts
+  `)).rows, [{
+    status: "closed", expected_cash: "70.00", actual_cash: "65.00", difference: "-5.00",
+    closed_by_user_id: 2, notes: "Faltante registrado",
+  }]);
+
 });

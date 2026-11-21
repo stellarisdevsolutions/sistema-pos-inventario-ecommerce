@@ -95,6 +95,7 @@ export default function VentasPage() {
   const [users, setUsers] = useState<PosUserItem[]>([]);
   const [currentOperator, setCurrentOperator] = useState<PosUserItem | null>(null);
   const [allOpenShifts, setAllOpenShifts] = useState<PosShiftItem[]>([]);
+  const [shiftPendingReview, setShiftPendingReview] = useState(false);
   const [isAdministrativeSale, setIsAdministrativeSale] = useState(false);
 
   // Estado del catálogo y turno de caja
@@ -201,6 +202,7 @@ export default function VentasPage() {
       }
 
       if (contextRes.success) {
+        setShiftPendingReview(contextRes.shiftPendingReview);
         setUsers(contextRes.users);
         setAllOpenShifts(contextRes.allOpenShifts);
         setCurrentOperator(contextRes.currentOperator);
@@ -217,8 +219,8 @@ export default function VentasPage() {
           setActiveShift(null);
           // Si el operador es admin o supervisor y no tiene caja propia abierta, activar modo administrativo
           if (
-            contextRes.currentOperator?.role === "admin" ||
-            contextRes.currentOperator?.role === "manager"
+            !contextRes.shiftPendingReview &&
+            (contextRes.currentOperator?.role === "admin" || contextRes.currentOperator?.role === "manager")
           ) {
             setIsAdministrativeSale(true);
           } else {
@@ -707,7 +709,7 @@ export default function VentasPage() {
             ) : (
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800 px-2.5 py-1 rounded-xl">
                 <Lock className="h-3 w-3" />
-                Sin turno abierto
+                {shiftPendingReview ? "Arqueo pendiente" : "Sin turno abierto"}
               </span>
             )}
           </div>
@@ -764,13 +766,13 @@ export default function VentasPage() {
                     Terminal Bloqueada para {currentOperator?.name || "este operador"}
                   </p>
                   <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed max-w-2xl">
-                    Por estricto control de arqueo ciego y responsabilidad de dinero en efectivo, no cuentas con un turno de caja abierto asignado a tu nombre. Tampoco puedes operar en la caja de otro compañero.
+                    {shiftPendingReview ? "Tu conteo está pendiente de aprobación. La caja se libera cuando un supervisor aprueba el cierre." : "Abre un turno a tu nombre para cobrar en mostrador."}
                   </p>
                 </div>
               </div>
               <Link href="/admin/cajas">
                 <Button size="sm" className="h-8 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-xl">
-                  Aperturar Mi Caja
+                  {shiftPendingReview ? "Ver estado en Cajas" : "Abrir mi caja"}
                 </Button>
               </Link>
             </div>
