@@ -76,7 +76,7 @@ test("PBKDF2 verifica contraseñas válidas y rechaza registros sin hash", () =>
   assert.equal(verifyPassword(password, password), false);
 });
 
-test("las cuentas de prueba están disponibles en desarrollo y en el Preview de mejoras-panel-admin", (t) => {
+test("las cuentas de prueba funcionan en desarrollo y en el despliegue de main en Vercel", (t) => {
   const keys = ["NODE_ENV", "ENABLE_DEMO_LOGIN", "VERCEL_ENV", "VERCEL_GIT_COMMIT_REF"] as const;
   const previous = keys.map((name) => [name, process.env[name]] as const);
   t.after(() => {
@@ -87,18 +87,30 @@ test("las cuentas de prueba están disponibles en desarrollo y en el Preview de 
   });
 
   const demo = ["cajera@aurastudio.com", "password123", "$2b$10$hashedpasswordforcashier"] as const;
-  process.env.ENABLE_DEMO_LOGIN = "1";
+  delete process.env.ENABLE_DEMO_LOGIN;
   process.env.VERCEL_ENV = "production";
-  process.env.VERCEL_GIT_COMMIT_REF = "mejoras-panel-admin";
+  process.env.VERCEL_GIT_COMMIT_REF = "main";
   Reflect.set(process.env, "NODE_ENV", "production");
-  assert.equal(verifyDemoLogin(...demo), false);
-  assert.equal(getDemoLoginOptions(), null);
-  process.env.VERCEL_ENV = "preview";
   assert.equal(verifyDemoLogin(...demo), true);
   assert.equal(getDemoLoginOptions()?.accounts.length, 4);
   assert.equal(verifyDemoLogin(demo[0], demo[1], "different-hash"), false);
 
+  process.env.ENABLE_DEMO_LOGIN = "0";
+  assert.equal(verifyDemoLogin(...demo), false);
+  assert.equal(getDemoLoginOptions(), null);
+
+  process.env.ENABLE_DEMO_LOGIN = "1";
+  process.env.VERCEL_ENV = "preview";
+  assert.equal(verifyDemoLogin(...demo), false);
+  assert.equal(getDemoLoginOptions(), null);
+
+  process.env.VERCEL_ENV = "production";
   process.env.VERCEL_GIT_COMMIT_REF = "otra-rama";
+  assert.equal(verifyDemoLogin(...demo), false);
+  assert.equal(getDemoLoginOptions(), null);
+
+  delete process.env.VERCEL_ENV;
+  process.env.VERCEL_GIT_COMMIT_REF = "main";
   assert.equal(verifyDemoLogin(...demo), false);
   assert.equal(getDemoLoginOptions(), null);
 

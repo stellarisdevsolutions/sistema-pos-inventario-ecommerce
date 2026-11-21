@@ -12,8 +12,9 @@ export function isDemoLoginEnabled(): boolean {
   }
 
   return process.env.NODE_ENV === "production" &&
-    process.env.VERCEL_ENV === "preview" &&
-    process.env.VERCEL_GIT_COMMIT_REF === "mejoras-panel-admin";
+    process.env.VERCEL_ENV === "production" &&
+    process.env.VERCEL_GIT_COMMIT_REF === "main" &&
+    process.env.ENABLE_DEMO_LOGIN !== "0";
 }
 
 export const demoSupervisorEmails = [demoAccounts[0].email, demoAccounts[1].email];

@@ -17,16 +17,15 @@ En el portal, elige un rol en **Cuentas de prueba** para rellenar los campos y l
 
 El acceso de demostración acepta los registros originales de la semilla en este modo. Si ya cambiaste la contraseña o desactivaste una cuenta, se respetan esos cambios. El modo de demostración también admite los PIN heredados del administrador y supervisor de la semilla. Si vas a configurar PIN nuevos en la base de pruebas y quieres conservarlos entre reinicios, usa un `SUPERVISOR_PIN_SECRET` estable. El arranque reutiliza los datos existentes. Para poblar una base de pruebas vacía con `corepack pnpm db:seed`, configura `SEED_PASSWORD` con una contraseña de 16 a 100 caracteres.
 
-## Preview de Vercel con la base de pruebas
+## Despliegue de pruebas de `main` en Vercel
 
-1. En Vercel, configura `DATABASE_URL` con tu base de pruebas y `SESSION_SECRET` para **Preview**. Puedes limitar ambas variables a la rama `mejoras-panel-admin`.
-2. En **Deployments**, abre el despliegue de `mejoras-panel-admin` y entra en `/portal`. El selector **Cuentas de prueba** se habilita automáticamente con las variables del sistema de Vercel `VERCEL_ENV` y `VERCEL_GIT_COMMIT_REF`.
-3. Si agregaste o cambiaste una variable, vuelve a desplegar el **Preview** de la rama. Para `SESSION_SECRET`, genera un valor propio con `openssl rand -hex 32` y guárdalo en Vercel. Si aparece un error de base de datos, comprueba que la conexión apunta a la base de pruebas con el esquema y las cuentas cargadas.
-4. Usa **Deployment Protection** si el Preview debe quedar accesible solo para tu equipo.
+1. Configura `DATABASE_URL` con la conexión a la base de pruebas y `SESSION_SECRET` en el entorno **Production** de Vercel. Para la clave de sesión, genera un valor con `openssl rand -hex 32`.
+2. Publica `main` y abre `/portal`. El selector **Cuentas de prueba** aparece automáticamente en el despliegue de producción de esa rama. Elige un rol y pulsa **Entrar al panel**.
+3. Si cambias la configuración de Vercel, vuelve a desplegar. Si falla el inicio de sesión, comprueba que la conexión apunta a la base de pruebas con el esquema y las cuentas cargadas.
 
 ## Instalación de producción
 
-1. Crea una base PostgreSQL de Neon exclusiva para producción. En el gestor de secretos del despliegue, configura `DATABASE_URL` y `SESSION_SECRET`. Usa una clave estable con al menos 32 bytes aleatorios. Puedes generar una con `openssl rand -hex 32`. Configura también `SUPERVISOR_PIN_SECRET` si quieres una clave independiente para los PIN.
+1. Crea una base PostgreSQL de Neon exclusiva para producción. Si usas Vercel con `main`, configura `ENABLE_DEMO_LOGIN=0` en **Production** para ocultar el selector y deshabilitar la validación de credenciales heredadas de la semilla. En el gestor de secretos del despliegue, configura `DATABASE_URL` y `SESSION_SECRET`. Usa una clave estable con al menos 32 bytes aleatorios. Puedes generar una con `openssl rand -hex 32`. Configura también `SUPERVISOR_PIN_SECRET` si quieres una clave independiente para los PIN.
 2. Ejecuta `corepack pnpm install --frozen-lockfile`. En una base vacía, aplica las migraciones con `corepack pnpm exec drizzle-kit migrate` desde un entorno con acceso directo a PostgreSQL. Para una base existente, revisa primero su esquema y el historial de migraciones. Consulta la [auditoría](AUDITORIA_PANEL_ADMIN.md) para la base de pruebas actual.
 3. Da de alta el primer administrador con un correo propio y un hash generado con `hashPassword` de `src/lib/auth/password.ts`. Inserta el registro en `users` con rol `admin` mediante una operación de aprovisionamiento autorizada. Crea las demás cuentas desde el módulo **Usuarios**. Reserva `db:seed` para pruebas.
 4. Ejecuta `corepack pnpm test` y `corepack pnpm build`. Arranca el artefacto con `corepack pnpm start` detrás de HTTPS. Comprueba el inicio de sesión con el administrador y ejecuta `corepack pnpm test:http` contra el proceso que acabas de levantar.
