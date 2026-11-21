@@ -48,7 +48,9 @@ export async function getInventoryProducts() {
       orderBy: (p, { desc }) => [desc(p.id)],
     });
 
-    const data = prods.map((p) => ({
+    if (prods.length === 0) return [];
+
+    return prods.map((p) => ({
       id: p.id,
       name: productName(p),
       sku: p.sku || `PROD-${p.id.toString().padStart(4, "0")}`,
@@ -65,11 +67,13 @@ export async function getInventoryProducts() {
         : "in_stock") as "in_stock" | "low_stock" | "out_of_stock",
       isActive: p.isActive ?? true,
       description: p.description || null,
-      image: p.imageUrl || null,
+      image:
+        p.imageUrl ||
+        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&auto=format&fit=crop&q=80",
     }));
-    return { success: true as const, data };
   } catch (error) {
-    return { success: false as const, data: [], error: adminActionError(error, "No se pudo cargar el inventario.") };
+    console.error("Error al obtener productos de inventario:", error);
+    return [];
   }
 }
 
@@ -466,7 +470,6 @@ export async function getProductKardexAction(productId?: number) {
           day: "2-digit",
           month: "2-digit",
           year: "numeric",
-          timeZone: "America/La_Paz",
           hour: "2-digit",
           minute: "2-digit",
         });
@@ -497,8 +500,8 @@ export async function getProductKardexAction(productId?: number) {
               ? `#REF-${m.referenceId}`
               : "Ajuste Directo",
           referenceType: m.referenceType,
-          reason: m.reason || null,
-          user: m.user?.name || null,
+          reason: m.reason || "Sin observación",
+          user: m.user?.name || "Administrador",
         };
       }),
     };
@@ -595,14 +598,13 @@ export async function getInventoryAdjustmentsAction() {
 
     const flatList = adjustments.map((a) => {
       const firstItem = a.items[0];
-      const product = a.items.length === 1 ? firstItem?.product : null;
+      const product = firstItem?.product;
 
       const dateObj = new Date(a.createdAt);
       const formattedDate = dateObj.toLocaleDateString("es-BO", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
-        timeZone: "America/La_Paz",
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -611,17 +613,16 @@ export async function getInventoryAdjustmentsAction() {
         id: a.id,
         adjustmentNumber: a.adjustmentNumber,
         date: formattedDate,
-        businessDate: businessDate(dateObj),
         productId: product?.id || 0,
-        productName: product ? productName(product) : a.items.length ? "Varios productos" : "Sin detalle",
-        sku: product?.sku ?? null,
-        quantity: a.items.reduce((sum, item) => sum + item.quantity, 0),
+        productName: product?.name || "Varios productos",
+        sku: product?.sku || "N/A",
+        quantity: firstItem ? firstItem.quantity : 1,
         reason: a.reason,
         reasonLabel: reasonLabels[a.reason] || a.reason,
         totalLoss: Number(a.totalCost || 0),
-        reportedBy: a.user?.name ?? null,
-        authorizedBy: a.authorizedByUser?.name ?? null,
-        notes: a.notes ?? null,
+        reportedBy: a.user?.name || "Almacenero",
+        authorizedBy: a.authorizedByUser?.name || "Supervisor General",
+        notes: a.notes || "Sin observaciones adicionales",
       };
     });
 
