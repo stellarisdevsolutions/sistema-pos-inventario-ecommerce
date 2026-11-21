@@ -167,8 +167,13 @@ export async function createProductAction(input: ProductFormInput, options?: Pro
           variantSelector: model ? model.variantSelector : input.variantSelector,
           mainImage: option.mainImage || input.mainImage,
           additionalImages: option.mainImage ? [] : input.additionalImages,
+          attributes: option.attributes ?? input.attributes,
         });
-        return { ...productDbInsertSchema.parse(product), variantSelector: product.variantSelector || null };
+        return {
+          ...productDbInsertSchema.parse(product),
+          variantSelector: product.variantSelector || null,
+          attributes: option.attributes ?? null,
+        };
       });
     }
 
@@ -237,6 +242,7 @@ export async function updateProductAction(
       modelCode: payload.modelCode,
       variant: payload.variant,
       variantColor: payload.variantColor,
+      attributes: payload.attributes,
       minStock: payload.minStock,
       imageUrl: payload.imageUrl,
       images: payload.images,

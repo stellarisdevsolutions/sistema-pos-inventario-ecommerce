@@ -56,7 +56,7 @@ export async function importCatalogAction(form: FormData, confirm = false): Prom
         if (model && (model.name !== entry.name || model.variantSelector !== variantSelector)) {
           errors.push({ row, message: "El nombre del producto y el selector deben coincidir para todas las filas de este grupo." });
         } else if (!model) {
-          modelByCode.set(entry.modelCode, { code: entry.modelCode, name: entry.name, variantSelector });
+          modelByCode.set(entry.modelCode, { code: entry.modelCode, name: entry.name, variantSelector, options: null });
         }
       }
     }

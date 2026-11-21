@@ -11,6 +11,7 @@ import {
   index,
   check,
   uuid,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -167,6 +168,7 @@ export const productModels = pgTable("product_models", {
   code: text("code").primaryKey(),
   name: text("name").notNull(),
   variantSelector: text("variant_selector"),
+  options: jsonb("options"),
 });
 
 export const products = pgTable("products", {
@@ -176,6 +178,7 @@ export const products = pgTable("products", {
   modelCode: text("model_code").references(() => productModels.code),
   variant: text("variant"),
   variantColor: text("variant_color"),
+  attributes: jsonb("attributes"),
   importKey: text("import_key").unique(),
   sku: text("sku").unique(),                                                        // Código SKU interno (opcional / nullable)
   barcode: text("barcode").unique(),                                                // Código de barras (opcional / nullable)

@@ -89,6 +89,7 @@ const productFieldsSchema = z.object({
   variant: z.string().trim().max(100).optional().nullable(),
   variantSelector: z.string().trim().max(60).optional().nullable(),
   variantColor: z.string().trim().regex(/^(#[0-9a-fA-F]{6})?$/, "Escribe un color hexadecimal válido.").optional().nullable(),
+  attributes: z.record(z.string(), z.string()).optional().nullable(),
 });
 
 export const productFormSchema = productFieldsSchema.refine(data => Boolean(data.modelCode) === Boolean(data.variant),
@@ -104,12 +105,13 @@ export const productOptionsSchema = z.array(
     costPrice: true,
     initialStock: true,
     variantColor: true,
+    attributes: true,
   }).extend({
     variant: z.string().trim().min(1, "Escribe el valor de la variante.").max(100),
     mainImage: z.union([
       z.literal(""),
-      z.url({ protocol: /^https$/ }).max(1500),
-    ]).optional(),
+      z.string().max(1500),
+    ]).optional().nullable(),
   }),
 ).min(1).max(100).superRefine((options, context) => {
   const seen = { variant: new Set<string>(), sku: new Set<string>(), barcode: new Set<string>() };
@@ -140,6 +142,7 @@ export const productDbInsertSchema = productFormSchema.transform((data) => {
     modelCode: data.modelCode?.toUpperCase() || null,
     variant: data.variant || null,
     variantColor: data.variantColor || null,
+    attributes: data.attributes || null,
     sku: data.sku && data.sku.trim() !== "" ? data.sku.trim() : null,
     barcode: data.barcode && data.barcode.trim() !== "" ? data.barcode.trim() : null,
     description: data.description.trim() || null,

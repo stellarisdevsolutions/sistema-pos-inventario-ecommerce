@@ -24,6 +24,7 @@ import {
   Loader2,
   Truck,
   Lock,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -181,7 +182,9 @@ export function ProductForm({
         sku, barcode,
         modelCode: usesVariants ? modelCode : null,
         variant: usesVariants && isEdit ? variant : null,
-        variantSelector: usesVariants ? variantSelector : null,
+        variantSelector: usesVariants
+          ? (variantSelector || (options[0]?.attributes ? Object.keys(options[0].attributes).join(" y ") : "Variante"))
+          : null,
         variantColor: usesVariants && isEdit ? variantColor : null,
         description: description.trim(),
         mainImage: imageUrl || mainImage || null,
@@ -543,45 +546,6 @@ export function ProductForm({
               </div>
             )}
 
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input type="checkbox" checked={usesVariants} onChange={e => setUsesVariants(e.target.checked)} />
-              Este producto tiene variantes
-            </label>
-
-            {usesVariants && (
-              <div className="space-y-3 rounded-xl border border-admin-card-border p-3">
-                {createWithVariants && models.length > 0 && (
-                  <label className="grid gap-1 text-sm">Modelo
-                    <select className="min-h-9 rounded-lg border border-admin-card-border bg-admin-card-bg px-2"
-                      value={modelCode} onChange={event => {
-                        const selected = models.find(model => model.code === event.target.value);
-                        setModelCode(selected?.code ?? "");
-                        if (selected) {
-                          setName(selected.name);
-                          setVariantSelector(selected.variantSelector ?? "");
-                        }
-                      }}>
-                      <option value="">Crear un modelo nuevo</option>
-                      {models.map(model => <option key={model.code} value={model.code}>{model.name}</option>)}
-                    </select>
-                  </label>
-                )}
-                <label className="grid gap-1 text-sm">Nombre del selector (opcional)
-                  <Input placeholder="Variante" value={variantSelector} readOnly={Boolean(existingModel)} maxLength={60} onChange={e => setVariantSelector(e.target.value)} />
-                </label>
-                <p className="text-xs text-admin-muted">Por ejemplo, Talla, Color o Almacenamiento. Si lo dejas vacío se muestra «Variante».</p>
-                {isEdit && (
-                  <>
-                    {modelCode && <p className="break-all text-xs text-admin-muted">Grupo para Excel <code>{modelCode}</code></p>}
-                    <label className="grid gap-1 text-sm">Valor de la variante
-                      <Input placeholder="41, Verde o S / Verde" value={variant} required maxLength={100} onChange={e => setVariant(e.target.value)} />
-                    </label>
-                    <VariantColorField value={variantColor} onChange={setVariantColor} />
-                  </>
-                )}
-              </div>
-            )}
-
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-admin-secondary flex items-center gap-1.5">
                 <Tag className="h-3.5 w-3.5 text-admin-brand-text" />
@@ -626,15 +590,170 @@ export function ProductForm({
       </div>
 
       {/* =========================================================================
-          FILA 2: PRECIOS Y RENTABILIDAD COMERCIAL
+          SECCIÓN DEDICADA: VARIANTES Y ATRIBUTOS DEL PRODUCTO
           ========================================================================= */}
-      {createWithVariants && (
-        <div className="admin-panel space-y-3 p-4 sm:p-6">
-          <h2 className="text-base font-semibold">Variantes, precios y stock</h2>
-          <ProductVariantFields options={options} onChange={setOptions}
-            onAdd={() => setOptions([...options, emptyProductOption(nextOptionId.current++)])} />
+      <div className="admin-panel p-5 sm:p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-admin-card-border pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="size-9 rounded-xl bg-admin-brand-light flex items-center justify-center text-admin-brand-text shrink-0">
+              <Layers className="size-4.5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-admin-text tracking-tight flex items-center gap-2">
+                <span>Variantes del Producto</span>
+                {usesVariants && (
+                  <Badge variant="outline" className="text-[11px] font-bold border-admin-brand/40 bg-admin-brand-subtle text-admin-brand-text">
+                    {createWithVariants ? `${options.length} opciones` : "Variante activa"}
+                  </Badge>
+                )}
+              </h2>
+              <p className="text-xs text-admin-muted mt-0.5">
+                Define si este artículo se comercializa en distintas opciones (tallas, colores, capacidades) con inventario propio.
+              </p>
+            </div>
+          </div>
+
+          {!isEdit && (
+            <div className="admin-segments self-start sm:self-auto">
+              <button
+                type="button"
+                aria-pressed={!usesVariants}
+                onClick={() => setUsesVariants(false)}
+                className="admin-segment"
+              >
+                Producto Simple
+              </button>
+              <button
+                type="button"
+                aria-pressed={usesVariants}
+                onClick={() => setUsesVariants(true)}
+                className="admin-segment"
+              >
+                <Layers className="size-3.5" />
+                Con Variantes
+              </button>
+            </div>
+          )}
         </div>
-      )}
+
+        {usesVariants ? (
+          <div className="space-y-5">
+            {/* Si estamos creando un nuevo producto con variantes */}
+            {createWithVariants && (
+              <>
+                {/* Selector de Modelo existente (opcional si ya hay modelos creados) */}
+                {models.length > 0 && (
+                  <div className="bg-admin-raised p-4 sm:p-4.5 rounded-2xl border border-admin-card-border space-y-1.5">
+                    <label className="text-xs font-bold text-admin-secondary">
+                      Modelo Base del Catálogo (Opcional)
+                    </label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-admin-card-border bg-admin-card-bg text-admin-text text-xs px-3 font-medium outline-none focus:border-admin-brand"
+                      value={modelCode}
+                      onChange={(event) => {
+                        const selected = models.find((model) => model.code === event.target.value);
+                        setModelCode(selected?.code ?? "");
+                        if (selected) {
+                          setName(selected.name);
+                          setVariantSelector(selected.variantSelector ?? "");
+                        }
+                      }}
+                    >
+                      <option value="">Crear nuevo modelo base automáticamente</option>
+                      {models.map((model) => (
+                        <option key={model.code} value={model.code}>
+                          {model.name} ({model.code})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-admin-muted">Agrupa variantes bajo un mismo modelo de catálogo si ya existe.</p>
+                  </div>
+                )}
+
+                {/* Listado y configuración de opciones de variantes con stock y precios propios */}
+                <div className="space-y-3 pt-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-admin-secondary flex items-center gap-1.5">
+                      <span>Opciones y Existencias de la Variante</span>
+                      <span className="size-1.5 rounded-full bg-admin-brand inline-block" />
+                    </h3>
+                    <span className="text-[11px] text-admin-muted">
+                      Cada opción tiene su propio SKU, precio de venta, costo y Kárdex independiente.
+                    </span>
+                  </div>
+
+                  <ProductVariantFields
+                    options={options}
+                    onChange={setOptions}
+                    onAdd={() => setOptions([...options, emptyProductOption(nextOptionId.current++)])}
+                    onAddToGallery={(url) => setAdditionalImages((prev) => (prev.includes(url) ? prev : [...prev, url]))}
+                    basePrice={price}
+                    baseCostPrice={cost}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Si estamos editando una variante existente */}
+            {isEdit && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-admin-raised p-4.5 rounded-2xl border border-admin-card-border">
+                {modelCode && (
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-admin-secondary">Código del Modelo</span>
+                    <p className="font-mono text-xs font-bold text-admin-brand-text">{modelCode}</p>
+                  </div>
+                )}
+                {variantSelector && (
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-admin-secondary">Selector de atributo</span>
+                    <p className="text-xs font-medium text-admin-text">{variantSelector}</p>
+                  </div>
+                )}
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-xs font-bold text-admin-secondary">
+                    Valor de esta variante <span className="text-rose-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="Ej. S, 41, Verde, S / Verde"
+                    value={variant}
+                    required
+                    maxLength={100}
+                    onChange={(e) => setVariant(e.target.value)}
+                    className="h-10 text-xs font-semibold bg-admin-card-bg border-admin-card-border"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <VariantColorField value={variantColor} onChange={setVariantColor} />
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-admin-raised/70 border border-admin-card-border/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+            <div>
+              <p className="text-xs font-bold text-admin-text">Producto configurado como artículo único</p>
+              <p className="text-[11px] text-admin-muted mt-0.5">
+                Los precios y el stock inicial se controlan de forma global abajo en la sección de Rentabilidad.
+              </p>
+            </div>
+            {!isEdit && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setUsesVariants(true)}
+                className="text-xs font-bold text-admin-brand-text border-admin-card-border hover:bg-admin-card-bg shrink-0"
+              >
+                + Habilitar Variantes
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* =========================================================================
+          FILA 2: PRECIOS Y RENTABILIDAD COMERCIAL (Sólo para Producto Simple o Edición)
+          ========================================================================= */}
       {!createWithVariants && <div className="admin-panel p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
           <div className="flex items-center gap-2">
