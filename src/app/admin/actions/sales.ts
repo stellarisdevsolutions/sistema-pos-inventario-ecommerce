@@ -125,7 +125,7 @@ export async function getPosCatalogAction(): Promise<{
       categorySet.add(categoryName);
 
       const stock = p.stock || 0;
-      const minStock = p.minStock || 5;
+      const minStock = p.minStock;
 
       const status: "in_stock" | "low_stock" | "out_of_stock" =
         stock <= 0 ? "out_of_stock" : stock <= minStock ? "low_stock" : "in_stock";
@@ -329,11 +329,11 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
         return await rejectSale(`El producto ID #${item.productId} no fue encontrado en la base de datos.`);
       }
       if (Math.round(item.unitPrice * 100) !== Math.round(Number(prod.price) * 100)) {
-        return await rejectSale(`El precio de "${prod.name}" cambió. Actualiza el catálogo.`);
+        return await rejectSale(`El precio de "${productName(prod)}" cambió. Actualiza el catálogo.`);
       }
       item.unitPrice = Number(prod.price);
       if (prod.stock < item.quantity) {
-        return await rejectSale(`Stock insuficiente para "${prod.name}". Solicitado: ${item.quantity}, Disponible: ${prod.stock}`);
+        return await rejectSale(`Stock insuficiente para "${productName(prod)}". Solicitado: ${item.quantity}, Disponible: ${prod.stock}`);
       }
     }
 
@@ -729,7 +729,7 @@ export async function refundSaleItemsAction(
       const alreadyReturned = originalItem.returnedQuantity;
       const newReturned = alreadyReturned + refundItem.quantityToRefund;
       if (newReturned > originalItem.quantity) {
-        return { success: false, error: `Cantidad disponible para devolver insuficiente: ${originalItem.product.name}.` };
+        return { success: false, error: `Cantidad disponible para devolver insuficiente: ${productName(originalItem.product)}.` };
       }
 
       const unitPrice = Number(originalItem.unitPrice);

@@ -1,6 +1,7 @@
 "use server";
 
 import { adminActionError } from "@/lib/admin-action-error";
+import { productName } from "@/lib/product-name";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { and, gte, lt, desc, eq } from "drizzle-orm";
@@ -198,7 +199,7 @@ export async function getPeriodAnalyticsAction(
         if (s.status !== "cancelled") {
           const prevP = productMap.get(item.productId) || {
             productId: item.productId,
-            productName: item.product?.name || "Producto",
+            productName: item.product ? productName(item.product) : "Producto",
             sku: item.product?.sku || null,
             categoryName: item.product?.category?.name || "General",
             unitsSold: 0,

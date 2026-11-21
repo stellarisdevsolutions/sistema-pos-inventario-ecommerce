@@ -1,6 +1,7 @@
 "use server";
 
 import { adminActionError } from "@/lib/admin-action-error";
+import { productName } from "@/lib/product-name";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { and, gte, lt, eq, desc, sql } from "drizzle-orm";
@@ -197,7 +198,7 @@ export async function getReporteZAction(
         if (sale.status !== "cancelled") {
           const prev = productMap.get(item.productId) || {
             productId: item.productId,
-            productName: item.product?.name || "Producto",
+            productName: item.product ? productName(item.product) : "Producto",
             sku: item.product?.sku || null,
             unitsSold: 0,
             unitsReturned: 0,

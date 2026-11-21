@@ -344,7 +344,7 @@ export default function AdminDashboardPage() {
                   <h3 className="font-semibold text-sm text-admin-text">
                     Stock Crítico
                   </h3>
-                  <p className="text-[11px] text-admin-muted">Por debajo del stock mínimo</p>
+                  <p className="text-[11px] text-admin-muted">En el stock mínimo o por debajo</p>
                 </div>
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">

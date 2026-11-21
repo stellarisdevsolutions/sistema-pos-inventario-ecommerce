@@ -192,7 +192,7 @@ export function ProductForm({
         brandId: initialData?.brandId ?? null,
         supplierId: selectedSupplierId,
         initialStock: parseInt(stock, 10) || 0,
-        minStock: parseInt(minStockAlert, 10) || 5,
+        minStock: minStockAlert.trim() ? Number(minStockAlert) : 5,
         isActive,
         isVisibleWeb,
         isFeatured,
@@ -817,13 +817,14 @@ export function ProductForm({
               )}
 
               <div className="space-y-1.5">
-                <label className="font-bold text-admin-secondary">
+                <label htmlFor="product-min-stock" className="font-bold text-admin-secondary">
                   Alerta Stock Bajo
                 </label>
                 <div className="flex items-center gap-2">
                   <Input
+                    id="product-min-stock"
                     type="number"
-                    min="1"
+                    min="0"
                     value={minStockAlert}
                     onChange={(e) => setMinStockAlert(e.target.value)}
                     className="h-11 rounded-xl font-bold font-mono text-amber-600 dark:text-amber-400 bg-admin-card-bg border border-admin-card-border"

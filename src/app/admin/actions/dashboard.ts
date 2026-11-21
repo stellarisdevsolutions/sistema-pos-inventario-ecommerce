@@ -256,13 +256,13 @@ export async function getDashboardSummaryAction(): Promise<{
       const cost = parseFloat(p.costPrice) || 0;
       totalInventoryValue += stock * cost;
 
-      if (stock <= (p.minStock || 5)) {
+      if (stock <= p.minStock) {
         criticalStockProducts.push({
           id: p.id,
           name: productName(p),
           sku: p.sku || `PROD-${p.id}`,
           stock,
-          minStock: p.minStock || 5,
+          minStock: p.minStock,
           supplier: p.supplier?.name || "Proveedor no asignado",
         });
       }

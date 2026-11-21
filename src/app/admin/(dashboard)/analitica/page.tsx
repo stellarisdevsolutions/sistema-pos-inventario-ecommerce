@@ -608,9 +608,10 @@ export default function AnaliticaPage() {
                             <span className="font-mono text-admin-muted font-bold w-4">
                               #{(productsPage - 1) * PAGE_SIZE + idx + 1}
                             </span>
-                            <span className="font-bold text-admin-text truncate max-w-xs">
-                              {p.productName}
-                            </span>
+                            <div className="min-w-0">
+                              <p className="font-bold text-admin-text">{p.productName}</p>
+                              {p.sku && <p className="text-[11px] text-admin-muted">{p.sku}</p>}
+                            </div>
                           </div>
                         </td>
                         <td className="py-3 px-4 text-admin-muted">

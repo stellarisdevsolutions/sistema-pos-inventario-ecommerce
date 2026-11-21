@@ -731,7 +731,7 @@ export default function ReportesPage() {
                             <span className="font-mono text-admin-muted font-bold w-4">
                               #{(productsPage - 1) * PAGE_SIZE + idx + 1}
                             </span>
-                            <span className="font-bold text-admin-text truncate max-w-xs">
+                            <span className="font-bold text-admin-text">
                               {p.productName}
                             </span>
                           </div>

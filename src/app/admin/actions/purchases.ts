@@ -223,6 +223,7 @@ export async function getProductsForPurchaseAction() {
       columns: {
         id: true,
         name: true,
+        variant: true,
         sku: true,
         barcode: true,
         stock: true,

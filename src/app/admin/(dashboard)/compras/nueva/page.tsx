@@ -59,6 +59,7 @@ interface FormItem {
   tempId: string;
   productId: number;
   productName: string;
+  productSku: string;
   productImage: string | null;
   currentStock: number;
   quantity: number;
@@ -69,7 +70,7 @@ export default function NuevaCompraPage() {
   const router = useRouter();
 
   // Estados de catálogo
-  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<Awaited<ReturnType<typeof getProductsForPurchaseAction>>["data"]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<any[]>([]);
   const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -137,6 +138,7 @@ export default function NuevaCompraPage() {
       tempId: `${Date.now()}-${Math.random()}`,
       productId: prod.id,
       productName: prod.name,
+      productSku: prod.sku,
       productImage: prod.imageUrl || null,
       currentStock: prod.stock,
       quantity: 1,
@@ -187,11 +189,12 @@ export default function NuevaCompraPage() {
     return availableSuppliers.find((s) => s.id === Number(supplierId));
   }, [availableSuppliers, supplierId]);
 
-  // Filtrado por nombre de producto únicamente (sin SKU ni código de barras)
   const filteredModalProducts = useMemo(() => {
     const term = modalSearchTerm.toLowerCase().trim();
     if (!term) return availableProducts;
-    return availableProducts.filter((p) => p.name.toLowerCase().includes(term));
+    return availableProducts.filter((product) =>
+      [product.name, product.sku, product.barcode].some((value) => value.toLowerCase().includes(term))
+    );
   }, [availableProducts, modalSearchTerm]);
 
   const modalTotalPages = Math.max(1, Math.ceil(filteredModalProducts.length / modalPageSize));
@@ -457,9 +460,10 @@ export default function NuevaCompraPage() {
                             )}
 
                             <div className="min-w-0 flex-1">
-                              <h4 className="font-bold text-admin-text truncate">
+                              <h4 className="font-bold text-admin-text break-words">
                                 {it.productName}
                               </h4>
+                              <p className="text-[11px] text-admin-muted">{it.productSku}</p>
                               <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
                                 <span>
                                   Stock actual: <strong className="text-admin-secondary font-mono">{it.currentStock}</strong> u.
@@ -666,7 +670,8 @@ export default function NuevaCompraPage() {
                   setModalSearchTerm(e.target.value);
                   setModalCurrentPage(1);
                 }}
-                placeholder="Buscar por nombre de producto..."
+                aria-label="Buscar por producto, variante, SKU o código de barras"
+                placeholder="Buscar producto, variante, SKU o código de barras"
                 className="pl-9 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:bg-admin-card-bg"
               />
               {modalSearchTerm && (
@@ -731,9 +736,8 @@ export default function NuevaCompraPage() {
                               </div>
                             )}
                             <div className="min-w-0">
-                              <div className="font-bold text-admin-text truncate max-w-[200px] sm:max-w-[260px]">
-                                {p.name}
-                              </div>
+                              <div className="font-bold text-admin-text break-words">{p.name}</div>
+                              <p className="text-[11px] text-admin-muted">{p.sku}</p>
                             </div>
                           </div>
                         </td>

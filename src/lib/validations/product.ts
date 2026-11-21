@@ -66,7 +66,7 @@ const productFieldsSchema = z.object({
   minStock: z.coerce
     .number()
     .int("El umbral de alerta debe ser un número entero.")
-    .min(1, "El umbral mínimo de stock debe ser al menos 1 unidad.")
+    .min(0, "El umbral mínimo de stock no puede ser negativo.")
     .default(5),
 
   // Estados y Visibilidad Multicanal
