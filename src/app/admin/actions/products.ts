@@ -4,12 +4,14 @@ import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { automaticModelCode, automaticSku, createCatalogProductsQuery, type CatalogEntry } from "@/db/operations/catalog";
+import { extendModelOptions } from "@/lib/model-variants";
+import { deleteUnusedProductQuery, hasNoProductHistory } from "@/db/operations/catalog";
 import { productName } from "@/lib/product-name";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
 import { businessDate, formatBusinessDateTime } from "@/lib/business-date";
 import { z } from "zod";
 import * as schema from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   productFormSchema,
   productOptionsSchema,
@@ -37,6 +39,28 @@ export type ActionResult<T = unknown> = {
   error?: string;
 };
 
+function refreshCatalog() {
+  for (const path of ["/admin/inventario", "/admin/ventas", "/catalogo", "/"]) safeRevalidatePath(path);
+}
+
+const eligibility = hasNoProductHistory(sql`"products"."id"`).as("can_hard_delete");
+
+export async function deleteProductAction(id: number): Promise<ActionResult> {
+  try {
+    await requireRole(["admin", "manager", "warehouse"]);
+    const [, , result] = await db.batch([
+      db.execute(sql`SELECT code FROM product_models WHERE code = (SELECT model_code FROM products WHERE id = ${id}) FOR UPDATE`),
+      db.execute(sql`SELECT id FROM products WHERE id = ${id} FOR UPDATE`),
+      db.execute(deleteUnusedProductQuery(id)),
+    ]);
+    if (!result.rows.length) return { success: false, error: "El producto ya no existe o tiene historial comercial. Puedes archivarlo para conservar sus movimientos." };
+    refreshCatalog();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "No se pudo eliminar el producto. Actualiza su ficha.") };
+  }
+}
+
 /**
  * Obtiene todos los productos de la base de datos para la tabla de inventario
  */
@@ -45,6 +69,7 @@ export async function getInventoryProducts() {
     await requireRole(["admin", "manager", "warehouse"]);
 
     const prods = await db.query.products.findMany({
+      extras: { canHardDelete: eligibility },
       with: {
         category: true,
         brand: true,
@@ -65,6 +90,7 @@ export async function getInventoryProducts() {
 
       return {
         id: p.id,
+        canHardDelete: p.canHardDelete,
         name: productName(p),
         slug: p.slug,
         sku: p.sku || `PROD-${p.id.toString().padStart(4, "0")}`,
@@ -152,7 +178,15 @@ export async function getProductById(id: number) {
       },
     });
 
-    return product ? { ...product, variantSelector: product.model?.variantSelector ?? null } : null;
+    if (!product) return null;
+    const siblings = await db.select({
+      id: schema.products.id, variant: schema.products.variant, variantColor: schema.products.variantColor,
+      attributes: schema.products.attributes, sku: schema.products.sku, barcode: schema.products.barcode,
+      price: schema.products.price, costPrice: schema.products.costPrice, stock: schema.products.stock,
+      isActive: schema.products.isActive, imageUrl: schema.products.imageUrl, canHardDelete: eligibility,
+    }).from(schema.products).where(product.modelCode ? eq(schema.products.modelCode, product.modelCode) : eq(schema.products.id, id))
+      .orderBy(schema.products.variant);
+    return { ...product, siblings, variantSelector: product.model?.variantSelector ?? null };
   } catch (error) {
     console.error(`Error al obtener producto #${id}:`, error);
     return null;
@@ -170,6 +204,7 @@ export async function createProductAction(
   try {
     const currentUser = await requireRole(["admin", "manager", "warehouse"]);
     let entries: CatalogEntry[];
+    let existingModel: typeof schema.productModels.$inferSelect | undefined;
 
     let parsedConfigs: ProductOptionConfig[] | null = null;
     if (optionConfigs && optionConfigs.length > 0) {
@@ -200,7 +235,12 @@ export async function createProductAction(
       const model = existingCode ? await db.query.productModels.findFirst({ where: eq(schema.productModels.code, existingCode) }) : undefined;
       if (existingCode && !model) return { success: false, error: "El modelo seleccionado ya no está disponible." };
       const modelCode = model?.code ?? automaticModelCode();
-      const modelOptionsToSave = parsedConfigs ?? model?.options ?? null;
+      existingModel = model;
+      let modelOptionsToSave = parsedConfigs;
+      if (model) {
+        try { modelOptionsToSave = extendModelOptions(model, validated.data); }
+        catch (error) { return { success: false, error: (error as Error).message }; }
+      }
       entries = validated.data.map(option => {
         const mergedAttributes = option.attributes ?? input.attributes ?? null;
         const product = productFormSchema.parse({
@@ -225,15 +265,14 @@ export async function createProductAction(
     const [first] = entries;
     if (first.modelCode && options === undefined) {
       const model = await db.query.productModels.findFirst({ where: eq(schema.productModels.code, first.modelCode) });
-      if (model && (model.name !== first.name || (first.variantSelector && model.variantSelector !== first.variantSelector))) {
-        return { success: false, error: "Usa el nombre y selector del modelo existente o escribe otro código de grupo." };
-      }
+      if (model) return { success: false, error: "Añade las variantes desde el modelo existente." };
     }
-    const { rows } = await db.execute(createCatalogProductsQuery(entries, currentUser.id));
-
-    safeRevalidatePath("/admin/inventario");
-    safeRevalidatePath("/catalogo");
-    safeRevalidatePath("/");
+    const query = createCatalogProductsQuery(entries, currentUser.id, existingModel);
+    const { rows } = existingModel ? (await db.batch([
+      db.execute(sql`SELECT code FROM product_models WHERE code = ${existingModel.code} FOR UPDATE`), db.execute(query),
+    ]))[1] : await db.execute(query);
+    if (!rows.length) return { success: false, error: "La variante, SKU o código ya existe, o cambió el modelo. Actualiza la ficha." };
+    refreshCatalog();
     return { success: true, data: rows[0] };
   } catch (error) {
     const cause = error instanceof Error && error.cause ? error.cause : error;
@@ -245,6 +284,16 @@ export async function createProductAction(
       error: adminActionError(error, "Error al guardar el producto."),
     };
   }
+}
+
+export async function addModelVariantsAction(modelCode: string, newOptions: ProductOptionInput[]): Promise<ActionResult> {
+  await requireRole(["admin", "manager", "warehouse"]);
+  const base = await db.query.products.findFirst({ where: eq(schema.products.modelCode, modelCode), orderBy: schema.products.id });
+  if (!base) return { success: false, error: "El modelo ya no está disponible." };
+  return createProductAction({
+    ...base, modelCode, description: base.description ?? "", mainImage: base.imageUrl, additionalImages: base.images ?? [],
+    initialStock: 0, price: Number(base.price), costPrice: Number(base.costPrice), isActive: true, isFeatured: false,
+  }, newOptions);
 }
 
 /**
@@ -278,6 +327,15 @@ export async function updateProductAction(
 
     const payload = productDbInsertSchema.parse(validated.data);
 
+    if (existing.modelCode) {
+      const model = await db.query.productModels.findFirst({ where: eq(schema.productModels.code, existing.modelCode) });
+      if (payload.modelCode !== existing.modelCode || (model?.variantSelector ?? "Variante") !== (validated.data.variantSelector || "Variante") ||
+          Object.keys(existing.attributes ?? {}).sort().join("|") !== Object.keys(payload.attributes ?? {}).sort().join("|") ||
+          (!existing.variantColor && payload.variantColor && !model?.options?.some(d => d.type === "color") && !/color/i.test(model?.variantSelector ?? ""))) {
+        return { success: false, error: "Conserva los atributos del modelo. Para otra estructura crea un modelo nuevo." };
+      }
+    }
+
     const setData: Partial<typeof schema.products.$inferInsert> = {
       name: payload.name,
       description: payload.description,
@@ -308,10 +366,9 @@ export async function updateProductAction(
     if (payload.modelCode) {
       const model = { code: payload.modelCode, name: payload.name, variantSelector: validated.data.variantSelector || null };
       const [, , [updated]] = await db.batch([
-        db.insert(schema.productModels).values(model).onConflictDoUpdate({
-          target: schema.productModels.code,
-          set: { name: model.name, variantSelector: model.variantSelector },
-        }),
+        existing.modelCode
+          ? db.update(schema.productModels).set({ name: model.name }).where(eq(schema.productModels.code, existing.modelCode))
+          : db.insert(schema.productModels).values(model),
         db.update(schema.products).set({ name: model.name, updatedAt: new Date() }).where(eq(schema.products.modelCode, payload.modelCode)),
         update,
       ]);
@@ -321,11 +378,10 @@ export async function updateProductAction(
     }
 
     // 5. Revalidar rutas
-    safeRevalidatePath("/admin/inventario");
     safeRevalidatePath(`/admin/inventario/${id}/editar`);
-    safeRevalidatePath("/catalogo");
     safeRevalidatePath(`/producto/${existing.slug}`);
-
+    refreshCatalog();
+    if (!updatedProduct) return { success: false, error: "El producto ya no existe." };
     return { success: true, data: updatedProduct };
   } catch (error) {
     console.error(`Error al actualizar producto #${id}:`, error);
@@ -456,19 +512,19 @@ export async function toggleProductActiveAction(
   try {
     await requireRole(["admin", "manager", "warehouse"]);
 
+    if (typeof isActive !== "boolean") return { success: false, error: "Estado de producto inválido." };
     const [updated] = await db
       .update(schema.products)
       .set({
         isActive,
+        ...(!isActive && { isVisibleWeb: false, isFeatured: false }),
         updatedAt: new Date(),
       })
       .where(eq(schema.products.id, id))
       .returning();
 
-    safeRevalidatePath("/admin/inventario");
-    safeRevalidatePath("/catalogo");
-    safeRevalidatePath("/");
-
+    if (!updated) return { success: false, error: "El producto ya no existe." };
+    refreshCatalog();
     return { success: true, data: updated };
   } catch (error) {
     return {

@@ -44,6 +44,12 @@ function revalidateSalesPaths() {
 }
 
 export type PosProductItem = {
+  baseName: string;
+  modelCode: string | null;
+  variant: string | null;
+  variantColor: string | null;
+  attributes: Record<string, string> | null;
+  modelOptions: import("@/lib/validations/product").ProductOptionConfig[] | null;
   id: number;
   name: string;
   sku: string;
@@ -130,6 +136,7 @@ export async function getPosCatalogAction(): Promise<{
       where: eq(schema.products.isActive, true),
       with: {
         category: true,
+        model: true,
       },
       orderBy: (p, { asc }) => [asc(p.name)],
     });
@@ -149,6 +156,8 @@ export async function getPosCatalogAction(): Promise<{
       return {
         id: p.id,
         name: productName(p),
+        baseName: p.model?.name ?? p.name, modelCode: p.modelCode, variant: p.variant,
+        variantColor: p.variantColor, attributes: p.attributes, modelOptions: p.model?.options ?? null,
         sku: p.sku || `SKU-${p.id}`,
         barcode: p.barcode || "",
         category: categoryName,

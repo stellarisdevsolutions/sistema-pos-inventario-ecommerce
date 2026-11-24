@@ -17,7 +17,7 @@ export function automaticModelCode() {
   return "MOD-" + randomUUID().toUpperCase();
 }
 
-export function createCatalogProductsQuery(entries: CatalogEntry[], userId: number) {
+export function createCatalogProductsQuery(entries: CatalogEntry[], userId: number, existingModel?: { code: string; options: ProductOptionConfig[] | null }) {
   const rows = entries.map(entry => ({
     ...entry,
     slug: entry.slug + "-" + randomUUID().slice(0, 8),
@@ -34,7 +34,16 @@ export function createCatalogProductsQuery(entries: CatalogEntry[], userId: numb
         "brandId" integer, "supplierId" integer, "isActive" boolean, "isVisibleWeb" boolean, "isFeatured" boolean,
         "modelCode" text, variant text, "variantColor" text, "variantSelector" text, "importKey" text,
         attributes jsonb, options jsonb)
-    ), models AS (
+    ), models AS (${existingModel ? sql`
+      UPDATE product_models SET options = (SELECT options FROM input LIMIT 1)
+      WHERE code = ${existingModel.code} AND options IS NOT DISTINCT FROM ${existingModel.options ? JSON.stringify(existingModel.options) : null}::jsonb
+      AND NOT EXISTS (
+        SELECT FROM input i JOIN products p ON lower(p.sku) = lower(i.sku)
+          OR lower(p.barcode) = lower(i.barcode)
+          OR (p.model_code = i."modelCode" AND (
+            lower(p.variant) = lower(i.variant) OR lower(p.attributes::text) = lower(i.attributes::text)
+          ))
+      ) RETURNING code` : sql`
       INSERT INTO product_models (code, name, variant_selector, options)
       SELECT DISTINCT ON ("modelCode") "modelCode", name, "variantSelector", options
       FROM input WHERE "modelCode" IS NOT NULL
@@ -42,7 +51,7 @@ export function createCatalogProductsQuery(entries: CatalogEntry[], userId: numb
       ON CONFLICT (code) DO UPDATE SET
         options = COALESCE(EXCLUDED.options, product_models.options),
         variant_selector = COALESCE(EXCLUDED.variant_selector, product_models.variant_selector)
-      RETURNING code
+      RETURNING code`}
     ), created AS (
       INSERT INTO products (name, slug, sku, barcode, description, price, cost_price, stock, min_stock, image_url,
         images, category_id, brand_id, supplier_id, is_active, is_visible_web, is_featured, model_code, variant,
@@ -51,6 +60,7 @@ export function createCatalogProductsQuery(entries: CatalogEntry[], userId: numb
         images, "categoryId", "brandId", "supplierId", "isActive", "isVisibleWeb", "isFeatured", "modelCode", variant,
         "variantColor", "importKey", attributes
       FROM input
+      WHERE "modelCode" IS NULL OR "modelCode" IN (SELECT code FROM models)
       RETURNING id, stock, cost_price
     ), opening AS (
       INSERT INTO inventory_movements (product_id, movement_type, quantity, previous_stock, new_stock,
@@ -61,4 +71,28 @@ export function createCatalogProductsQuery(entries: CatalogEntry[], userId: numb
     )
     SELECT id FROM created
   `;
+}
+
+export function hasNoProductHistory(productId: ReturnType<typeof sql> | number) {
+  return sql<boolean>`NOT EXISTS (SELECT FROM sale_items WHERE product_id = ${productId})
+    AND NOT EXISTS (SELECT FROM purchase_items WHERE product_id = ${productId})
+    AND NOT EXISTS (SELECT FROM inventory_adjustment_items WHERE product_id = ${productId})
+    AND NOT EXISTS (SELECT FROM inventory_movements WHERE product_id = ${productId}
+      AND reference_type IS DISTINCT FROM 'product_creation')`;
+}
+
+// The caller locks the model and product in a batch before this statement so
+// references committed while waiting for the locks are visible to this check.
+export function deleteUnusedProductQuery(id: number) {
+  return sql`WITH eligible AS MATERIALIZED (
+      SELECT id, model_code FROM products WHERE id = ${id} AND ${hasNoProductHistory(id)}
+    ), opening AS (
+      DELETE FROM inventory_movements USING eligible WHERE product_id = eligible.id
+        AND reference_type = 'product_creation'
+    ), removed AS (
+      DELETE FROM products USING eligible WHERE products.id = eligible.id RETURNING products.id, products.model_code
+    ), orphan AS (
+      DELETE FROM product_models m USING removed r WHERE m.code = r.model_code
+        AND NOT EXISTS (SELECT FROM products p WHERE p.model_code = m.code AND p.id <> r.id)
+    ) SELECT id FROM removed`;
 }

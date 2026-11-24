@@ -202,7 +202,13 @@ export async function getStoreVariants(modelCode: string): Promise<StoreProduct[
       orderBy: (p, { asc }) => [asc(p.variant), asc(p.id)],
     });
     const firstImage = rows.find(row => row.imageUrl || row.images[0]);
-    return rows.map(row => toStoreProduct(row, firstImage?.imageUrl || firstImage?.images[0]));
+    // Un modelo importado puede tener etiquetas anteriores a los atributos estructurados.
+    // En ese caso el selector por etiqueta permite elegir también las variantes antiguas.
+    const completeAttributes = rows.every(row => row.attributes && Object.keys(row.attributes).length > 0);
+    return rows.map(row => {
+      const variant = toStoreProduct(row, firstImage?.imageUrl || firstImage?.images[0]);
+      return completeAttributes ? variant : { ...variant, attributes: null };
+    });
   } catch (error) {
     console.error("Error al obtener variantes del producto:", error);
     return [];

@@ -8,7 +8,6 @@ import { refundUnitAmounts } from "@/lib/refund-amount";
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,7 +44,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
+import { CURRENCY_SYMBOL, formatCurrency } from "@/lib/currency";
 import { STORE_NAME } from "@/lib/store-config";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 import {
@@ -108,6 +107,7 @@ export default function VentasPage() {
   const [categories, setCategories] = useState<string[]>(["Todas"]);
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [catalogRevision, setCatalogRevision] = useState(0);
 
   // Estado del Carrito y Venta actual
@@ -406,9 +406,8 @@ export default function VentasPage() {
       const match = catalog.find(
         (p) =>
           p.barcode.toLowerCase() === query ||
-          p.sku.toLowerCase() === query ||
-          p.name.toLowerCase() === query
-      );
+          p.sku.toLowerCase() === query
+      ) ?? catalog.find(p => p.name.toLowerCase() === query);
 
       if (match) {
         addToCart(match);
@@ -437,6 +436,19 @@ export default function VentasPage() {
       return matchesSearch && matchesCategory;
     });
   }, [catalog, searchTerm, selectedCategory]);
+
+  const catalogGroups = useMemo(() => {
+    const matches = new Set(filteredCatalog.map(p => p.id));
+    const groups = new Map<string, PosProductItem[]>();
+    for (const item of catalog) {
+      const key = item.modelCode ? `model:${item.modelCode}` : `product:${item.id}`;
+      const group = groups.get(key);
+      if (group) group.push(item);
+      else groups.set(key, [item]);
+    }
+    return [...groups.values()].filter(group => group.some(item => matches.has(item.id)));
+  }, [catalog, filteredCatalog]);
+  const selectedVariants = selectedModel ? catalog.filter(p => p.modelCode === selectedModel) : [];
 
   // Procesar Cobro de Venta (Server Action con Reglas de Negocio Estrictas)
   const handleProcessCheckout = async () => {
@@ -869,82 +881,26 @@ export default function VentasPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {filteredCatalog.map((product) => {
-                  const cartItem = cart.find((i) => i.id === product.id);
-                  const isOutOfStock = product.stock <= 0;
-
+                {catalogGroups.map(group => {
+                  const first = group[0];
+                  const grouped = group.length > 1;
+                  const stock = group.reduce((sum, p) => sum + p.stock, 0);
+                  const prices = group.map(p => p.price);
+                  const min = Math.min(...prices);
+                  const max = Math.max(...prices);
+                  const name = grouped ? first.baseName : first.name;
+                  const ids = new Set(group.map(p => p.id));
+                  const inCart = cart.reduce((sum, line) => sum + (ids.has(line.id) ? line.quantity : 0), 0);
                   return (
-                    <div
-                      key={product.id}
-                      onClick={() => !isOutOfStock && addToCart(product)}
-                      className={cn(
-                        "group rounded-xl bg-admin-card-bg border p-3 transition-all flex flex-col justify-between select-none",
-                        isOutOfStock
-                          ? "opacity-55 border-admin-card-border cursor-not-allowed bg-admin-raised"
-                          : "border-admin-card-border hover:border-admin-brand hover:shadow-md cursor-pointer"
-                      )}
-                    >
-                      <div className="relative aspect-square rounded-xl overflow-hidden bg-admin-raised border border-slate-100 dark:border-slate-850 mb-2">
-                        <ProductThumbnail
-                          src={product.image}
-                          alt={product.name}
-                          className={cn(
-                            "w-full h-full object-cover transition-transform",
-                            !isOutOfStock && "group-hover:scale-105"
-                          )}
-                        />
-
-                        {/* Badge de Stock en la imagen */}
-                        <div className="absolute top-2 right-2">
-                          {isOutOfStock ? (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-rose-600 text-white">
-                              Agotado
-                            </span>
-                          ) : product.status === "low_stock" ? (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500 text-white">
-                              {product.stock} disp.
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-xs">
-                              {product.stock} disp.
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Indicador si ya está en el carrito */}
-                        {cartItem && (
-                          <div className="absolute bottom-2 left-2 bg-admin-brand text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-                            <ShoppingCart className="h-2.5 w-2.5" />
-                            <span>{cartItem.quantity} en ticket</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">
-                          {product.category}
-                        </span>
-                        <h3 className="text-xs font-bold text-admin-text line-clamp-1 group-hover:text-admin-brand-text transition-colors">
-                          {product.name}
-                        </h3>
-                        <p className="text-[10px] font-mono text-slate-400 mt-0.5">
-                          {product.sku}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2 mt-2 border-t border-admin-card-border">
-                        <span className="text-sm font-semibold text-admin-text">
-                          {formatCurrency(product.price)}
-                        </span>
-                        <Button
-                          disabled={isOutOfStock}
-                          size="sm"
-                          className="h-7 w-7 p-0 rounded-lg bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid disabled:bg-slate-300 dark:disabled:bg-slate-700"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
+                    <button key={first.id} type="button" disabled={stock <= 0 || pendingCheckout !== null}
+                      onClick={() => grouped ? setSelectedModel(first.modelCode) : addToCart(first)}
+                      className="text-left rounded-xl border border-admin-card-border bg-admin-card-bg p-3 hover:border-admin-brand disabled:opacity-55">
+                      <ProductThumbnail src={first.image} alt={name} className="aspect-square w-full rounded-lg object-cover mb-2" />
+                      <strong className="block text-sm text-admin-text">{name}</strong>
+                      <span className="block text-xs text-admin-muted">{grouped ? `${group.length} variantes` : first.sku} · {stock ? `${stock} disp.` : "Agotado"}</span>
+                      <span className="block text-sm text-admin-text">{formatCurrency(min)}{min !== max && ` – ${formatCurrency(max)}`}</span>
+                      {inCart > 0 && <span className="text-xs text-admin-brand-text">{inCart} en ticket</span>}
+                    </button>
                   );
                 })}
               </div>
@@ -1511,6 +1467,23 @@ export default function VentasPage() {
       {/* =========================================================================
           4. MODAL DE COMPROBANTE TÉRMICO / TICKET DE VENTA (80MM READY)
           ========================================================================= */}
+      <Dialog open={selectedVariants.length > 0} onOpenChange={open => { if (!open) setSelectedModel(null); }}>
+        <DialogContent className="admin-panel max-h-[85dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedVariants[0]?.baseName}</DialogTitle>
+            <DialogDescription>Elige la variante para añadirla al ticket.</DialogDescription>
+          </DialogHeader>
+          {selectedVariants.map(p => (
+            <button key={p.id} type="button" disabled={p.stock <= 0 || pendingCheckout !== null}
+              onClick={() => { addToCart(p); setSelectedModel(null); }}
+              className="flex items-center gap-3 rounded-xl border border-admin-card-border bg-admin-card-bg p-3 text-left disabled:opacity-50">
+              {p.variantColor && <span className="size-5 rounded-[5px] border border-admin-card-border" style={{ backgroundColor: p.variantColor }} />}
+              <span className="flex-1">{p.variant}<small className="block text-admin-muted">{p.sku}</small></span>
+              <span>{formatCurrency(p.price)}<small className="block text-admin-muted">{p.stock > 0 ? `${p.stock} disp.` : "Agotado"}</small></span>
+            </button>
+          ))}
+        </DialogContent>
+      </Dialog>
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
         <DialogContent className="sm:max-w-xs p-6 rounded-xl bg-white text-slate-900 border border-slate-200 print:p-0 print:border-none print:shadow-none">
           <div id={receiptOpen ? "thermal-receipt" : undefined} className="space-y-3 font-mono text-xs">

@@ -1,5 +1,6 @@
 "use client";
 
+import { ProductLifecycle } from "./product-lifecycle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -40,6 +41,7 @@ export interface InventoryProductDetail {
   status: "in_stock" | "low_stock" | "out_of_stock";
   image: string;
   images?: string[];
+  canHardDelete?: boolean;
   isActive?: boolean;
   isVisibleWeb?: boolean;
   isFeatured?: boolean;
@@ -53,6 +55,7 @@ export interface InventoryProductDetail {
 }
 
 interface ProductDetailSheetProps {
+  onChanged: () => void;
   product: InventoryProductDetail | null;
   onClose: () => void;
   onOpenKardex: (product: InventoryProductDetail) => void;
@@ -65,10 +68,12 @@ function isValidHex(color?: string | null): color is string {
 
 function ProductDetailSheetBody({
   product,
+  onChanged,
   onOpenKardex,
   onOpenAdjustment,
 }: {
   product: InventoryProductDetail;
+  onChanged: () => void;
   onOpenKardex: (product: InventoryProductDetail) => void;
   onOpenAdjustment: (product: InventoryProductDetail) => void;
 }) {
@@ -545,6 +550,7 @@ function ProductDetailSheetBody({
           </Button>
         </div>
 
+        <ProductLifecycle product={product} name={product.name} onChange={onChanged} />
         <Link
           href={`/admin/inventario/${product.id}/editar`}
           className={cn(
@@ -563,6 +569,7 @@ function ProductDetailSheetBody({
 export function ProductDetailSheet({
   product,
   onClose,
+  onChanged,
   onOpenKardex,
   onOpenAdjustment,
 }: ProductDetailSheetProps) {
@@ -587,6 +594,7 @@ export function ProductDetailSheet({
       >
         {product && (
           <ProductDetailSheetBody
+            onChanged={onChanged}
             key={product.id}
             product={product}
             onOpenKardex={onOpenKardex}

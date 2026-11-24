@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { ProductForm } from "@/components/admin/product-form";
 import { ProductFormSkeleton } from "@/components/admin/product-form-skeleton";
 import { getProductById, getInventoryFormData } from "@/app/admin/actions/products";
-import { Button } from "@/components/ui/button";
+import { ModelSiblings } from "@/components/admin/model-siblings";
+import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 
 type LoadedProduct = NonNullable<Awaited<ReturnType<typeof getProductById>>>;
@@ -63,8 +64,7 @@ function EditarProductoContent() {
       <div className="max-w-xl mx-auto mt-12 admin-panel p-6 text-center space-y-4">
         <p className="text-sm font-semibold text-admin-text">{loadError || "Producto no disponible."}</p>
         <div className="flex items-center justify-center gap-3">
-          <Link href="/admin/inventario">
-            <Button variant="outline" size="sm">Volver a Inventario</Button>
+          <Link href="/admin/inventario" className={buttonVariants({ variant: "outline", size: "sm" })}>Volver a Inventario
           </Link>
           <Button size="sm" onClick={loadProduct}>Reintentar</Button>
         </div>
@@ -73,7 +73,8 @@ function EditarProductoContent() {
   }
 
   return (
-    <ProductForm
+    <div className="space-y-5">
+    <ProductForm key={`${product.id}-${product.isActive}`}
       isEdit={true}
       initialData={{
         id: product.id,
@@ -103,6 +104,12 @@ function EditarProductoContent() {
       brands={formData.brands}
       suppliers={formData.suppliers}
     />
+    <ModelSiblings product={product} onChanged={async () => {
+      const updated = await getProductById(product.id);
+      if (updated) setProduct(updated);
+      else router.replace("/admin/inventario");
+    }} />
+    </div>
   );
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { modelDimensions } from "@/lib/model-variants";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -940,6 +941,7 @@ export function ProductForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               type="button"
+              disabled={isEdit && Boolean(initialData?.modelCode)}
               aria-pressed={!usesVariants}
               onClick={() => setUsesVariants(false)}
               className={cn(
@@ -1023,6 +1025,7 @@ export function ProductForm({
                           (model) => model.code === event.target.value
                         );
                         setModelCode(selected?.code ?? "");
+                        setOptions([]);
                         if (selected) {
                           setName(selected.name);
                           setVariantSelector(selected.variantSelector ?? "");
@@ -1051,7 +1054,8 @@ export function ProductForm({
                   }
                   basePrice={price}
                   baseCostPrice={cost}
-                  modelOptionsHint={existingModel?.options ?? null}
+                  locked={Boolean(existingModel)}
+                  modelOptionsHint={existingModel ? modelDimensions({ options: existingModel.options ?? null, variantSelector: existingModel.variantSelector }) : null}
                 />
               </>
             )}
@@ -1389,7 +1393,11 @@ export function ProductForm({
               type="button"
               role="switch"
               aria-checked={isActive}
-              onClick={() => setIsActive(!isActive)}
+              onClick={() => {
+                if (isEdit && isActive && !window.confirm(`Al guardar se archivará el producto. Quedan ${initialData?.stock ?? 0} unidades. Se conserva el historial de caja, reportes y Kárdex.`)) return;
+                setIsActive(!isActive);
+                if (isActive) { setIsVisibleWeb(false); setIsFeatured(false); }
+              }}
               className={cn(
                 "w-full flex items-center justify-between gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer",
                 isActive

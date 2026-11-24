@@ -590,6 +590,8 @@ export function ProductVariantFields({
   onAddToGallery,
   basePrice = "",
   baseCostPrice = "",
+  locked = false,
+  existingVariants = [],
   modelOptionsHint,
 }: {
   options: ProductOptionDraft[];
@@ -597,6 +599,8 @@ export function ProductVariantFields({
   onAddToGallery?: (url: string) => void;
   basePrice?: string;
   baseCostPrice?: string;
+  locked?: boolean;
+  existingVariants?: string[];
   modelOptionsHint?: OptionConfig[] | null;
 }) {
   const initialHint = initialBuilderFromHint(modelOptionsHint);
@@ -754,6 +758,14 @@ export function ProductVariantFields({
     }
 
     if (!currentCandidate) return;
+    const attrs = locked && modelOptionsHint?.length
+      ? Object.fromEntries(modelOptionsHint.map(d => [d.name, currentCandidate.attributes[d.type === "color" ? "Color" : d.name]]))
+      : currentCandidate.attributes;
+    const variant = Object.values(attrs).join(" / ");
+    if (existingVariants.some(v => v.toLowerCase() === variant.toLowerCase())) {
+      toast.error("Esta variante ya existe en el modelo.");
+      return;
+    }
 
     if (isDuplicateDraft(options, currentCandidate.variantName, currentCandidate.attributes)) {
       toast.error(`La variante "${currentCandidate.variantName}" ya está en la lista.`);
@@ -767,7 +779,7 @@ export function ProductVariantFields({
 
     const created: ProductOptionDraft = {
       id: nextDraftBaseId(options),
-      variant: currentCandidate.variantName,
+      variant,
       price: bulkPrice || basePrice || "",
       costPrice: bulkCost || baseCostPrice || "",
       initialStock: bulkStock || "0",
@@ -775,7 +787,7 @@ export function ProductVariantFields({
       sku: "",
       barcode: "",
       mainImage: "",
-      attributes: currentCandidate.attributes,
+      attributes: attrs,
     };
 
     onChange([...options, created]);
@@ -912,7 +924,7 @@ export function ProductVariantFields({
           {MODE_OPTIONS.map((item) => {
             const Icon = item.icon;
             const active = mode === item.id;
-            const disabled = hasVariants && !active;
+            const disabled = (locked || hasVariants) && !active;
             return (
               <button
                 key={item.id}
@@ -968,6 +980,7 @@ export function ProductVariantFields({
             </label>
             <Input
               id="variant-attr-name"
+              disabled={locked}
               placeholder="Ej. Talla, Capacidad, Material"
               value={attrName}
               maxLength={60}

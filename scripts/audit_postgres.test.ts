@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { makeCatalogWorkbook, readCatalogWorkbook } from "@/lib/catalog-workbook";
-import { createCatalogProductsQuery } from "@/db/operations/catalog";
+import { extendModelOptions } from "@/lib/model-variants";
+import { deleteUnusedProductQuery, createCatalogProductsQuery } from "@/db/operations/catalog";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -415,4 +416,62 @@ test("product_models.options y products.attributes persisten en JSONB sin pérdi
     "SELECT attributes FROM products WHERE model_code = 'CHAQ-TECH'"
   );
   assert.deepEqual(prodRows.rows, [{ attributes }]);
+});
+
+test("las variantes conservan opciones y apertura y solo se eliminan sin historial", async t => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  async function run(statement: ReturnType<typeof createCatalogProductsQuery>) {
+    const query = dialect.sqlToQuery(statement);
+    return (await db.query(query.sql, query.params)).rows;
+  }
+  const base = productDbInsertSchema.parse({ name: "Polera", modelCode: "POL", variant: "S", price: 80, initialStock: 5 });
+  const model = { code: "POL", options: [productOptionConfigSchema.parse({ id: "talla", name: "Talla", type: "text", values: [{ name: "S" }] })], variantSelector: "Talla" };
+  await run(createCatalogProductsQuery([{ ...base, options: model.options, variantSelector: "Talla", attributes: { Talla: "S" } }], 1));
+  const option = { variant: "M", attributes: { Talla: "M" }, price: 80 };
+  assert.throws(() => extendModelOptions(model, [{ ...option, attributes: { Color: "Verde" } }]), /atributos/);
+  const options = extendModelOptions(model, [option]);
+  const entry = { ...base, variant: "M", attributes: option.attributes, options, sku: "CAM-M", barcode: "200" };
+  assert.equal((await run(createCatalogProductsQuery([entry], 1, model))).length, 1);
+  const updated = { ...model, options };
+  assert.deepEqual((await db.query("SELECT options FROM product_models")).rows, [{ options }]);
+  const nextSize = { ...entry, variant: "L", attributes: { Talla: "L" } };
+  for (const duplicate of [
+    { ...entry, sku: null, barcode: null },
+    { ...nextSize, barcode: null, sku: "cam-m" },
+    { ...nextSize, sku: null },
+  ]) {
+    assert.equal((await run(createCatalogProductsQuery([duplicate], 1, updated))).length, 0);
+  }
+  assert.equal((await db.query("SELECT id FROM inventory_movements")).rows.length, 2);
+  await run(deleteUnusedProductQuery(1));
+  assert.equal((await db.query("SELECT code FROM product_models")).rows.length, 1);
+  await run(deleteUnusedProductQuery(2));
+  for (const table of ["products", "inventory_movements", "product_models"]) {
+    assert.equal((await db.query(`SELECT * FROM ${table}`)).rows.length, 0);
+  }
+});
+
+test("una venta, compra, baja u otro movimiento impide borrar y conserva la apertura", async t => {
+  const db = await createDatabase(t);
+  await db.exec(`
+    INSERT INTO products (name, slug, price) SELECT 'Item', 'p' || i, 10 FROM generate_series(1,4) i;
+    INSERT INTO inventory_movements (product_id, movement_type, quantity, previous_stock, new_stock, unit_cost, reference_type, user_id)
+      SELECT id, 'adjustment_in', 1, 0, 1, 10, 'product_creation', 1 FROM products;
+    INSERT INTO sales (sale_number, user_id) VALUES ('V1', 1);
+    INSERT INTO sale_items (sale_id,product_id,quantity,unit_price,unit_cost,subtotal) VALUES (1,1,1,10,10,10);
+    INSERT INTO suppliers (name) VALUES ('Proveedor');
+    INSERT INTO purchases (purchase_number,supplier_id,user_id) VALUES ('C1',1,1);
+    INSERT INTO purchase_items (purchase_id,product_id,quantity,unit_cost,subtotal) VALUES (1,2,1,10,10);
+    INSERT INTO inventory_adjustments (adjustment_number,reason,user_id) VALUES ('B1','damaged',1);
+    INSERT INTO inventory_adjustment_items (adjustment_id,product_id,quantity,unit_cost,subtotal) VALUES (1,3,1,10,10);
+    INSERT INTO inventory_movements (product_id,movement_type,quantity,previous_stock,new_stock,unit_cost,reference_type,user_id)
+      VALUES (4,'adjustment_in',1,1,2,10,'return',1);
+  `);
+  for (const id of [1,2,3,4]) {
+    const query = new PgDialect().sqlToQuery(deleteUnusedProductQuery(id));
+    assert.deepEqual((await db.query(query.sql, query.params)).rows, []);
+  }
+  assert.equal((await db.query("SELECT id FROM products")).rows.length, 4);
+  assert.equal((await db.query("SELECT id FROM inventory_movements")).rows.length, 5);
 });

@@ -27,9 +27,9 @@ import {
 import { uploadCategoryPhotoAction } from "@/app/admin/actions/upload";
 import { optimizeImageToWebP } from "@/lib/image-optimizer";
 import { csvCell } from "@/lib/sanitize";
-import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
+import { CURRENCY_SYMBOL, formatCurrencyLocale } from "@/lib/currency";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -38,7 +38,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -52,30 +51,18 @@ import {
 import {
   Plus,
   Search,
-  Filter,
   MoreVertical,
   Edit,
   Trash2,
   AlertTriangle,
   Package,
-  Layers,
   DollarSign,
-  TrendingUp,
   Boxes,
   CheckCircle2,
-  ArrowUpRight,
   BookOpen,
   FileSpreadsheet,
   ShieldAlert,
-  ArrowDownRight,
-  User,
   X,
-  ExternalLink,
-  Barcode,
-  History,
-  ArrowRight,
-  Printer,
-  Sparkles,
   FolderTree,
   Pencil,
   Loader2,
@@ -250,11 +237,9 @@ export default function InventarioPage() {
   const [realKardexMovements, setRealKardexMovements] = useState<KardexMovement[]>([]);
   const [productDrawerMovements, setProductDrawerMovements] = useState<KardexMovement[]>([]);
   const [loadingDrawerKardex, setLoadingDrawerKardex] = useState(false);
-  const [loadingTabKardex, setLoadingTabKardex] = useState(false);
 
   // Estados de Bajas & Mermas en vivo desde PostgreSQL
   const [adjustments, setAdjustments] = useState<AdjustmentItem[]>([]);
-  const [loadingAdjustments, setLoadingAdjustments] = useState(false);
 
   // Estados del Modal de Baja / Merma
   const [adjustmentProductId, setAdjustmentProductId] = useState<number | null>(null);
@@ -376,11 +361,7 @@ export default function InventarioPage() {
   useEffect(() => {
     if (activeTab !== "kardex") return;
     let cancelled = false;
-    Promise.resolve()
-      .then(() => {
-        if (!cancelled) setLoadingTabKardex(true);
-        return getProductKardexAction();
-      })
+    getProductKardexAction()
       .then((res) => {
         if (cancelled) return;
         if (res.success && res.data) {
@@ -391,9 +372,6 @@ export default function InventarioPage() {
       })
       .catch(() => {
         if (!cancelled) toast.error("Error de conexión al cargar el Kárdex general.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingTabKardex(false);
       });
     return () => {
       cancelled = true;
@@ -404,11 +382,7 @@ export default function InventarioPage() {
   useEffect(() => {
     if (activeTab !== "adjustments") return;
     let cancelled = false;
-    Promise.resolve()
-      .then(() => {
-        if (!cancelled) setLoadingAdjustments(true);
-        return getInventoryAdjustmentsAction();
-      })
+    getInventoryAdjustmentsAction()
       .then((res) => {
         if (cancelled) return;
         if (res.success && res.data) {
@@ -419,9 +393,6 @@ export default function InventarioPage() {
       })
       .catch(() => {
         if (!cancelled) toast.error("Error de conexión al cargar actas de baja.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingAdjustments(false);
       });
     return () => {
       cancelled = true;
@@ -634,6 +605,7 @@ export default function InventarioPage() {
     const currentActive = p.isActive ?? true;
     const newActive = !currentActive;
 
+    if (!newActive && !window.confirm(`Archivar ${p.name}? Quedan ${p.stock} unidades. Se conserva el historial de caja y Kárdex.`)) return;
     setTogglingProductId(p.id);
     const toastId = toast.loading(
       newActive ? `Activando "${p.name}"...` : `Desactivando "${p.name}"...`
@@ -643,7 +615,7 @@ export default function InventarioPage() {
       const res = await toggleProductActiveAction(p.id, newActive);
       if (res.success) {
         setProducts((prev) =>
-          prev.map((item) => (item.id === p.id ? { ...item, isActive: newActive } : item))
+          prev.map((item) => (item.id === p.id ? { ...item, isActive: newActive, ...(!newActive && { isVisibleWeb: false, isFeatured: false }) } : item))
         );
         if (newActive) {
           toast.success("Producto activado", {
@@ -842,14 +814,9 @@ export default function InventarioPage() {
             <span>Categorías</span>
           </Button>
 
-          <Link href="/admin/inventario/nuevo">
-            <Button
-              size="sm"
-              className="h-10 px-5 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-semibold gap-2 transition-all active:scale-95 cursor-pointer"
-            >
+          <Link href="/admin/inventario/nuevo" className={cn(buttonVariants({ size: "sm" }), "h-10 px-5 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-semibold gap-2 transition-all active:scale-95 cursor-pointer")}>
               <Plus className="h-4 w-4 stroke-[2.5]" />
               <span>Nuevo Producto</span>
-            </Button>
           </Link>
         </div>
       </div>
@@ -1886,6 +1853,7 @@ export default function InventarioPage() {
           Se activa al hacer clic en cualquier fila de la lista o tarjeta de cuadros
           ========================================================================= */}
       <ProductDetailSheet
+        onChanged={() => { setSelectedProductForDetails(null); void reloadInitialInventory(); }}
         product={selectedProductForDetails}
         onClose={() => setSelectedProductForDetails(null)}
         onOpenKardex={(prod) => {
@@ -2149,8 +2117,8 @@ export default function InventarioPage() {
               {/* Selector / Previsualizador de foto WebP */}
               {newCategoryImage ? (
                 <div className="relative group shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+
+                  <ProductThumbnail
                     src={newCategoryImage}
                     alt="Previsualización"
                     className="h-10 w-10 rounded-xl object-cover border-2 border-admin-brand"
@@ -2258,14 +2226,12 @@ export default function InventarioPage() {
                       <div className="relative group shrink-0">
                         {currentImageUrl ? (
                           <div className="relative">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+
+                            <button type="button" onClick={() => editCatFileInputRef.current?.click()} title="Cambiar foto"><ProductThumbnail
                               src={currentImageUrl}
                               alt={editingCategory.current}
                               className="h-9 w-9 rounded-xl object-cover border border-amber-400 cursor-pointer"
-                              onClick={() => editCatFileInputRef.current?.click()}
-                              title="Cambiar foto"
-                            />
+                            /></button>
                             <button
                               type="button"
                               onClick={() =>
@@ -2331,8 +2297,8 @@ export default function InventarioPage() {
                       <div className="flex items-center gap-3">
                         {/* Miniatura de la Categoría */}
                         {catData?.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
+
+                          <ProductThumbnail
                             src={catData.imageUrl}
                             alt={cat}
                             className="h-9 w-9 rounded-xl object-cover border border-admin-card-border shrink-0"
