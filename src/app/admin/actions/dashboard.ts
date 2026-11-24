@@ -5,8 +5,14 @@ import { productName } from "@/lib/product-name";
 import { adminActionError } from "@/lib/admin-action-error";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq, desc, and, gte, lt, lte as lessOrEqual, sql } from "drizzle-orm";
-import { businessDate, businessDayStart } from "@/lib/business-date";
+import { eq, desc, and, gte, lt } from "drizzle-orm";
+import {
+  businessDate,
+  businessDayStart,
+  businessMonthStart,
+  formatBusinessDate,
+  formatBusinessShortDateTime,
+} from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
 
 export interface DashboardSalesItem {
@@ -83,6 +89,13 @@ export interface DashboardData {
   monthLossesTotal: number;
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: "Efectivo",
+  card: "Tarjeta",
+  transfer: "QR / Transferencia",
+  other: "Otro",
+};
+
 export async function getDashboardSummaryAction(): Promise<{
   success: boolean;
   data?: DashboardData;
@@ -92,11 +105,11 @@ export async function getDashboardSummaryAction(): Promise<{
     await requireRole(["admin", "manager"]);
 
     const [year, month, day] = businessDate().split("-").map(Number);
-    const monthDate = (offset: number) => new Date(Date.UTC(year, month - 1 + offset, 1)).toISOString().slice(0, 10);
-    const startOfMonth = businessDayStart(monthDate(0));
-    const endOfMonth = businessDayStart(monthDate(1));
+    const nextMonthStr =
+      month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const startOfMonth = businessMonthStart();
+    const endOfMonth = businessDayStart(nextMonthStr);
 
-    // 1. Obtener ventas del mes en curso
     const monthSales = await db.query.sales.findMany({
       where: and(
         gte(schema.sales.createdAt, startOfMonth),
@@ -134,7 +147,10 @@ export async function getDashboardSummaryAction(): Promise<{
       if (s.status === "completed" || s.status === "refunded") {
         const total = parseFloat(s.totalAmount) || 0;
         const refunded = parseFloat(s.refundedAmount || "0") || 0;
-        const net = Math.max(0, total - refunded);
+        const net =
+          s.netAmount !== null && s.netAmount !== undefined
+            ? parseFloat(s.netAmount) || 0
+            : Math.max(0, total - refunded);
         const index = Number(businessDate(s.createdAt).slice(-2)) - 1;
         monthSalesTotal += net;
         let cost = 0;
@@ -152,14 +168,13 @@ export async function getDashboardSummaryAction(): Promise<{
           qrAmount += net;
         }
 
-        // Costo de los productos vendidos
         for (const it of s.items || []) {
           const uCost = parseFloat(it.unitCost) || 0;
           const netQty = Math.max(0, it.quantity - (it.returnedQuantity || 0));
           cost += uCost * netQty;
         }
         monthSalesCost += cost;
-        if (index < day) {
+        if (index >= 0 && index < day) {
           dailySales[index] += net;
           dailyProfit[index] += net - cost;
           dailyCount[index]++;
@@ -174,20 +189,50 @@ export async function getDashboardSummaryAction(): Promise<{
     const posPercentage = totalCountValid > 0 ? Math.round((posCount / totalCountValid) * 100) : 100;
     const adminPercentage = totalCountValid > 0 ? 100 - posPercentage : 0;
 
-    // 2. Obtener cajas físicas y turnos activos
-    const allRegisters = await db.query.cashRegisters.findMany();
-    const openShifts = await db.query.cashShifts.findMany({
-      where: eq(schema.cashShifts.status, "open"),
-    });
+    const [allRegisters, openShifts, allProducts, monthAdjustments] = await Promise.all([
+      db.query.cashRegisters.findMany(),
+      db.query.cashShifts.findMany({
+        where: eq(schema.cashShifts.status, "open"),
+      }),
+      db.query.products.findMany({
+        where: eq(schema.products.isActive, true),
+        with: {
+          supplier: true,
+        },
+      }),
+      db.query.inventoryAdjustments.findMany({
+        where: and(
+          gte(schema.inventoryAdjustments.createdAt, startOfMonth),
+          lt(schema.inventoryAdjustments.createdAt, endOfMonth)
+        ),
+        with: {
+          authorizedByUser: true,
+          items: {
+            with: {
+              product: true,
+            },
+          },
+        },
+        orderBy: [desc(schema.inventoryAdjustments.createdAt)],
+      }),
+    ]);
 
     let cashInDrawers = 0;
     for (const sh of openShifts) {
       cashInDrawers += parseFloat(sh.expectedCash) || 0;
     }
 
-    // 3. Formatear ventas recientes (hasta 15)
     const recentSalesFormatted: DashboardSalesItem[] = monthSales.slice(0, 15).map((s) => {
-      const totalNum = parseFloat(s.totalAmount) || 0;
+      const origTotal = parseFloat(s.totalAmount) || 0;
+      const refundedNum = parseFloat(s.refundedAmount || "0") || 0;
+      const isCancelled = s.status === "cancelled";
+      const isPending = s.status === "pending";
+      const netTotal =
+        isCancelled || isPending
+          ? 0
+          : s.netAmount !== null && s.netAmount !== undefined
+          ? parseFloat(s.netAmount) || 0
+          : Math.max(0, origTotal - refundedNum);
       const subtotalNum = parseFloat(s.subtotal) || 0;
       const taxNum = parseFloat(s.taxAmount || "0") || 0;
       const cashGivenNum = parseFloat(s.cashGiven || "0") || 0;
@@ -197,55 +242,54 @@ export async function getDashboardSummaryAction(): Promise<{
       const itemsFormatted = (s.items || []).map((it) => {
         const uPrice = parseFloat(it.unitPrice) || 0;
         const uCost = parseFloat(it.unitCost) || 0;
-        const sub = parseFloat(it.subtotal) || uPrice * it.quantity;
-        itemCostTotal += uCost * it.quantity;
+        const netQty = Math.max(0, it.quantity - (it.returnedQuantity || 0));
+        if (!isCancelled && !isPending) {
+          itemCostTotal += uCost * netQty;
+        }
         return {
           name: it.product ? productName(it.product) : "Producto general",
-          quantity: it.quantity,
+          quantity: netQty,
           unitPrice: uPrice,
           unitCost: uCost,
-          subtotal: sub,
+          subtotal: netQty * uPrice,
         };
       });
-
-      const dateObj = new Date(s.createdAt);
-      const timeStr = dateObj.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" });
-      const dateStr = dateObj.toLocaleDateString("es-BO", { day: "2-digit", month: "short" });
 
       const isPos = Boolean(s.cashShiftId);
       const channelLabel = isPos
         ? `POS (${s.cashShift?.cashRegister?.name || "Caja"})`
         : "Venta Administrativa";
 
+      const statusLabel =
+        s.status === "completed"
+          ? "Cobrado"
+          : s.status === "refunded"
+          ? "Devuelta"
+          : s.status === "pending"
+          ? "Pendiente"
+          : "Anulado";
+
       return {
         id: s.saleNumber,
         dbId: s.id,
         saleNumber: s.saleNumber,
-        time: `${dateStr}, ${timeStr}`,
+        time: formatBusinessShortDateTime(s.createdAt),
         rawDate: s.createdAt.toISOString(),
-        status: s.status === "completed" ? "Cobrado" : s.status === "refunded" ? "Devuelto" : "Anulado",
+        status: statusLabel,
         channel: isPos ? "pos" : "administrative",
         channelLabel,
-        customer: s.customer?.name || "Cliente Mostrador",
+        customer: s.customerName || s.customer?.name || "Cliente Mostrador",
         cashier: s.user?.name || "Cajero",
-        total: totalNum,
+        total: netTotal,
         subtotal: subtotalNum,
         tax: taxNum,
         costTotal: itemCostTotal,
-        grossProfit: Math.max(0, totalNum - itemCostTotal),
-        paymentMethod: s.paymentMethod === "cash" ? "Efectivo" : "QR Simple",
+        grossProfit: isCancelled || isPending ? 0 : netTotal - itemCostTotal,
+        paymentMethod: PAYMENT_METHOD_LABELS[s.paymentMethod] || s.paymentMethod,
         cashGiven: cashGivenNum,
         changeGiven: changeGivenNum,
         items: itemsFormatted,
       };
-    });
-
-    // 4. Productos con stock crítico (stock <= minStock)
-    const allProducts = await db.query.products.findMany({
-      where: eq(schema.products.isActive, true),
-      with: {
-        supplier: true,
-      },
     });
 
     const criticalStockProducts: DashboardCriticalProduct[] = [];
@@ -268,23 +312,6 @@ export async function getDashboardSummaryAction(): Promise<{
       }
     }
 
-    // 5. Mermas y Bajas del mes
-    const monthAdjustments = await db.query.inventoryAdjustments.findMany({
-      where: and(
-        gte(schema.inventoryAdjustments.createdAt, startOfMonth),
-        lt(schema.inventoryAdjustments.createdAt, endOfMonth)
-      ),
-      with: {
-        authorizedByUser: true,
-        items: {
-          with: {
-            product: true,
-          },
-        },
-      },
-      orderBy: [desc(schema.inventoryAdjustments.createdAt)],
-    });
-
     const reasonMap: Record<string, string> = {
       damaged: "Rotura física",
       defective: "Defecto de fábrica",
@@ -294,22 +321,25 @@ export async function getDashboardSummaryAction(): Promise<{
       internal_use: "Uso interno / Muestra",
     };
 
-    let monthLossesTotal = 0;
+    const monthLossesTotal = monthAdjustments.reduce(
+      (sum, a) => sum + (parseFloat(a.totalCost) || 0),
+      0
+    );
+
     const recentAdjustments: DashboardAdjustmentItem[] = monthAdjustments.slice(0, 5).map((a) => {
       const costNum = parseFloat(a.totalCost) || 0;
-      monthLossesTotal += costNum;
       const firstItem = a.items[0];
 
       return {
         id: a.id,
         adjustmentNumber: a.adjustmentNumber,
-        productName: firstItem?.product?.name || "Producto general",
+        productName: firstItem?.product ? productName(firstItem.product) : "Producto general",
         quantity: firstItem?.quantity || 1,
         reason: a.reason,
         reasonLabel: reasonMap[a.reason] || a.reason,
         totalCost: costNum,
-        authorizedBy: a.authorizedByUser?.name || "Administrador",
-        date: new Date(a.createdAt).toLocaleDateString("es-BO"),
+        authorizedBy: a.authorizedByUser?.name || "Pendiente de autorización",
+        date: formatBusinessDate(a.createdAt),
       };
     });
 
@@ -319,7 +349,7 @@ export async function getDashboardSummaryAction(): Promise<{
         kpis: {
           dailySales,
           dailyProfit,
-          dailyTickets: dailySales.map((amount, i) => dailyCount[i] ? amount / dailyCount[i] : 0),
+          dailyTickets: dailySales.map((amount, i) => (dailyCount[i] ? amount / dailyCount[i] : 0)),
           monthSalesTotal,
           monthSalesCount: completedCount,
           posPercentage,

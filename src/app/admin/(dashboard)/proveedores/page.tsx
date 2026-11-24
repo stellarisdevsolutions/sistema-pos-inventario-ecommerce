@@ -2,7 +2,7 @@
 
 import { MetricCard } from "@/components/admin/metric-card";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
+import { useAuth } from "@/context/auth-context";
 import {
   getSuppliersAction,
   createSupplierAction,
@@ -161,6 +162,10 @@ function PaginationBar({
 }
 
 export default function ProveedoresPage() {
+  const { user } = useAuth();
+  const canEditSuppliers = user?.role === "admin" || user?.role === "manager";
+  const canDeleteSuppliers = user?.role === "admin";
+
   const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -192,7 +197,7 @@ export default function ProveedoresPage() {
   const [formIsActive, setFormIsActive] = useState(true);
 
   // Cargar Proveedores desde PostgreSQL
-  const loadSuppliers = async () => {
+  const loadSuppliers = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await getSuppliersAction();
@@ -201,16 +206,39 @@ export default function ProveedoresPage() {
       } else {
         toast.error("Error al cargar proveedores", { description: res.error });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast.error("Error de conexión al cargar proveedores");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadSuppliers();
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getSuppliersAction();
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setSuppliers(res.data);
+        } else {
+          toast.error("Error al cargar proveedores", { description: res.error });
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          console.error(err);
+          toast.error("Error de conexión al cargar proveedores");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Filtrado de Proveedores
@@ -326,7 +354,7 @@ export default function ProveedoresPage() {
           toast.error("Error al registrar", { description: res.error });
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast.error("Error al guardar proveedor");
     } finally {
@@ -361,7 +389,7 @@ export default function ProveedoresPage() {
           description: res.error || "No se pudo actualizar el estado del proveedor.",
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast.error("Error al conectar con el servidor", { id: toastId });
     } finally {
@@ -384,7 +412,7 @@ export default function ProveedoresPage() {
       } else {
         toast.error("No se pudo eliminar", { description: res.error });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast.error("Error al eliminar proveedor");
     }
@@ -403,14 +431,16 @@ export default function ProveedoresPage() {
           <p className="admin-page-description">Contactos comerciales e historial de compras.</p>
         </div>
 
-        <Button
-          onClick={handleOpenCreateModal}
-          size="sm"
-          className="h-10 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold gap-2 active:scale-95 transition-all cursor-pointer w-full sm:w-auto shrink-0"
-        >
-          <Plus className="h-4 w-4 stroke-[2.5]" />
-          <span>Registrar Proveedor</span>
-        </Button>
+        {canEditSuppliers && (
+          <Button
+            onClick={handleOpenCreateModal}
+            size="sm"
+            className="h-10 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold gap-2 active:scale-95 transition-all cursor-pointer w-full sm:w-auto shrink-0"
+          >
+            <Plus className="h-4 w-4 stroke-[2.5]" />
+            <span>Registrar Proveedor</span>
+          </Button>
+        )}
       </div>
 
       {/* =========================================================================
@@ -674,36 +704,44 @@ export default function ProveedoresPage() {
                               <Eye className="h-3.5 w-3.5 mr-2 text-slate-500" />
                               Ver Ficha Comercial
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleOpenEditModal(s)}
-                              className="rounded-lg text-xs font-semibold cursor-pointer"
-                            >
-                              <Edit className="h-3.5 w-3.5 mr-2 text-slate-500" />
-                              Editar Proveedor
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              disabled={isToggling}
-                              onClick={() => handleToggleActive(s)}
-                              className="rounded-lg text-xs font-semibold cursor-pointer"
-                            >
-                              {isToggling ? (
-                                <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin text-slate-500" />
-                              ) : s.isActive ? (
-                                <XCircle className="h-3.5 w-3.5 mr-2 text-slate-400" />
-                              ) : (
-                                <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-500" />
-                              )}
-                              {s.isActive ? "Pausar Proveedor" : "Activar Proveedor"}
-                            </DropdownMenuItem>
+                            {canEditSuppliers && (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => handleOpenEditModal(s)}
+                                  className="rounded-lg text-xs font-semibold cursor-pointer"
+                                >
+                                  <Edit className="h-3.5 w-3.5 mr-2 text-slate-500" />
+                                  Editar Proveedor
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={isToggling}
+                                  onClick={() => handleToggleActive(s)}
+                                  className="rounded-lg text-xs font-semibold cursor-pointer"
+                                >
+                                  {isToggling ? (
+                                    <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin text-slate-500" />
+                                  ) : s.isActive ? (
+                                    <XCircle className="h-3.5 w-3.5 mr-2 text-slate-400" />
+                                  ) : (
+                                    <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-500" />
+                                  )}
+                                  {s.isActive ? "Pausar Proveedor" : "Activar Proveedor"}
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuGroup>
-                          <DropdownMenuSeparator className="my-1 bg-admin-raised" />
-                          <DropdownMenuItem
-                            onClick={() => setSupplierToDelete(s)}
-                            className="rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 focus:bg-rose-50 dark:focus:bg-rose-950/60 cursor-pointer"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 mr-2" />
-                            Eliminar Proveedor
-                          </DropdownMenuItem>
+                          {canDeleteSuppliers && (
+                            <>
+                              <DropdownMenuSeparator className="my-1 bg-admin-raised" />
+                              <DropdownMenuItem
+                                onClick={() => setSupplierToDelete(s)}
+                                className="rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 focus:bg-rose-50 dark:focus:bg-rose-950/60 cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-2" />
+                                Eliminar Proveedor
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -851,43 +889,62 @@ export default function ProveedoresPage() {
 
                       {/* 5. Estado con Switch y Loader */}
                       <td className="py-4 px-5 text-center" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={s.isActive}
-                          disabled={isToggling}
-                          onClick={() => handleToggleActive(s)}
-                          className="inline-flex items-center gap-2 cursor-pointer group disabled:cursor-wait"
-                        >
-                          <span
-                            className={cn(
-                              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none items-center",
-                              s.isActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700",
-                              isToggling && "opacity-80"
-                            )}
+                        {canEditSuppliers ? (
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={s.isActive}
+                            disabled={isToggling}
+                            onClick={() => handleToggleActive(s)}
+                            className="inline-flex items-center gap-2 cursor-pointer group disabled:cursor-wait"
                           >
                             <span
                               className={cn(
-                                "pointer-events-none flex items-center justify-center h-4 w-4 transform rounded-full bg-white ring-0 transition duration-200 ease-in-out",
-                                s.isActive ? "translate-x-4" : "translate-x-0"
+                                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none items-center",
+                                s.isActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700",
+                                isToggling && "opacity-80"
                               )}
                             >
-                              {isToggling ? (
-                                <Loader2 className="h-2.5 w-2.5 animate-spin text-slate-600" />
-                              ) : null}
+                              <span
+                                className={cn(
+                                  "pointer-events-none flex items-center justify-center h-4 w-4 transform rounded-full bg-white ring-0 transition duration-200 ease-in-out",
+                                  s.isActive ? "translate-x-4" : "translate-x-0"
+                                )}
+                              >
+                                {isToggling ? (
+                                  <Loader2 className="h-2.5 w-2.5 animate-spin text-slate-600" />
+                                ) : null}
+                              </span>
                             </span>
-                          </span>
+                            <span
+                              className={cn(
+                                "text-[11px] font-medium select-none min-w-[50px] text-left",
+                                s.isActive
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-admin-muted"
+                              )}
+                            >
+                              {isToggling ? "Cargando..." : s.isActive ? "Activo" : "Inactivo"}
+                            </span>
+                          </button>
+                        ) : (
                           <span
                             className={cn(
-                              "text-[11px] font-medium select-none min-w-[50px] text-left",
+                              "inline-flex items-center gap-1.5 text-[11px] font-medium",
                               s.isActive
                                 ? "text-emerald-700 dark:text-emerald-400"
                                 : "text-admin-muted"
                             )}
                           >
-                            {isToggling ? "Cargando..." : s.isActive ? "Activo" : "Inactivo"}
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                s.isActive ? "bg-emerald-500" : "bg-slate-400"
+                              )}
+                            />
+                            {s.isActive ? "Activo" : "Inactivo"}
                           </span>
-                        </button>
+                        )}
                       </td>
 
                       {/* 6. Acciones */}
@@ -916,22 +973,28 @@ export default function ProveedoresPage() {
                                 <Eye className="h-3.5 w-3.5 mr-2 text-slate-500" />
                                 Ver Ficha Comercial
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleOpenEditModal(s)}
-                                className="rounded-lg text-xs font-semibold cursor-pointer"
-                              >
-                                <Edit className="h-3.5 w-3.5 mr-2 text-slate-500" />
-                                Editar Proveedor
-                              </DropdownMenuItem>
+                              {canEditSuppliers && (
+                                <DropdownMenuItem
+                                  onClick={() => handleOpenEditModal(s)}
+                                  className="rounded-lg text-xs font-semibold cursor-pointer"
+                                >
+                                  <Edit className="h-3.5 w-3.5 mr-2 text-slate-500" />
+                                  Editar Proveedor
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuGroup>
-                            <DropdownMenuSeparator className="my-1 bg-admin-raised" />
-                            <DropdownMenuItem
-                              onClick={() => setSupplierToDelete(s)}
-                              className="rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 focus:bg-rose-50 dark:focus:bg-rose-950/60 cursor-pointer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 mr-2" />
-                              Eliminar Proveedor
-                            </DropdownMenuItem>
+                            {canDeleteSuppliers && (
+                              <>
+                                <DropdownMenuSeparator className="my-1 bg-admin-raised" />
+                                <DropdownMenuItem
+                                  onClick={() => setSupplierToDelete(s)}
+                                  className="rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 focus:bg-rose-50 dark:focus:bg-rose-950/60 cursor-pointer"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 mr-2" />
+                                  Eliminar Proveedor
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
@@ -1101,21 +1164,23 @@ export default function ProveedoresPage() {
                 Cerrar
               </Button>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const sup = selectedSupplierForDetails;
-                    setSelectedSupplierForDetails(null);
-                    handleOpenEditModal(sup);
-                  }}
-                  className="rounded-lg h-9 text-xs font-bold gap-1.5"
-                >
-                  <Edit className="h-3.5 w-3.5" />
-                  <span>Editar</span>
-                </Button>
-              </div>
+              {canEditSuppliers && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const sup = selectedSupplierForDetails;
+                      setSelectedSupplierForDetails(null);
+                      handleOpenEditModal(sup);
+                    }}
+                    className="rounded-lg h-9 text-xs font-bold gap-1.5"
+                  >
+                    <Edit className="h-3.5 w-3.5" />
+                    <span>Editar</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>

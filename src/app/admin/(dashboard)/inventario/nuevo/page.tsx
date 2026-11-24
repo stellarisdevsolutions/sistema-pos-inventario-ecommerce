@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useCallback } from "react";
 import { ProductForm } from "@/components/admin/product-form";
 import { ProductFormSkeleton } from "@/components/admin/product-form-skeleton";
 import { getInventoryFormData, getProductModelsForForm } from "@/app/admin/actions/products";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 function NuevoProductoContent() {
   const [formData, setFormData] = useState<{
@@ -12,22 +14,47 @@ function NuevoProductoContent() {
     suppliers: { id: number; name: string }[];
   }>({ categories: [], brands: [], suppliers: [] });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [models, setModels] = useState<Awaited<ReturnType<typeof getProductModelsForForm>>>([]);
+  const [formKey, setFormKey] = useState(1);
 
-  // Key dinámico forzado al montar para garantizar que el formulario siempre se inicialice de cero
-  const [formKey, setFormKey] = useState(() => Date.now());
+  const loadForm = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
+    Promise.all([getInventoryFormData(), getProductModelsForForm().catch(() => [])])
+      .then(([data, existingModels]) => {
+        setFormData(data);
+        setModels(existingModels);
+        setFormKey((k) => k + 1);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoadError("No se pudieron cargar categorías y proveedores. Intenta nuevamente.");
+        setLoading(false);
+      });
+  }, []);
 
   useEffect(() => {
-    setFormKey(Date.now());
-    Promise.all([getInventoryFormData(), getProductModelsForForm().catch(() => [])]).then(([data, existingModels]) => {
-      setFormData(data);
-      setModels(existingModels);
-      setLoading(false);
-    });
-  }, []);
+    const id = setTimeout(() => loadForm(), 0);
+    return () => clearTimeout(id);
+  }, [loadForm]);
 
   if (loading) {
     return <ProductFormSkeleton isEdit={false} />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="max-w-xl mx-auto mt-12 admin-panel p-6 text-center space-y-4">
+        <p className="text-sm font-semibold text-admin-text">{loadError}</p>
+        <div className="flex items-center justify-center gap-3">
+          <Link href="/admin/inventario">
+            <Button variant="outline" size="sm">Volver a Inventario</Button>
+          </Link>
+          <Button size="sm" onClick={loadForm}>Reintentar</Button>
+        </div>
+      </div>
+    );
   }
 
   return (

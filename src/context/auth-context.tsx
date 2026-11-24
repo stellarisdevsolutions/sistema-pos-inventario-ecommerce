@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import type { SessionUser } from "@/lib/auth/session-edge";
 import { getCurrentUserAction, logoutAction } from "@/app/admin/actions/auth";
 import { toast } from "sonner";
@@ -22,7 +21,6 @@ export function AuthProvider({
   children: React.ReactNode;
   initialUser?: SessionUser | null;
 }) {
-  const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(initialUser);
   const [isLoading, setIsLoading] = useState(!initialUser);
 
@@ -42,10 +40,31 @@ export function AuthProvider({
   }, []);
 
   useEffect(() => {
-    if (!initialUser) {
-      refreshUser();
-    }
-  }, [initialUser, refreshUser]);
+    if (initialUser) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getCurrentUserAction();
+        if (cancelled) return;
+        if (res.success && res.user) {
+          setUser(res.user);
+        } else {
+          setUser(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialUser]);
 
   const logout = async () => {
     try {
@@ -53,8 +72,7 @@ export function AuthProvider({
       if (!result.success) throw new Error("No se pudo cerrar la sesión.");
       setUser(null);
       toast.success("Has cerrado sesión exitosamente.");
-      router.push("/portal");
-      router.refresh();
+      window.location.href = "/portal";
     } catch {
       toast.error("No se pudo cerrar la sesión. Inténtalo de nuevo.");
     }

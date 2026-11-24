@@ -36,6 +36,20 @@
       "when": 1795232466712,
       "tag": "0004_product_variants",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795242900000,
+      "tag": "0005_product_attributes_jsonb",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795450000000,
+      "tag": "0006_hardening_refunds_sessions",
+      "breakpoints": true
     }
   ]
 }

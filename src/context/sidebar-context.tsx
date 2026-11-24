@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useSyncExternalStore } from "react";
 
 interface SidebarContextType {
   isCollapsed: boolean;
@@ -9,46 +9,69 @@ interface SidebarContextType {
   setCollapsed: (collapsed: boolean) => void;
 }
 
+const SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
+const subscribeNoop = () => () => {};
+
+function subscribeSidebarStore(callback: () => void) {
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === null || e.key === SIDEBAR_STORAGE_KEY) {
+      callback();
+    }
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener("aura-sidebar-change", callback);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener("aura-sidebar-change", callback);
+  };
+}
+
+function getSidebarSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-
-  // Leer preferencia de localStorage solo tras montar en cliente para evitar mismatch de hidratación
-  useEffect(() => {
-    setIsMounted(true);
-    try {
-      const saved = localStorage.getItem("admin_sidebar_collapsed");
-      if (saved !== null) {
-        setIsCollapsed(saved === "true");
-      }
-    } catch (e) {
-      // Ignorar en SSR
-    }
-  }, []);
+  const isMounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false
+  );
+  const isCollapsed = useSyncExternalStore(
+    subscribeSidebarStore,
+    getSidebarSnapshot,
+    () => false
+  );
 
   const toggleSidebar = () => {
-    setIsCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("admin_sidebar_collapsed", String(next));
-      } catch (e) {}
-      return next;
-    });
+    const next = !getSidebarSnapshot();
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+    } catch {}
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("aura-sidebar-change"));
+    }
   };
 
   const setCollapsed = (collapsed: boolean) => {
-    setIsCollapsed(collapsed);
     try {
-      localStorage.setItem("admin_sidebar_collapsed", String(collapsed));
-    } catch (e) {}
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+    } catch {}
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("aura-sidebar-change"));
+    }
   };
 
   return (
     <SidebarContext.Provider
       value={{
-        isCollapsed: isMounted ? isCollapsed : false,
+        isCollapsed,
         isMounted,
         toggleSidebar,
         setCollapsed,

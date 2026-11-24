@@ -6,6 +6,8 @@ export const openShiftSchema = z.object({
   initialCash: z
     .number()
     .min(0, "El fondo inicial no puede ser negativo")
+    .max(9_999_999_999.99, "El fondo inicial supera el límite admitido")
+    .refine((amount) => Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-6, "Usa hasta dos decimales")
     .default(0),
   notes: z
     .string()

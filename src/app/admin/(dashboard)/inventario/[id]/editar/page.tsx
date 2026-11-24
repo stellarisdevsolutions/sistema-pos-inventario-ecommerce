@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ProductForm } from "@/components/admin/product-form";
 import { ProductFormSkeleton } from "@/components/admin/product-form-skeleton";
 import { getProductById, getInventoryFormData } from "@/app/admin/actions/products";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+
+type LoadedProduct = NonNullable<Awaited<ReturnType<typeof getProductById>>>;
 
 function EditarProductoContent() {
   const params = useParams();
@@ -12,33 +16,60 @@ function EditarProductoContent() {
   const idStr = params?.id as string;
   const productId = parseInt(idStr, 10);
 
-  const [product, setProduct] = useState<any>(null);
+  const [product, setProduct] = useState<LoadedProduct | null>(null);
   const [formData, setFormData] = useState<{
     categories: { id: number; name: string }[];
     brands: { id: number; name: string }[];
     suppliers: { id: number; name: string }[];
   }>({ categories: [], brands: [], suppliers: [] });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadProduct = useCallback(() => {
     if (isNaN(productId)) {
       router.push("/admin/inventario");
       return;
     }
 
-    Promise.all([getProductById(productId), getInventoryFormData()]).then(([prod, data]) => {
-      if (!prod) {
-        router.push("/admin/inventario");
-        return;
-      }
-      setProduct(prod);
-      setFormData(data);
-      setLoading(false);
-    });
+    setLoading(true);
+    setLoadError(null);
+    Promise.all([getProductById(productId), getInventoryFormData()])
+      .then(([prod, data]) => {
+        if (!prod) {
+          router.push("/admin/inventario");
+          return;
+        }
+        setProduct(prod);
+        setFormData(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoadError("No se pudieron cargar los datos del producto. Verifica tu conexión e inténtalo nuevamente.");
+        setLoading(false);
+      });
   }, [productId, router]);
 
-  if (loading || !product) {
+  useEffect(() => {
+    const id = setTimeout(() => loadProduct(), 0);
+    return () => clearTimeout(id);
+  }, [loadProduct]);
+
+  if (loading) {
     return <ProductFormSkeleton isEdit={true} />;
+  }
+
+  if (loadError || !product) {
+    return (
+      <div className="max-w-xl mx-auto mt-12 admin-panel p-6 text-center space-y-4">
+        <p className="text-sm font-semibold text-admin-text">{loadError || "Producto no disponible."}</p>
+        <div className="flex items-center justify-center gap-3">
+          <Link href="/admin/inventario">
+            <Button variant="outline" size="sm">Volver a Inventario</Button>
+          </Link>
+          <Button size="sm" onClick={loadProduct}>Reintentar</Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -47,8 +78,13 @@ function EditarProductoContent() {
       initialData={{
         id: product.id,
         name: product.model?.name ?? product.name,
-        sku: product.sku, barcode: product.barcode, modelCode: product.modelCode,
-        variant: product.variant, variantSelector: product.variantSelector, variantColor: product.variantColor,
+        sku: product.sku,
+        barcode: product.barcode,
+        modelCode: product.modelCode,
+        variant: product.variant,
+        variantSelector: product.variantSelector,
+        variantColor: product.variantColor,
+        attributes: product.attributes ?? null,
         description: product.description,
         mainImage: product.imageUrl,
         additionalImages: product.images || [],

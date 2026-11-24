@@ -9,21 +9,37 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { cancelSaleQuery, createSaleQuery, refundSaleQuery } from "@/db/operations/sales";
 import * as schema from "@/db/schema";
-import { isNull, eq, desc, and, inArray, or } from "drizzle-orm";
+import { isNull, eq, and, inArray } from "drizzle-orm";
 import { saleFormSchema, refundSaleSchema, type SaleFormInput, type RefundSaleItemsInput } from "@/lib/validations/sale";
-import { businessDate } from "@/lib/business-date";
+import { businessDate, formatBusinessDateTime, formatBusinessTime } from "@/lib/business-date";
 import { refundUnitAmounts } from "@/lib/refund-amount";
-import { demoSupervisorEmails, isDemoLoginEnabled } from "@/lib/auth/demo-login";
+import { checkRateLimit, recordFailedAttempt, resetRateLimit } from "@/lib/auth/rate-limit";
 import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
 import { requireRole, type SessionUser } from "@/lib/auth/session";
 
 const POS_ROLES: ("admin" | "manager" | "cashier")[] = ["admin", "manager", "cashier"];
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_WINDOW_MS = 15 * 60 * 1000;
 
 function safeRevalidatePath(path: string) {
   try {
     revalidatePath(path);
   } catch {
     // Si se ejecuta fuera de contexto Next.js (tests/scripts), no bloquea
+  }
+}
+
+function revalidateSalesPaths() {
+  for (const path of [
+    "/admin/ventas",
+    "/admin/inventario",
+    "/admin",
+    "/admin/cajas",
+    "/admin/reportes",
+    "/catalogo",
+    "/",
+  ]) {
+    safeRevalidatePath(path);
   }
 }
 
@@ -109,7 +125,7 @@ export async function getPosCatalogAction(): Promise<{
   error?: string;
 }> {
   try {
-    await requireRole(POS_ROLES);
+    const operator = await requireRole(POS_ROLES);
     const prods = await db.query.products.findMany({
       where: eq(schema.products.isActive, true),
       with: {
@@ -137,7 +153,7 @@ export async function getPosCatalogAction(): Promise<{
         barcode: p.barcode || "",
         category: categoryName,
         price: parseFloat(p.price) || 0,
-        costPrice: parseFloat(p.costPrice) || 0,
+        costPrice: operator.role === "cashier" ? 0 : parseFloat(p.costPrice) || 0,
         stock,
         minStock,
         image:
@@ -202,12 +218,6 @@ export async function getPosContextAction(): Promise<{
 
 /**
  * 3. Procesar y registrar una venta de mostrador (POS) o Venta Administrativa
- * Aplica reglas estrictas de control de caja y retail:
- * - Regla 1: Todo cobro de mostrador exige turno de caja abierto
- * - Regla 2: Exclusividad de caja (ningún usuario puede vender en la caja de otro operador)
- * - Regla 3: El Admin debe abrir su propia caja o emitir "Venta Administrativa Directa"
- * - Valida existencias físicas en tiempo real
- * - Descuenta stock y asienta Kardex
  */
 export async function createSaleAction(input: SaleFormInput): Promise<{
   success: boolean;
@@ -255,7 +265,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
           paymentMethod: sale.paymentMethod,
           cashGiven: sale.cashGiven === null ? null : Number(sale.cashGiven),
           changeGiven: sale.changeGiven === null ? null : Number(sale.changeGiven),
-          createdAt: sale.createdAt.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" }),
+          createdAt: formatBusinessTime(sale.createdAt),
           items: sale.items.map(item => ({
             id: item.id, productId: item.productId, productName: item.product ? productName(item.product) : "Producto",
             productSku: item.product?.sku ?? null, quantity: item.quantity,
@@ -276,10 +286,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
     let finalShiftId: number | null = null;
     let saleNotes = parsed.notes ? parsed.notes.trim() : null;
 
-    // APLICACIÓN DE REGLAS DE NEGOCIO DE CAJA
     if (parsed.isAdministrativeSale) {
-      // Regla 3b: Venta Administrativa Directa (fuera de caja)
-      // Solo permitida para perfiles de Admin o Supervisor
       if (operatingUser.role !== "admin" && operatingUser.role !== "manager") {
         return await rejectSale("Acceso Denegado: Solo administradores y supervisores de tienda están facultados para emitir ventas administrativas directas fuera de caja.");
       }
@@ -288,7 +295,6 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
       const adminTag = "[Venta Administrativa Directa]";
       saleNotes = saleNotes ? `${adminTag} ${saleNotes}` : adminTag;
     } else {
-      // Regla 1: Venta POS de mostrador exige turno de caja abierto asignado
       if (!parsed.cashShiftId) {
         return await rejectSale("Control de Caja: No cuentas con un turno de caja abierto. Debes aperturar una caja con tu fondo inicial antes de cobrar en mostrador.");
       }
@@ -305,7 +311,6 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
         return await rejectSale("El turno de caja no está disponible para cobrar. Puede estar pendiente de aprobación o cerrado.");
       }
 
-      // Regla 2: Exclusividad de caja (Anti Cross-Cashier Selling)
       if (shift.userId !== operatingUser.id) {
         const assignedName = shift.user?.name || "otro operador";
         const registerTitle = shift.cashRegister?.name || `Caja #${shift.cashRegisterId}`;
@@ -315,7 +320,6 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
       finalShiftId = shift.id;
     }
 
-    // 1. Validar existencias físicas en tiempo real para todos los ítems
     const productIds = parsed.items.map((i) => i.productId);
     const dbProducts = await db.query.products.findMany({
       where: (p, { inArray }) => inArray(p.id, productIds),
@@ -390,10 +394,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
       subtotal: Number(row.subtotal),
     }));
 
-    safeRevalidatePath("/admin/ventas");
-    safeRevalidatePath("/admin/inventario");
-    safeRevalidatePath("/admin");
-    safeRevalidatePath("/admin/cajas");
+    revalidateSalesPaths();
 
     return {
       success: true,
@@ -405,10 +406,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
         paymentMethod: parsed.paymentMethod,
         cashGiven,
         changeGiven,
-        createdAt: new Date().toLocaleTimeString("es-BO", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+        createdAt: formatBusinessTime(new Date()),
         items: ticketItems,
       },
     };
@@ -451,12 +449,12 @@ export async function getSalesHistoryAction(): Promise<{
       orderBy: (s, { desc }) => [desc(s.id)],
     });
 
-    const now = new Date();
-    const todayStr = businessDate(now);
+    const todayStr = businessDate();
 
     let totalRevenue = 0;
     let todayRevenue = 0;
     let completedCount = 0;
+    let ticketsWithNetAmount = 0;
     let administrativeSalesCount = 0;
     let administrativeSalesRevenue = 0;
     let posShiftSalesCount = 0;
@@ -464,21 +462,13 @@ export async function getSalesHistoryAction(): Promise<{
 
     const formatted: SaleHistoryItem[] = list.map((s) => {
       const totalNum = parseFloat(s.totalAmount) || 0;
-      const sDate = new Date(s.createdAt);
-      const isToday = businessDate(sDate) === todayStr;
-      const isAdministrative =
-        !s.cashShiftId || (s.notes?.includes("[Venta Administrativa Directa]") ?? false);
+      const isToday = businessDate(s.createdAt) === todayStr;
+      const isAdministrative = !s.cashShiftId;
 
-      const formattedDate = sDate.toLocaleDateString("es-BO", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const formattedDate = formatBusinessDateTime(s.createdAt);
 
       const formattedItems: SaleTicketItem[] = (s.items || []).map((it) => {
-        const returnedQty = (it as any).returnedQuantity || 0;
+        const returnedQty = it.returnedQuantity || 0;
         return {
           id: it.id,
           productId: it.productId,
@@ -493,41 +483,46 @@ export async function getSalesHistoryAction(): Promise<{
       });
 
       const totalItemsCount = formattedItems.reduce((acc, i) => acc + i.quantity, 0);
-      const totalReturnedAmount = formattedItems.reduce(
-        (acc, i) => acc + (i.returnedQuantity * i.unitPrice),
-        0
-      );
-      const netAmount = Math.max(0, totalNum - totalReturnedAmount);
+      const persistedRefunded = parseFloat(s.refundedAmount || "0") || 0;
+      const persistedNet =
+        s.status === "cancelled"
+          ? 0
+          : s.netAmount !== null && s.netAmount !== undefined
+          ? parseFloat(s.netAmount) || 0
+          : Math.max(0, totalNum - persistedRefunded);
 
       if (s.status === "completed" || s.status === "refunded") {
-        totalRevenue += netAmount;
+        totalRevenue += persistedNet;
         completedCount += 1;
+        if (persistedNet > 0) {
+          ticketsWithNetAmount += 1;
+        }
         if (isToday) {
-          todayRevenue += netAmount;
+          todayRevenue += persistedNet;
         }
 
         if (isAdministrative) {
           administrativeSalesCount += 1;
-          administrativeSalesRevenue += netAmount;
+          administrativeSalesRevenue += persistedNet;
         } else {
           posShiftSalesCount += 1;
-          posShiftSalesRevenue += netAmount;
+          posShiftSalesRevenue += persistedNet;
         }
       }
 
       return {
         id: s.id,
         saleNumber: s.saleNumber,
-        customerName: s.customerName || "Público General",
-        paymentMethod: s.paymentMethod as "cash" | "card" | "transfer" | "other",
-        channel: s.channel as "pos" | "online",
-        status: s.status as "completed" | "pending" | "cancelled" | "refunded",
+        customerName: s.customerName || s.customer?.name || "Público General",
+        paymentMethod: s.paymentMethod,
+        channel: s.channel,
+        status: s.status,
         subtotal: parseFloat(s.subtotal) || 0,
         discountAmount: parseFloat(s.discountAmount) || 0,
         taxAmount: parseFloat(s.taxAmount) || 0,
         totalAmount: totalNum,
-        refundedAmount: totalReturnedAmount,
-        netAmount,
+        refundedAmount: persistedRefunded,
+        netAmount: persistedNet,
         cashGiven: s.cashGiven ? parseFloat(s.cashGiven) : null,
         changeGiven: s.changeGiven ? parseFloat(s.changeGiven) : null,
         notes: s.notes,
@@ -545,7 +540,7 @@ export async function getSalesHistoryAction(): Promise<{
       };
     });
 
-    const averageTicket = completedCount > 0 ? totalRevenue / completedCount : 0;
+    const averageTicket = ticketsWithNetAmount > 0 ? totalRevenue / ticketsWithNetAmount : 0;
 
     return {
       success: true,
@@ -582,9 +577,6 @@ export async function getSalesHistoryAction(): Promise<{
 
 /**
  * 5. Anular una venta emitida
- * - Reintegra el stock al inventario
- * - Asienta Kardex (movementType: "return_in")
- * - Cambia estado a "cancelled"
  */
 export async function cancelSaleAction(
   saleId: number,
@@ -604,10 +596,7 @@ export async function cancelSaleAction(
       return { success: false, error: "La venta no se puede anular. Revisa su estado, devoluciones y turno original." };
     }
 
-    safeRevalidatePath("/admin/ventas");
-    safeRevalidatePath("/admin/inventario");
-    safeRevalidatePath("/admin");
-    safeRevalidatePath("/admin/cajas");
+    revalidateSalesPaths();
 
     return { success: true };
   } catch (error) {
@@ -638,12 +627,6 @@ export type RefundReceiptData = {
 
 /**
  * 6. Procesar Devolución Parcial o Total de Productos sobre una Venta
- * - Valida PIN de autorización de Administrador o Supervisor
- * - Reintegra solo los ítems seleccionados al inventario físico
- * - Asienta en Kardex el movimiento inmutable tipo "return_in"
- * - Actualiza returnedQuantity en saleItems y estado de venta ("refunded")
- * - Si es reembolso en efectivo, descuenta de la gaveta activa (expectedCash)
- * - Emite comprobante / vale de devolución
  */
 export async function refundSaleItemsAction(
   input: RefundSaleItemsInput
@@ -655,14 +638,19 @@ export async function refundSaleItemsAction(
   try {
     const operator = await requireRole(POS_ROLES);
     input = refundSaleSchema.parse(input);
+
+    const pinRateKey = `pin:${operator.id}`;
+    const pinLimit = checkRateLimit(pinRateKey, PIN_MAX_ATTEMPTS, PIN_WINDOW_MS);
+    if (!pinLimit.allowed) {
+      return {
+        success: false,
+        error: "Demasiados intentos de PIN fallidos. Espera unos minutos antes de volver a intentar.",
+      };
+    }
+
     const supervisor = await db.query.users.findFirst({
       where: and(
-        or(
-          eq(schema.users.pin, encodeSupervisorPin(input.supervisorPin)),
-          isDemoLoginEnabled()
-            ? and(inArray(schema.users.email, demoSupervisorEmails), eq(schema.users.pin, input.supervisorPin))
-            : undefined
-        ),
+        eq(schema.users.pin, encodeSupervisorPin(input.supervisorPin)),
         eq(schema.users.isActive, true),
         inArray(schema.users.role, ["admin", "manager"])
       ),
@@ -670,13 +658,14 @@ export async function refundSaleItemsAction(
     });
 
     if (!supervisor) {
+      recordFailedAttempt(pinRateKey, PIN_WINDOW_MS);
       return {
         success: false,
         error: "Acceso Denegado: PIN de autorización inválido o el usuario no posee rol de Administrador/Supervisor.",
       };
     }
+    resetRateLimit(pinRateKey);
 
-    // 2. Obtener la venta original y sus productos
     const sale = await db.query.sales.findFirst({
       where: eq(schema.sales.id, input.saleId),
       with: {
@@ -699,25 +688,83 @@ export async function refundSaleItemsAction(
       return { success: false, error: "Solo puedes devolver productos de tus propias ventas." };
     }
 
-    const targetShift = input.refundMethod === "cash" && input.cashShiftId
-      ? await db.query.cashShifts.findFirst({
-          where: and(
-            eq(schema.cashShifts.id, input.cashShiftId),
-            eq(schema.cashShifts.status, "open"),
-            isNull(schema.cashShifts.actualCash),
-            eq(schema.cashShifts.userId, operator.id)
-          ),
-        })
-      : null;
-    if (input.refundMethod === "cash" && !targetShift) {
-      return { success: false, error: "El reembolso en efectivo requiere un turno propio abierto." };
+    const refundAmounts = refundUnitAmounts(sale.items, Number(sale.totalAmount));
+
+    if (input.requestId) {
+      const existingRefund = await db.query.saleRefunds.findFirst({
+        where: eq(schema.saleRefunds.requestId, input.requestId),
+        with: { user: true, authorizedByUser: true },
+      });
+      if (existingRefund) {
+        if (existingRefund.saleId !== sale.id) {
+          return { success: false, error: "Este identificador de devolución pertenece a otra venta." };
+        }
+        return {
+          success: true,
+          data: {
+            refundNumber: `DEV-${businessDate(existingRefund.createdAt).slice(0, 4)}-${String(existingRefund.id).padStart(4, "0")}`,
+            saleNumber: sale.saleNumber,
+            customerName: sale.customerName || "Público General",
+            refundAmount: Number(existingRefund.amount),
+            refundMethod: existingRefund.refundMethod,
+            supervisorName: existingRefund.authorizedByUser?.name || supervisor.name,
+            processedByName: existingRefund.user?.name || operator.name,
+            reason: existingRefund.reason,
+            createdAt: formatBusinessTime(existingRefund.createdAt),
+            returnedItems: input.items.map((ri) => {
+              const orig = sale.items.find((it) => it.id === ri.saleItemId);
+              const unitPrice = orig ? Number(orig.unitPrice) : 0;
+              const startReturned = orig ? Math.max(0, orig.returnedQuantity - ri.quantityToRefund) : 0;
+              const lineSub = orig
+                ? (refundAmounts.get(orig.id)?.(startReturned, ri.quantityToRefund) ?? 0) / 100
+                : 0;
+              return {
+                name: orig?.product ? productName(orig.product) : "Producto",
+                quantity: ri.quantityToRefund,
+                unitPrice,
+                subtotal: lineSub,
+              };
+            }),
+          },
+        };
+      }
+    }
+
+    let refundShiftId: number | null = null;
+    let targetCashBalanceCents: number | null = null;
+
+    if (input.refundMethod === "cash") {
+      const targetShift = input.cashShiftId
+        ? await db.query.cashShifts.findFirst({
+            where: and(
+              eq(schema.cashShifts.id, input.cashShiftId),
+              eq(schema.cashShifts.status, "open"),
+              isNull(schema.cashShifts.actualCash),
+              eq(schema.cashShifts.userId, operator.id)
+            ),
+          })
+        : null;
+      if (!targetShift) {
+        return { success: false, error: "El reembolso en efectivo requiere un turno propio abierto." };
+      }
+      refundShiftId = targetShift.id;
+      targetCashBalanceCents = Math.round(Number(targetShift.expectedCash) * 100);
+    } else if (sale.cashShiftId) {
+      const originalOpenShift = await db.query.cashShifts.findFirst({
+        where: and(
+          eq(schema.cashShifts.id, sale.cashShiftId),
+          eq(schema.cashShifts.status, "open"),
+          isNull(schema.cashShifts.actualCash)
+        ),
+        columns: { id: true },
+      });
+      refundShiftId = originalOpenShift?.id ?? null;
     }
 
     const returnedItemsList: RefundReceiptData["returnedItems"] = [];
     const plannedItems = [];
     let totalRefundCents = 0;
     const originalTotalCents = Math.round(Number(sale.totalAmount) * 100);
-    const refundAmounts = refundUnitAmounts(sale.items, Number(sale.totalAmount));
     const previousRefundedCents = Math.round(Number(sale.refundedAmount ?? 0) * 100);
 
     for (const refundItem of input.items) {
@@ -738,8 +785,10 @@ export async function refundSaleItemsAction(
       plannedItems.push({ refundItem, originalItem, newReturned, unitPrice, refundCents });
     }
 
-    if (totalRefundCents + previousRefundedCents > originalTotalCents ||
-        (targetShift && totalRefundCents > Math.round(Number(targetShift.expectedCash) * 100))) {
+    if (
+      totalRefundCents + previousRefundedCents > originalTotalCents ||
+      (targetCashBalanceCents !== null && totalRefundCents > targetCashBalanceCents)
+    ) {
       return { success: false, error: "El reembolso supera el saldo disponible." };
     }
     const totalRefundAmount = totalRefundCents / 100;
@@ -754,13 +803,16 @@ export async function refundSaleItemsAction(
     }
 
     const note = `Devolución de ${totalRefundAmount.toFixed(2)} autorizada por ${supervisor.name}, procesada por ${operator.name}: ${input.reason}`;
-    const { rows } = await db.execute(refundSaleQuery({
+    const { rows } = await db.execute<{ id: number; refundId: number | null }>(refundSaleQuery({
       saleId: sale.id,
       operatorId: operator.id,
       supervisorId: supervisor.id,
-      cashShiftId: targetShift?.id ?? null,
+      cashShiftId: refundShiftId,
       amount: totalRefundAmount,
       note,
+      refundMethod: input.refundMethod,
+      requestId: input.requestId ?? null,
+      reason: input.reason,
       items: plannedItems.map(({ originalItem, refundItem }) => ({
         id: originalItem.id,
         returnedQuantity: originalItem.returnedQuantity,
@@ -771,12 +823,10 @@ export async function refundSaleItemsAction(
       return { success: false, error: "Cambió la venta o el saldo de caja. Actualiza el ticket." };
     }
 
-    const refundNumber = `DEV-${new Date().getFullYear()}-${String(sale.id).padStart(4, "0")}`;
+    const folioId = rows[0].refundId ?? sale.id;
+    const refundNumber = `DEV-${businessDate().slice(0, 4)}-${String(folioId).padStart(4, "0")}`;
 
-    safeRevalidatePath("/admin/ventas");
-    safeRevalidatePath("/admin/inventario");
-    safeRevalidatePath("/admin");
-    safeRevalidatePath("/admin/cajas");
+    revalidateSalesPaths();
 
     return {
       success: true,
@@ -789,7 +839,7 @@ export async function refundSaleItemsAction(
         supervisorName: supervisor.name,
         processedByName: operator.name,
         reason: input.reason,
-        createdAt: new Date().toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" }),
+        createdAt: formatBusinessTime(new Date()),
         returnedItems: returnedItemsList,
       },
     };

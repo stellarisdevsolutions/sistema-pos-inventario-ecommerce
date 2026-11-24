@@ -1,69 +1,88 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Home, Compass, Heart, ShoppingBag, User } from "lucide-react";
 import { useCart } from "@/context/cart-context";
 
-export function StoreMobileNav() {
+function StoreMobileNavContent() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { cartCount, setIsCartOpen, favorites } = useCart();
+  const isFavs = pathname === "/catalogo" && searchParams.get("favs") === "true";
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-6 py-2.5 flex items-center justify-between shadow-lg">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-store-ink text-store-on-primary/70 rounded-t-2xl px-5 py-2.5 flex items-center justify-between shadow-lg font-store">
       <Link
         href="/"
-        className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${
-          pathname === "/" ? "text-store-primary" : "text-slate-400 hover:text-slate-600"
+        className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+          pathname === "/"
+            ? "text-store-on-primary font-semibold"
+            : "text-store-on-primary/65 hover:text-store-on-primary"
         }`}
       >
-        <Home className="h-5 w-5" />
+        <Home className="h-5 w-5 stroke-[1.75]" />
         <span>Inicio</span>
       </Link>
 
       <Link
         href="/catalogo"
-        className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${
-          pathname.startsWith("/catalogo") ? "text-store-primary" : "text-slate-400 hover:text-slate-600"
+        className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+          pathname.startsWith("/catalogo") && !isFavs
+            ? "text-store-on-primary font-semibold"
+            : "text-store-on-primary/65 hover:text-store-on-primary"
         }`}
       >
-        <Compass className="h-5 w-5" />
+        <Compass className="h-5 w-5 stroke-[1.75]" />
         <span>Catálogo</span>
       </Link>
 
-      <Link
-        href="/catalogo?favs=true"
-        className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors relative ${
-          pathname.includes("favs=true") ? "text-store-primary" : "text-slate-400 hover:text-slate-600"
-        }`}
-      >
-        <Heart className="h-5 w-5" />
-        <span>Deseos</span>
-        {favorites.length > 0 && (
-          <span className="absolute -top-1 right-1 h-2 w-2 rounded-full bg-store-primary" />
-        )}
-      </Link>
-
+      {/* Botón central elevado de bolsa */}
       <button
+        type="button"
         onClick={() => setIsCartOpen(true)}
-        className="flex flex-col items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600 relative"
+        aria-label="Abrir carrito"
+        className="-mt-7 h-13 w-13 rounded-full bg-store-primary border-4 border-store-bg text-store-on-primary shadow-md flex items-center justify-center relative transition-transform duration-150 ease-out active:scale-[0.95] cursor-pointer"
       >
-        <ShoppingBag className="h-5 w-5" />
-        <span>Carrito</span>
+        <ShoppingBag className="h-5 w-5 stroke-[2]" />
         {cartCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-store-primary text-white text-[9px] font-black h-4 w-4 rounded-full flex items-center justify-center">
+          <span className="absolute -top-1 -right-1 bg-store-ink text-store-on-primary text-[9px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center tabular-nums">
             {cartCount}
           </span>
         )}
       </button>
 
       <Link
-        href="/portal"
-        className="flex flex-col items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600"
+        href="/catalogo?favs=true"
+        className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors relative ${
+          isFavs
+            ? "text-store-on-primary font-semibold"
+            : "text-store-on-primary/65 hover:text-store-on-primary"
+        }`}
       >
-        <User className="h-5 w-5" />
+        <Heart className="h-5 w-5 stroke-[1.75]" />
+        <span>Deseos</span>
+        {favorites.length > 0 && (
+          <span className="absolute top-0 right-0.5 h-2 w-2 rounded-full bg-store-primary" />
+        )}
+      </Link>
+
+      <Link
+        href="/portal"
+        className="flex flex-col items-center gap-0.5 text-[10px] font-medium text-store-on-primary/65 hover:text-store-on-primary transition-colors"
+      >
+        <User className="h-5 w-5 stroke-[1.75]" />
         <span>Cuenta</span>
       </Link>
     </nav>
+  );
+}
+
+export function StoreMobileNav() {
+  return (
+    <Suspense fallback={null}>
+      <StoreMobileNavContent />
+    </Suspense>
   );
 }

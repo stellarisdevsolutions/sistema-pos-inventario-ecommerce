@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Activity, ArrowUpRight } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
+import { STORE_NAME } from "@/lib/store-config";
 import { isModuleActive, navigationItems } from "./nav-items";
 
 const sections = [
@@ -21,9 +22,9 @@ export function Sidebar({ collapsed = false, onNavigate }: { collapsed?: boolean
 
   return (
     <aside className="admin-rail" data-collapsed={collapsed}>
-      <Link className="admin-rail-brand" href={home} onClick={onNavigate} aria-label="Inicio de Aura Commerce">
+      <Link className="admin-rail-brand" href={home} onClick={onNavigate} aria-label={`Inicio de ${STORE_NAME}`}>
         <span className="admin-rail-mark"><Activity size={19} aria-hidden /></span>
-        {!collapsed && <span className="truncate text-[15px] font-semibold tracking-tight">Aura Commerce</span>}
+        {!collapsed && <span className="truncate text-[15px] font-semibold tracking-tight">{STORE_NAME}</span>}
       </Link>
       <nav aria-label="Módulos del panel">
         {sections.map(({ id, label }) => {

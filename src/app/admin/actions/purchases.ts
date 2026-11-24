@@ -6,9 +6,9 @@ import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
-import { businessDate } from "@/lib/business-date";
+import { businessDate, businessMonthStart, formatBusinessDate } from "@/lib/business-date";
 import * as schema from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { purchaseFormSchema, purchaseReturnSchema, type PurchaseFormInput, type PurchaseReturnInput } from "@/lib/validations/purchase";
 import { requireRole } from "@/lib/auth/session";
 
@@ -17,6 +17,20 @@ function safeRevalidatePath(path: string) {
     revalidatePath(path);
   } catch {
     // Si se ejecuta fuera de contexto Next.js (tests/scripts), no bloquea
+  }
+}
+
+function revalidatePurchasePaths() {
+  for (const path of [
+    "/admin/compras",
+    "/admin/inventario",
+    "/admin/proveedores",
+    "/admin",
+    "/admin/ventas",
+    "/catalogo",
+    "/",
+  ]) {
+    safeRevalidatePath(path);
   }
 }
 
@@ -51,8 +65,8 @@ export type PurchaseListItem = {
   notes: string | null;
   createdAt: string;
   rawCreatedAt: string;
-  itemsCount: number; // Cantidad total de piezas físicas
-  linesCount: number; // Cantidad de renglones / productos distintos
+  itemsCount: number;
+  linesCount: number;
   items: PurchaseItemDetail[];
   returns: {
     id: number;
@@ -97,8 +111,7 @@ export async function getPurchasesAction(): Promise<{
       orderBy: (p, { desc }) => [desc(p.id)],
     });
 
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const startOfMonth = businessMonthStart();
 
     let monthlyInvestment = 0;
     let monthlyPurchasesCount = 0;
@@ -111,30 +124,30 @@ export async function getPurchasesAction(): Promise<{
       const totalNum = parseFloat(p.totalAmount) || 0;
       const pDate = new Date(p.createdAt);
 
-      if (p.supplierId) {
+      if (p.supplierId && p.status !== "cancelled") {
         activeSupplierIds.add(p.supplierId);
       }
 
-      if (pDate >= startOfMonth && p.status !== "cancelled") {
-        monthlyInvestment += totalNum;
-        monthlyPurchasesCount += 1;
-        if (p.status === "received") {
-          monthlyUnitsReceived += totalUnits;
-        }
-      }
-
-      const formattedDate = pDate.toLocaleDateString("es-BO", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-
       const returnedByLine = new Map<number, number>();
+      let totalReturnedUnits = 0;
+      let totalReturnedValue = 0;
       for (const receipt of p.returns) {
         for (const item of receipt.items) {
           returnedByLine.set(item.purchaseItemId, (returnedByLine.get(item.purchaseItemId) ?? 0) + item.quantity);
+          totalReturnedUnits += item.quantity;
+          totalReturnedValue += item.quantity * (parseFloat(item.originalUnitCost) || 0);
         }
       }
+
+      if (pDate >= startOfMonth && p.status !== "cancelled") {
+        monthlyInvestment += Math.max(0, totalNum - totalReturnedValue);
+        monthlyPurchasesCount += 1;
+        if (p.status === "received") {
+          monthlyUnitsReceived += Math.max(0, totalUnits - totalReturnedUnits);
+        }
+      }
+
+      const formattedDate = formatBusinessDate(p.createdAt);
 
       const formattedItems: PurchaseItemDetail[] = itemsList.map((it) => ({
         id: it.id,
@@ -161,9 +174,9 @@ export async function getPurchasesAction(): Promise<{
         subtotal: parseFloat(p.subtotal) || 0,
         taxAmount: parseFloat(p.taxAmount) || 0,
         totalAmount: totalNum,
-        status: p.status as "pending" | "received" | "cancelled",
-        paymentStatus: p.paymentStatus as "paid" | "pending" | "partial",
-        paymentMethod: (p.paymentMethod as any) || "transfer",
+        status: p.status,
+        paymentStatus: p.paymentStatus,
+        paymentMethod: p.paymentMethod || "transfer",
         notes: p.notes || null,
         createdAt: formattedDate,
         rawCreatedAt: p.createdAt.toISOString(),
@@ -249,7 +262,7 @@ export async function getProductsForPurchaseAction() {
         supplierId: p.supplierId || null,
       })),
     };
-  } catch (error: any) {
+  } catch (error) {
     return { success: false, data: [], error: adminActionError(error, "No se pudo completar la operación.") };
   }
 }
@@ -274,7 +287,7 @@ export async function getSuppliersForPurchaseAction() {
     });
 
     return { success: true, data: list };
-  } catch (error: any) {
+  } catch (error) {
     return { success: false, data: [], error: adminActionError(error, "No se pudo completar la operación.") };
   }
 }
@@ -284,7 +297,7 @@ export async function getSuppliersForPurchaseAction() {
  */
 export async function createPurchaseAction(input: PurchaseFormInput): Promise<{
   success: boolean;
-  data?: any;
+  data?: { id: number; purchaseNumber: string };
   error?: string;
 }> {
   try {
@@ -292,18 +305,37 @@ export async function createPurchaseAction(input: PurchaseFormInput): Promise<{
 
     const parsed = purchaseFormSchema.parse(input);
 
-    const { rows: [newPurchase] } = await db.execute(createPurchaseQuery(
-      parsed,
-      currentUser.id,
-      `COM-${businessDate().slice(0, 4)}-`
-    ));
+    if (parsed.requestId) {
+      const existing = await db.query.purchases.findFirst({
+        where: eq(schema.purchases.requestId, parsed.requestId),
+        columns: { id: true, purchaseNumber: true },
+      });
+      if (existing) {
+        return { success: true, data: existing };
+      }
+    }
+
+    const { rows: [newPurchase] } = await db.execute<{ id: number; purchaseNumber: string }>(
+      createPurchaseQuery(
+        parsed,
+        currentUser.id,
+        `COM-${businessDate().slice(0, 4)}-`
+      )
+    );
     if (!newPurchase) {
+      if (parsed.requestId) {
+        const recovered = await db.query.purchases.findFirst({
+          where: eq(schema.purchases.requestId, parsed.requestId),
+          columns: { id: true, purchaseNumber: true },
+        });
+        if (recovered) {
+          return { success: true, data: recovered };
+        }
+      }
       return { success: false, error: "El proveedor o uno de los productos ya no está activo." };
     }
 
-    safeRevalidatePath("/admin/compras");
-    safeRevalidatePath("/admin/inventario");
-    safeRevalidatePath("/admin/proveedores");
+    revalidatePurchasePaths();
 
     return { success: true, data: newPurchase };
   } catch (error) {
@@ -337,9 +369,7 @@ export async function cancelPurchaseAction(
       return { success: false, error: "La compra ya fue anulada, tiene devoluciones registradas o falta stock para revertirla." };
     }
 
-    safeRevalidatePath("/admin/compras");
-    safeRevalidatePath("/admin/inventario");
-    safeRevalidatePath("/admin/proveedores");
+    revalidatePurchasePaths();
 
     return { success: true };
   } catch (error) {
@@ -362,9 +392,7 @@ export async function returnPurchaseAction(input: PurchaseReturnInput): Promise<
       return { success: false, error: "Verifica que la compra siga recibida y que las cantidades no superen lo pendiente por devolver ni el stock disponible." };
     }
 
-    for (const path of ["/admin/compras", "/admin/inventario", "/admin", "/admin/ventas", "/catalogo"]) {
-      safeRevalidatePath(path);
-    }
+    revalidatePurchasePaths();
     return { success: true };
   } catch (error) {
     return { success: false, error: adminActionError(error, "No se pudo registrar la devolución al proveedor.") };

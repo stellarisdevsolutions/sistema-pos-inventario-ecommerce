@@ -70,11 +70,13 @@ export function createSaleQuery(input: {
         cash_sales = shift.cash_sales + CASE WHEN sale.payment_method = 'cash' THEN sale.total_amount ELSE 0 END,
         expected_cash = shift.expected_cash + CASE WHEN sale.payment_method = 'cash' THEN sale.total_amount ELSE 0 END,
         card_sales = shift.card_sales + CASE WHEN sale.payment_method = 'card' THEN sale.total_amount ELSE 0 END,
-        transfer_sales = shift.transfer_sales + CASE WHEN sale.payment_method = 'transfer' THEN sale.total_amount ELSE 0 END
+        transfer_sales = shift.transfer_sales + CASE WHEN sale.payment_method = 'transfer' THEN sale.total_amount ELSE 0 END,
+        other_sales = shift.other_sales + CASE WHEN sale.payment_method = 'other' THEN sale.total_amount ELSE 0 END
       FROM sale WHERE shift.id = sale.cash_shift_id
     )
     SELECT sale.id AS "saleId", sale_number AS "saleNumber", customer_name AS "customerName",
-      detail.id AS "itemId", detail.product_id AS "productId", concat_ws(' — ', p.name, p.variant) AS "productName", p.sku AS "productSku",
+      detail.id AS "itemId", detail.product_id AS "productId",
+      concat_ws(' — ', p.name, NULLIF(p.variant, '')) AS "productName", p.sku AS "productSku",
       quantity, unit_price AS "unitPrice", subtotal
     FROM sale CROSS JOIN detail JOIN locked_products p ON p.id = detail.product_id
     ORDER BY detail.id
@@ -104,10 +106,14 @@ export function cancelSaleQuery(saleId: number, operatorId: number, reason: stri
         sum(quantity * unit_cost) / sum(quantity) AS unit_cost
       FROM sale_items JOIN cancelled ON sale_id = cancelled.id
       GROUP BY product_id
+    ), locked_products AS MATERIALIZED (
+      SELECT p.id, q.quantity, q.unit_cost
+      FROM products p JOIN quantities q ON p.id = q.product_id
+      ORDER BY p.id FOR UPDATE OF p
     ), stock_change AS (
-      UPDATE products p SET stock = p.stock + q.quantity, updated_at = now()
-      FROM quantities q WHERE p.id = q.product_id
-      RETURNING p.id, p.stock, q.quantity, q.unit_cost
+      UPDATE products p SET stock = p.stock + l.quantity, updated_at = now()
+      FROM cancelled CROSS JOIN locked_products l WHERE p.id = l.id
+      RETURNING p.id, p.stock, l.quantity, l.unit_cost
     ), movement AS (
       INSERT INTO inventory_movements (product_id, movement_type, quantity, previous_stock, new_stock,
         unit_cost, reference_type, reference_id, reason, user_id)
@@ -116,10 +122,11 @@ export function cancelSaleQuery(saleId: number, operatorId: number, reason: stri
       FROM cancelled CROSS JOIN stock_change
     ), balance AS (
       UPDATE cash_shifts shift SET
-        cash_sales = shift.cash_sales - CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END,
+        cash_sales = GREATEST(0, shift.cash_sales - CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END),
         expected_cash = shift.expected_cash - CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END,
-        card_sales = shift.card_sales - CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END,
-        transfer_sales = shift.transfer_sales - CASE WHEN payment_method = 'transfer' THEN total_amount ELSE 0 END
+        card_sales = GREATEST(0, shift.card_sales - CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END),
+        transfer_sales = GREATEST(0, shift.transfer_sales - CASE WHEN payment_method = 'transfer' THEN total_amount ELSE 0 END),
+        other_sales = GREATEST(0, shift.other_sales - CASE WHEN payment_method = 'other' THEN total_amount ELSE 0 END)
       FROM cancelled WHERE shift.id = cancelled.cash_shift_id
     )
     SELECT id FROM cancelled
@@ -133,24 +140,39 @@ export function refundSaleQuery(input: {
   cashShiftId: number | null;
   amount: number;
   note: string;
+  refundMethod?: "cash" | "card" | "transfer" | "other";
+  requestId?: string | null;
+  reason?: string;
   items: { id: number; returnedQuantity: number; quantity: number }[];
 }) {
   const { saleId, operatorId, supervisorId, cashShiftId, amount, note } = input;
+  const refundMethod = input.refundMethod ?? "cash";
+  const requestId = input.requestId ?? null;
+  const reasonText = input.reason ?? note;
   const money = amount.toFixed(2);
   const lines = JSON.stringify(input.items.map((item) => ({
     id: item.id, returned_quantity: item.returnedQuantity, quantity: item.quantity,
   })));
 
   return sql`
-    WITH target AS MATERIALIZED (
+    WITH existing_refund AS MATERIALIZED (
+      SELECT id FROM sale_refunds
+      WHERE ${requestId}::uuid IS NOT NULL
+        AND request_id = ${requestId}::uuid
+        AND sale_id = ${saleId}
+    ), target AS MATERIALIZED (
       SELECT id FROM sales
       WHERE id = ${saleId} AND status IN ('completed', 'refunded')
         AND refunded_amount + ${money}::numeric <= total_amount
+        AND NOT EXISTS (SELECT 1 FROM existing_refund)
       FOR UPDATE
     ), locked_shift AS MATERIALIZED (
       SELECT id FROM cash_shifts
-      WHERE id = ${cashShiftId} AND user_id = ${operatorId} AND status = 'open' AND actual_cash IS NULL
-        AND expected_cash >= ${money}::numeric AND EXISTS (SELECT 1 FROM target)
+      WHERE id = ${cashShiftId}
+        AND status = 'open'
+        AND actual_cash IS NULL
+        AND (${refundMethod}::text <> 'cash' OR (user_id = ${operatorId} AND expected_cash >= ${money}::numeric))
+        AND EXISTS (SELECT 1 FROM target)
       FOR UPDATE
     ), lines AS MATERIALIZED (
       SELECT * FROM jsonb_to_recordset(${lines}::jsonb)
@@ -170,6 +192,12 @@ export function refundSaleQuery(input: {
         AND (${cashShiftId}::integer IS NULL OR EXISTS (SELECT 1 FROM locked_shift))
         AND (SELECT count(*) FROM lines) = (SELECT count(*) FROM matched)
       RETURNING sales.id
+    ), refund_record AS (
+      INSERT INTO sale_refunds (sale_id, cash_shift_id, user_id, authorized_by_user_id, request_id, refund_method, amount, reason)
+      SELECT refund.id, ${cashShiftId}, ${operatorId}, ${supervisorId}, ${requestId}::uuid, ${refundMethod}::payment_method, ${money}::numeric, ${reasonText}
+      FROM refund
+      ON CONFLICT (request_id) DO NOTHING
+      RETURNING id
     ), detail AS (
       UPDATE sale_items item SET returned_quantity = item.returned_quantity + matched.quantity
       FROM matched CROSS JOIN refund WHERE item.id = matched.id
@@ -177,10 +205,14 @@ export function refundSaleQuery(input: {
       SELECT product_id, sum(quantity)::integer AS quantity,
         sum(quantity * unit_cost) / sum(quantity) AS unit_cost
       FROM matched GROUP BY product_id
+    ), locked_products AS MATERIALIZED (
+      SELECT p.id, q.quantity, q.unit_cost
+      FROM products p JOIN quantities q ON p.id = q.product_id
+      ORDER BY p.id FOR UPDATE OF p
     ), stock_change AS (
-      UPDATE products p SET stock = p.stock + q.quantity, updated_at = now()
-      FROM quantities q CROSS JOIN refund WHERE p.id = q.product_id
-      RETURNING p.id, p.stock, q.quantity, q.unit_cost
+      UPDATE products p SET stock = p.stock + l.quantity, updated_at = now()
+      FROM locked_products l CROSS JOIN refund WHERE p.id = l.id
+      RETURNING p.id, p.stock, l.quantity, l.unit_cost
     ), movement AS (
       INSERT INTO inventory_movements (product_id, movement_type, quantity, previous_stock, new_stock,
         unit_cost, reference_type, reference_id, reason, user_id)
@@ -189,9 +221,14 @@ export function refundSaleQuery(input: {
       FROM refund CROSS JOIN stock_change
     ), balance AS (
       UPDATE cash_shifts SET
-        cash_sales = cash_sales - ${money}::numeric, expected_cash = expected_cash - ${money}::numeric
+        cash_sales = GREATEST(0, cash_sales - CASE WHEN ${refundMethod}::text = 'cash' THEN ${money}::numeric ELSE 0 END),
+        expected_cash = expected_cash - CASE WHEN ${refundMethod}::text = 'cash' THEN ${money}::numeric ELSE 0 END,
+        card_sales = GREATEST(0, card_sales - CASE WHEN ${refundMethod}::text = 'card' THEN ${money}::numeric ELSE 0 END),
+        transfer_sales = GREATEST(0, transfer_sales - CASE WHEN ${refundMethod}::text = 'transfer' THEN ${money}::numeric ELSE 0 END),
+        other_sales = GREATEST(0, other_sales - CASE WHEN ${refundMethod}::text = 'other' THEN ${money}::numeric ELSE 0 END)
       FROM refund WHERE cash_shifts.id = ${cashShiftId}
     )
-    SELECT id FROM refund
+    SELECT refund.id, refund_record.id AS "refundId"
+    FROM refund LEFT JOIN refund_record ON true
   `;
 }

@@ -13,17 +13,27 @@
   --font-store: var(--font-plus-jakarta);
 
   /* ========================================================
-     🎨 PALETA TIENDA / CATÁLOGO PÚBLICO (Inspirada en GadgetHub)
+     🎨 PALETA TIENDA / CATÁLOGO PÚBLICO (Regla 60 / 30 / 10 desde store-theme.css)
      ======================================================== */
+  --color-store-bg: var(--store-bg);
+  --color-store-surface: var(--store-surface);
+  --color-store-surface-hover: var(--store-surface-hover);
+  --color-store-border: var(--store-border);
+  --color-store-ink: var(--store-ink);
+  --color-store-ink-deep: var(--store-ink-deep);
+  --color-store-ink-soft: var(--store-ink-soft);
+  --color-store-on-ink: var(--store-on-ink);
+  --color-store-on-ink-muted: var(--store-on-ink-muted);
+  --color-store-muted: var(--store-muted);
   --color-store-primary: var(--store-primary);
   --color-store-primary-hover: var(--store-primary-hover);
+  --color-store-primary-deep: var(--store-primary-deep);
+  --color-store-primary-tint: var(--store-primary-tint);
   --color-store-primary-light: var(--store-primary-light);
-  --color-store-header-bg: var(--store-header-bg);
-  --color-store-header-sub: var(--store-header-sub);
-  --color-store-header-text: var(--store-header-text);
-  --color-store-header-muted: var(--store-header-muted);
-  --color-store-stars: var(--store-stars);
-  --color-store-discount: var(--store-discount);
+  --color-store-on-primary: var(--store-on-primary);
+  --color-store-success: var(--store-success);
+  --color-store-warning: var(--store-warning);
+  --color-store-danger: var(--store-danger);
 
   --color-admin-brand: var(--admin-brand);
   --color-admin-brand-hover: var(--admin-brand-hover);
@@ -86,19 +96,6 @@
 }
 
 :root {
-  /* =========================================================================
-     🟠 PALETA TIENDA PÚBLICA (Cambia estos valores para cambiar la tienda)
-     ========================================================================= */
-  --store-primary: #ff5500;             /* Naranja vibrante de botones y acentos */
-  --store-primary-hover: #e64a00;       /* Hover naranja */
-  --store-primary-light: #fff2eb;       /* Fondo suave */
-  --store-header-bg: #0b1120;           /* Dark Navy fondo principal del header */
-  --store-header-sub: #111827;          /* Sub-barra de categorías */
-  --store-header-text: #ffffff;         /* Texto blanco */
-  --store-header-muted: #94a3b8;        /* Texto secundario de header */
-  --store-stars: #f59e0b;               /* Dorado de calificaciones */
-  --store-discount: #ef4444;            /* Rojo de descuento (-25%, -30%) */
-
   /* Variables base de la aplicación */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -227,7 +224,6 @@
 .scrollbar-none {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
-  overflow-x: hidden !important;
 }
 .no-scrollbar::-webkit-scrollbar,
 .scrollbar-none::-webkit-scrollbar {
@@ -312,11 +308,17 @@
   }
 
   #thermal-receipt,
-  #thermal-receipt * {
+  #thermal-receipt *,
+  #thermal-refund-receipt,
+  #thermal-refund-receipt *,
+  #thermal-reporte-z,
+  #thermal-reporte-z * {
     visibility: visible;
   }
 
-  #thermal-receipt {
+  #thermal-receipt,
+  #thermal-refund-receipt,
+  #thermal-reporte-z {
     position: absolute;
     left: 0;
     top: 0;

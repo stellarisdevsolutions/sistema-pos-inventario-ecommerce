@@ -2,7 +2,7 @@
 
 import { addBusinessDays, businessDate } from "@/lib/business-date";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
+import { csvCell } from "@/lib/sanitize";
+import { STORE_NAME } from "@/lib/store-config";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 import {
   getReporteZAction,
@@ -58,6 +60,7 @@ export default function ReportesPage() {
   });
   const [reportData, setReportData] = useState<ReporteZData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"resumen" | "turnos" | "productos" | "devoluciones" | "ventas">("resumen");
 
   // Buscador para detalle de ventas
@@ -67,30 +70,83 @@ export default function ReportesPage() {
   // Modal de Reporte Z Térmico 80mm
   const [thermalModalOpen, setThermalModalOpen] = useState(false);
 
-  const loadReport = async (dateStr?: string) => {
+  const loadReport = useCallback(async (dateStr?: string) => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const targetDate = dateStr || selectedDate;
       const res = await getReporteZAction(targetDate);
       if (res.success && res.data) {
         setReportData(res.data);
       } else {
-        toast.error(res.error || "No se pudo cargar el Reporte Z.");
+        const msg = res.error || "No se pudo cargar el Reporte Z.";
+        setReportData(null);
+        setLoadError(msg);
+        toast.error(msg);
       }
     } catch {
-      toast.error("Error al conectar con la base de datos.");
+      const msg = "Error al conectar con la base de datos.";
+      setReportData(null);
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedDate]);
 
   useEffect(() => {
-    loadReport(selectedDate);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getReporteZAction(selectedDate);
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setReportData(res.data);
+          setLoadError(null);
+        } else {
+          const msg = res.error || "No se pudo cargar el Reporte Z.";
+          setReportData(null);
+          setLoadError(msg);
+          toast.error(msg);
+        }
+      } catch {
+        if (!cancelled) {
+          const msg = "Error al conectar con la base de datos.";
+          setReportData(null);
+          setLoadError(msg);
+          toast.error(msg);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedDate]);
+
+  // Paginación de 15 filas por página
+  const PAGE_SIZE = 15;
+  const [productsPage, setProductsPage] = useState(1);
+  const [salesPage, setSalesPage] = useState(1);
+
+  const selectReportDate = (nextDate: string) => {
+    setProductsPage(1);
+    setSalesPage(1);
+    if (nextDate !== selectedDate) {
+      setIsLoading(true);
+      setLoadError(null);
+      setSelectedDate(nextDate);
+    } else {
+      void loadReport(nextDate);
+    }
+  };
 
   // Accesos rápidos de fecha
   const setQuickDate = (type: "today" | "yesterday") => {
-    setSelectedDate(businessDate(addBusinessDays(new Date(), type === "yesterday" ? -1 : 0)));
+    selectReportDate(businessDate(addBusinessDays(new Date(), type === "yesterday" ? -1 : 0)));
   };
 
   // Filtrado de ventas en la pestaña de detalle
@@ -110,19 +166,6 @@ export default function ReportesPage() {
       return matchQ && matchMethod;
     });
   }, [reportData, salesSearch, salesFilterMethod]);
-
-  // Paginación de 15 filas por página
-  const PAGE_SIZE = 15;
-  const [productsPage, setProductsPage] = useState(1);
-  const [salesPage, setSalesPage] = useState(1);
-
-  useEffect(() => {
-    setSalesPage(1);
-  }, [salesSearch, salesFilterMethod, selectedDate]);
-
-  useEffect(() => {
-    setProductsPage(1);
-  }, [selectedDate]);
 
   const totalProductsPages = Math.ceil((reportData?.topProducts.length || 0) / PAGE_SIZE) || 1;
   const paginatedProducts = useMemo(() => {
@@ -146,35 +189,64 @@ export default function ReportesPage() {
     if (!reportData) return;
     try {
       let csv = "\uFEFF"; // UTF-8 BOM
-      csv += `REPORTE Z Y CIERRE FINANCIERO DIARIO - AURA COMMERCE\n`;
-      csv += `Fecha del Reporte:;${reportData.reportDate}\n`;
-      csv += `Generado el:;${reportData.generatedAt}\n\n`;
+      csv += `${csvCell(`REPORTE Z Y CIERRE FINANCIERO DIARIO - ${STORE_NAME.toUpperCase()}`)}\n`;
+      csv += `Fecha del Reporte:;${csvCell(reportData.reportDate)}\n`;
+      csv += `Generado el:;${csvCell(reportData.generatedAt)}\n\n`;
 
       csv += `RESUMEN FINANCIERO\n`;
-      csv += `Ventas Brutas;${reportData.summary.grossSales.toFixed(2)} Bs\n`;
-      csv += `Devoluciones (-);${reportData.summary.refunds.toFixed(2)} Bs\n`;
-      csv += `Ventas Netas;${reportData.summary.netSales.toFixed(2)} Bs\n`;
-      csv += `Costo Mercaderia Vendida;${reportData.summary.totalCost.toFixed(2)} Bs\n`;
-      csv += `Utilidad Bruta;${reportData.summary.grossProfit.toFixed(2)} Bs\n`;
-      csv += `Margen de Ganancia;${reportData.summary.profitMargin.toFixed(1)}%\n`;
-      csv += `Tickets Emitidos;${reportData.summary.totalSalesCount}\n`;
-      csv += `Ticket Promedio;${reportData.summary.averageTicket.toFixed(2)} Bs\n\n`;
+      csv += `Ventas Brutas;${csvCell(`${reportData.summary.grossSales.toFixed(2)} Bs`)}\n`;
+      csv += `Devoluciones (-);${csvCell(`${reportData.summary.refunds.toFixed(2)} Bs`)}\n`;
+      csv += `Ventas Netas;${csvCell(`${reportData.summary.netSales.toFixed(2)} Bs`)}\n`;
+      csv += `Costo Mercaderia Vendida;${csvCell(`${reportData.summary.totalCost.toFixed(2)} Bs`)}\n`;
+      csv += `Utilidad Bruta;${csvCell(`${reportData.summary.grossProfit.toFixed(2)} Bs`)}\n`;
+      csv += `Margen de Ganancia;${csvCell(`${reportData.summary.profitMargin.toFixed(1)}%`)}\n`;
+      csv += `Tickets Emitidos;${csvCell(reportData.summary.totalSalesCount)}\n`;
+      csv += `Ticket Promedio;${csvCell(`${reportData.summary.averageTicket.toFixed(2)} Bs`)}\n\n`;
 
       csv += `MEDIOS DE PAGO\n`;
-      csv += `Efectivo en Gavetas;${reportData.payments.cash.toFixed(2)} Bs\n`;
-      csv += `QR Simple / Bancario;${reportData.payments.transfer.toFixed(2)} Bs\n\n`;
+      csv += `Efectivo en Gavetas;${csvCell(`${reportData.payments.cash.toFixed(2)} Bs`)}\n`;
+      csv += `Tarjeta;${csvCell(`${reportData.payments.card.toFixed(2)} Bs`)}\n`;
+      csv += `QR Simple / Bancario;${csvCell(`${reportData.payments.transfer.toFixed(2)} Bs`)}\n`;
+      csv += `Otros Medios;${csvCell(`${reportData.payments.other.toFixed(2)} Bs`)}\n\n`;
 
       csv += `ARQUEOS DE CAJA\n`;
       csv += `Turno;Caja;Cajero;Apertura;Cierre;Fondo Inicial;Efectivo Esperado;Conteo Fisico;Diferencia;Estado\n`;
       reportData.shifts.forEach((s) => {
-        csv += `${s.shiftNumber};${s.cashRegisterName};${s.cashierName};${s.openedAt};${s.closedAt || "En curso"};${s.initialCash.toFixed(2)};${s.expectedCash.toFixed(2)};${s.actualCash !== null ? s.actualCash.toFixed(2) : "Pendiente"};${s.difference !== null ? s.difference.toFixed(2) : "Pendiente"};${s.status}\n`;
+        csv += [
+          s.shiftNumber,
+          s.cashRegisterName,
+          s.cashierName,
+          s.openedAt,
+          s.closedAt || "En curso",
+          s.initialCash.toFixed(2),
+          s.expectedCash.toFixed(2),
+          s.actualCash !== null ? s.actualCash.toFixed(2) : "Pendiente",
+          s.difference !== null ? s.difference.toFixed(2) : "Pendiente",
+          s.status,
+        ]
+          .map(csvCell)
+          .join(";") + "\n";
       });
       csv += `\n`;
 
       csv += `DETALLE DE VENTAS DEL DIA\n`;
       csv += `Ticket;Hora;Cliente;Caja/Canal;Operador;Metodo;Total Original;Devuelto;Total Neto;Utilidad;Estado\n`;
       reportData.sales.forEach((s) => {
-        csv += `${s.saleNumber};${s.time};${s.customerName};${s.cashRegisterName};${s.cashierName};${s.paymentMethod};${s.originalTotal.toFixed(2)};${s.refundedAmount.toFixed(2)};${s.netTotal.toFixed(2)};${s.profit.toFixed(2)};${s.status}\n`;
+        csv += [
+          s.saleNumber,
+          s.time,
+          s.customerName,
+          s.cashRegisterName,
+          s.cashierName,
+          s.paymentMethod,
+          s.originalTotal.toFixed(2),
+          s.refundedAmount.toFixed(2),
+          s.netTotal.toFixed(2),
+          s.profit.toFixed(2),
+          s.status,
+        ]
+          .map(csvCell)
+          .join(";") + "\n";
       });
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -185,6 +257,7 @@ export default function ReportesPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success("Archivo CSV generado y descargado exitosamente.");
     } catch {
       toast.error("Error al exportar los datos.");
@@ -241,7 +314,7 @@ export default function ReportesPage() {
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => selectReportDate(e.target.value)}
               className="text-xs font-bold text-admin-text bg-transparent border-none p-0 focus:outline-none cursor-pointer"
             />
           </div>
@@ -281,6 +354,24 @@ export default function ReportesPage() {
           </Button>
         </div>
       </div>
+
+      {loadError && !isLoading && (
+        <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{loadError}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadReport(selectedDate)}
+            className="h-8 rounded-lg text-xs font-bold gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:text-rose-200 cursor-pointer shrink-0"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Reintentar</span>
+          </Button>
+        </div>
+      )}
 
       {/* =========================================================================
           2. TARJETAS BENTO KPI DEL BALANCE DIARIO
@@ -326,7 +417,7 @@ export default function ReportesPage() {
               {formatCurrency(reportData?.summary.grossProfit || 0)}
             </span>
             <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              ({reportData?.summary.profitMargin.toFixed(1)}% margen)
+              ({(reportData?.summary.profitMargin ?? 0).toFixed(1)}% margen)
             </span>
           </div>
           <div className="mt-2 pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-admin-muted">
@@ -353,11 +444,25 @@ export default function ReportesPage() {
               </span>
             </div>
             <div className="flex justify-between items-center text-xs">
+              <span className="text-admin-muted">Tarjeta:</span>
+              <span className="font-semibold text-admin-text">
+                {formatCurrency(reportData?.payments.card || 0)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
               <span className="text-admin-muted">QR / Banco:</span>
               <span className="font-semibold text-admin-brand-text">
                 {formatCurrency(reportData?.payments.transfer || 0)}
               </span>
             </div>
+            {(reportData?.payments.other || 0) > 0 && (
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-admin-muted">Otros Medios:</span>
+                <span className="font-semibold text-admin-text">
+                  {formatCurrency(reportData?.payments.other || 0)}
+                </span>
+              </div>
+            )}
           </div>
           <div className="mt-2 pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-admin-muted">
             <span>{reportData?.summary.totalSalesCount || 0} tickets emitidos</span>
@@ -401,7 +506,7 @@ export default function ReportesPage() {
             >
               {reportData && reportData.cashDrawerSummary.totalDifference !== 0
                 ? `${reportData.cashDrawerSummary.totalDifference > 0 ? "+" : ""}${formatCurrency(reportData.cashDrawerSummary.totalDifference)}`
-                : "0.00 Bs"}
+                : formatCurrency(0)}
             </span>
             <span className="text-[10px] text-admin-muted">
               {(reportData?.cashDrawerSummary.totalDifference || 0) === 0
@@ -809,8 +914,8 @@ export default function ReportesPage() {
                       </td>
                     </tr>
                   ) : (
-                    reportData?.returns.map((r) => (
-                      <tr key={r.saleId} className="hover:bg-slate-50/80 transition-colors">
+                    reportData?.returns.map((r, idx) => (
+                      <tr key={r.id ?? `${r.saleId}-${r.time}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-admin-text">
                           #{r.saleNumber}
                         </td>
@@ -849,7 +954,10 @@ export default function ReportesPage() {
                 <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-admin-muted" />
                 <Input
                   value={salesSearch}
-                  onChange={(e) => setSalesSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSalesSearch(e.target.value);
+                    setSalesPage(1);
+                  }}
                   placeholder="Buscar ticket, cliente o cajero..."
                   className="h-9 pl-8 text-xs rounded-xl bg-admin-raised border-slate-200"
                 />
@@ -858,12 +966,17 @@ export default function ReportesPage() {
               <div className="flex items-center gap-2">
                 <select
                   value={salesFilterMethod}
-                  onChange={(e) => setSalesFilterMethod(e.target.value)}
+                  onChange={(e) => {
+                    setSalesFilterMethod(e.target.value);
+                    setSalesPage(1);
+                  }}
                   className="h-9 px-3 text-xs rounded-xl bg-admin-raised border border-slate-200 font-medium text-slate-700"
                 >
                   <option value="all">Todos los Métodos</option>
                   <option value="cash">Efectivo</option>
+                  <option value="card">Tarjeta</option>
                   <option value="transfer">QR / Transferencia</option>
+                  <option value="other">Otro</option>
                 </select>
               </div>
             </div>
@@ -910,7 +1023,13 @@ export default function ReportesPage() {
                         </td>
                         <td className="py-3 px-4">
                           <span className="capitalize font-semibold text-slate-700">
-                            {s.paymentMethod === "cash" ? "Efectivo" : "QR / Transf."}
+                            {s.paymentMethod === "cash"
+                              ? "Efectivo"
+                              : s.paymentMethod === "card"
+                              ? "Tarjeta"
+                              : s.paymentMethod === "other"
+                              ? "Otro"
+                              : "QR / Transf."}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right whitespace-nowrap">
@@ -989,7 +1108,7 @@ export default function ReportesPage() {
             {/* Encabezado */}
             <div className="text-center pb-3 border-b border-dashed border-slate-300">
               <h2 className="text-base font-semibold tracking-tight uppercase">
-                Aura Commerce
+                {STORE_NAME}
               </h2>
               <p className="text-[10px] text-admin-muted">Punto de Venta Central</p>
               <div className="my-1.5 py-1 px-2 rounded bg-slate-900 text-white font-semibold text-[11px] text-center">
@@ -1040,9 +1159,19 @@ export default function ReportesPage() {
                 <span className="font-bold">{formatCurrency(reportData?.payments.cash || 0)}</span>
               </div>
               <div className="flex justify-between">
+                <span>Tarjeta:</span>
+                <span className="font-bold">{formatCurrency(reportData?.payments.card || 0)}</span>
+              </div>
+              <div className="flex justify-between">
                 <span>QR / Transf.:</span>
                 <span className="font-bold">{formatCurrency(reportData?.payments.transfer || 0)}</span>
               </div>
+              {(reportData?.payments.other || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>Otros:</span>
+                  <span className="font-bold">{formatCurrency(reportData?.payments.other || 0)}</span>
+                </div>
+              )}
             </div>
 
             {/* Arqueo de Cajas Físicas */}
@@ -1091,7 +1220,7 @@ export default function ReportesPage() {
               </div>
               <div className="flex justify-between text-[10px] text-admin-muted">
                 <span>Margen sobre Ventas:</span>
-                <span className="font-bold">{reportData?.summary.profitMargin.toFixed(1)}%</span>
+                <span className="font-bold">{(reportData?.summary.profitMargin ?? 0).toFixed(1)}%</span>
               </div>
             </div>
 

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const saleItemSchema = z.object({
   productId: z.number().int().positive("Debes seleccionar un producto válido"),
-  quantity: z.number().int().positive("La cantidad debe ser al menos 1 unidad"),
+  quantity: z.number().int().positive("La cantidad debe ser al menos 1 unidad").max(2_147_483_647),
   unitPrice: z.number().min(0, "El precio unitario no puede ser negativo").max(99999999.99),
 });
 
@@ -48,16 +48,17 @@ export type SaleFormInput = z.infer<typeof saleFormSchema>;
 
 export const refundSaleSchema = z.object({
   saleId: z.number().int().positive(),
+  requestId: z.uuid().optional(),
   items: z.array(z.object({
     saleItemId: z.number().int().positive(),
-    quantityToRefund: z.number().int().positive(),
+    quantityToRefund: z.number().int().positive().max(2_147_483_647),
   })).min(1).max(200).refine(
     (items) => new Set(items.map((item) => item.saleItemId)).size === items.length,
     "Cada renglón debe aparecer una sola vez en la devolución."
   ),
   reason: z.string().trim().min(1).max(500),
   supervisorPin: z.string().trim().regex(/^[0-9]{4,6}$/),
-  refundMethod: z.enum(["cash", "card", "transfer"]),
+  refundMethod: z.enum(["cash", "card", "transfer", "other"]),
   cashShiftId: z.number().int().positive().optional().nullable(),
 });
 

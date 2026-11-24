@@ -46,6 +46,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
+import { STORE_NAME } from "@/lib/store-config";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 import {
   getPosCatalogAction,
@@ -176,7 +177,8 @@ export default function VentasPage() {
   const [refundQuantities, setRefundQuantities] = useState<Record<number, number>>({});
   const [refundReason, setRefundReason] = useState("");
   const [supervisorPin, setSupervisorPin] = useState("");
-  const [refundMethod, setRefundMethod] = useState<"cash" | "card" | "transfer">("cash");
+  const [refundMethod, setRefundMethod] = useState<"cash" | "card" | "transfer" | "other">("cash");
+  const [refundRequestId, setRefundRequestId] = useState<string | null>(null);
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
 
   // Modal de Vale / Comprobante de Devolución Térmico (80mm)
@@ -185,25 +187,28 @@ export default function VentasPage() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const applyPosContextResult = (result: Awaited<ReturnType<typeof getPosContextAction>>) => {
+    if (!result.success || !result.currentOperator) {
+      setContextError(result.error || "No se pudo verificar tu turno de caja.");
+      return;
+    }
+
+    setContextError("");
+    setCurrentOperator(result.currentOperator);
+    setShiftPendingReview(result.shiftPendingReview);
+    setActiveShift(result.userShift);
+    if (result.userShift || result.shiftPendingReview) setAdministrativeSelected(false);
+    try {
+      setPendingCheckout(readPendingCheckout(result.currentOperator.id));
+    } catch {
+      toast.error("No se pudo leer el cobro pendiente de este navegador.");
+    }
+    setCatalogRevision((revision) => revision + 1);
+  };
+
   const loadPosData = async () => {
     try {
-      const result = await getPosContextAction();
-      if (!result.success || !result.currentOperator) {
-        setContextError(result.error || "No se pudo verificar tu turno de caja.");
-        return;
-      }
-
-      setContextError("");
-      setCurrentOperator(result.currentOperator);
-      setShiftPendingReview(result.shiftPendingReview);
-      setActiveShift(result.userShift);
-      if (result.userShift || result.shiftPendingReview) setAdministrativeSelected(false);
-      try {
-        setPendingCheckout(readPendingCheckout(result.currentOperator.id));
-      } catch {
-        toast.error("No se pudo leer el cobro pendiente de este navegador.");
-      }
-      setCatalogRevision(revision => revision + 1);
+      applyPosContextResult(await getPosContextAction());
     } catch {
       setContextError("No se pudo verificar tu turno de caja.");
     } finally {
@@ -230,15 +235,31 @@ export default function VentasPage() {
   };
 
   useEffect(() => {
-    loadPosData();
+    let cancelled = false;
+    getPosContextAction()
+      .then((result) => {
+        if (!cancelled) applyPosContextResult(result);
+      })
+      .catch(() => {
+        if (!cancelled) setContextError("No se pudo verificar tu turno de caja.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingContext(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!canSell || activeTab !== "pos") return;
     let current = true;
-    setIsLoadingCatalog(true);
-    getPosCatalogAction()
-      .then(result => {
+    Promise.resolve()
+      .then(() => {
+        if (current) setIsLoadingCatalog(true);
+        return getPosCatalogAction();
+      })
+      .then((result) => {
         if (!current) return;
         if (result.success) {
           setCatalog(result.data);
@@ -247,15 +268,43 @@ export default function VentasPage() {
           toast.error(result.error || "No se pudo cargar el catálogo.");
         }
       })
-      .catch(() => { if (current) toast.error("No se pudo cargar el catálogo."); })
-      .finally(() => { if (current) setIsLoadingCatalog(false); });
-    return () => { current = false; };
+      .catch(() => {
+        if (current) toast.error("No se pudo cargar el catálogo.");
+      })
+      .finally(() => {
+        if (current) setIsLoadingCatalog(false);
+      });
+    return () => {
+      current = false;
+    };
   }, [canSell, activeTab, catalogRevision]);
 
   useEffect(() => {
-    if (activeTab === "history") {
-      loadHistoryData();
-    }
+    if (activeTab !== "history") return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => {
+        if (!cancelled) setIsLoadingHistory(true);
+        return getSalesHistoryAction();
+      })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success) {
+          setSalesHistory(res.data);
+          setHistoryKpis(res.kpis);
+        } else {
+          toast.error(res.error || "Error al obtener historial de ventas.");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Error al cargar ventas pasadas.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingHistory(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab]);
 
   // Cálculos de Totales
@@ -548,8 +597,8 @@ export default function VentasPage() {
     setRefundQuantities(initialQty);
     setRefundReason("");
     setSupervisorPin("");
-    const method = sale.paymentMethod === "cash" ? "cash" : "transfer";
-    setRefundMethod(method);
+    setRefundMethod(sale.paymentMethod);
+    setRefundRequestId(crypto.randomUUID());
     setRefundModalOpen(true);
   };
 
@@ -561,8 +610,13 @@ export default function VentasPage() {
     });
   };
 
+  const refundProrationMap = useMemo(() => {
+    if (!saleToRefund) return null;
+    return refundUnitAmounts(saleToRefund.items, saleToRefund.totalAmount);
+  }, [saleToRefund]);
+
   const refundCalculation = useMemo(() => {
-    if (!saleToRefund) return { totalAmount: 0, itemsCount: 0, itemsToRefund: [] };
+    if (!saleToRefund || !refundProrationMap) return { totalAmount: 0, itemsCount: 0, itemsToRefund: [] };
     let totalAmount = 0;
     let itemsCount = 0;
     const itemsToRefund: {
@@ -574,11 +628,10 @@ export default function VentasPage() {
       sku: string;
     }[] = [];
 
-    const amounts = refundUnitAmounts(saleToRefund.items, saleToRefund.totalAmount);
     saleToRefund.items.forEach((item) => {
       const qty = refundQuantities[item.id] || 0;
       if (qty > 0) {
-        totalAmount += amounts.get(item.id)!(item.returnedQuantity, qty) / 100;
+        totalAmount += refundProrationMap.get(item.id)!(item.returnedQuantity, qty) / 100;
         itemsCount += qty;
         itemsToRefund.push({
           saleItemId: item.id,
@@ -592,7 +645,7 @@ export default function VentasPage() {
     });
 
     return { totalAmount, itemsCount, itemsToRefund };
-  }, [saleToRefund, refundQuantities]);
+  }, [saleToRefund, refundQuantities, refundProrationMap]);
 
   const handleProcessRefund = async () => {
     if (!saleToRefund) return;
@@ -609,10 +662,14 @@ export default function VentasPage() {
       return;
     }
 
+    const requestIdToSend = refundRequestId || crypto.randomUUID();
+    if (!refundRequestId) setRefundRequestId(requestIdToSend);
+
     setIsSubmittingRefund(true);
     try {
       const res = await refundSaleItemsAction({
         saleId: saleToRefund.id,
+        requestId: requestIdToSend,
         items: refundCalculation.itemsToRefund.map((i) => ({
           saleItemId: i.saleItemId,
           quantityToRefund: i.quantityToRefund,
@@ -631,13 +688,14 @@ export default function VentasPage() {
       toast.success(
         `Devolución #${res.data.refundNumber} autorizada con éxito. Mercancía reingresada al inventario.`
       );
+      setRefundRequestId(null);
       setRefundReceiptData(res.data);
       setRefundModalOpen(false);
       setRefundReceiptOpen(true);
       loadHistoryData();
       loadPosData();
-    } catch (err: any) {
-      toast.error(err.message || "Error al procesar la devolución.");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al procesar la devolución.");
     } finally {
       setIsSubmittingRefund(false);
     }
@@ -672,17 +730,14 @@ export default function VentasPage() {
   const [historyPage, setHistoryPage] = useState(1);
   const HISTORY_PAGE_SIZE = 15;
 
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [historySearch, historyMethodFilter, historyStatusFilter, historyOriginFilter]);
-
   const totalHistoryPages = Math.ceil(filteredSalesHistory.length / HISTORY_PAGE_SIZE) || 1;
+  const activeHistoryPage = Math.min(historyPage, totalHistoryPages);
   const paginatedSalesHistory = useMemo(() => {
     return filteredSalesHistory.slice(
-      (historyPage - 1) * HISTORY_PAGE_SIZE,
-      historyPage * HISTORY_PAGE_SIZE
+      (activeHistoryPage - 1) * HISTORY_PAGE_SIZE,
+      activeHistoryPage * HISTORY_PAGE_SIZE
     );
-  }, [filteredSalesHistory, historyPage]);
+  }, [filteredSalesHistory, activeHistoryPage]);
 
   // Botones de billetes rápidos para agilizar cobro en efectivo
   const quickBills = useMemo(() => {
@@ -1180,7 +1235,10 @@ export default function VentasPage() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 value={historySearch}
-                onChange={(e) => setHistorySearch(e.target.value)}
+                onChange={(e) => {
+                  setHistorySearch(e.target.value);
+                  setHistoryPage(1);
+                }}
                 placeholder="Buscar por N° Ticket, cliente u operador..."
                 className="pl-9 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border"
               />
@@ -1190,7 +1248,10 @@ export default function VentasPage() {
               {/* Filtro por Origen de la Venta (Caja Mostrador vs Venta Administrativa) */}
               <select
                 value={historyOriginFilter}
-                onChange={(e) => setHistoryOriginFilter(e.target.value as any)}
+                onChange={(e) => {
+                  setHistoryOriginFilter(e.target.value as "all" | "pos" | "administrative");
+                  setHistoryPage(1);
+                }}
                 className="h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-admin-secondary font-medium cursor-pointer"
               >
                 <option value="all">Todos los orígenes</option>
@@ -1201,18 +1262,26 @@ export default function VentasPage() {
               {/* Filtro por método */}
               <select
                 value={historyMethodFilter}
-                onChange={(e) => setHistoryMethodFilter(e.target.value)}
+                onChange={(e) => {
+                  setHistoryMethodFilter(e.target.value);
+                  setHistoryPage(1);
+                }}
                 className="h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-admin-secondary font-medium cursor-pointer"
               >
                 <option value="all">Todos los Métodos</option>
                 <option value="cash">Efectivo</option>
+                <option value="card">Tarjeta</option>
                 <option value="transfer">QR / Transferencia</option>
+                <option value="other">Otro</option>
               </select>
 
               {/* Filtro por estado */}
               <select
                 value={historyStatusFilter}
-                onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setHistoryStatusFilter(e.target.value);
+                  setHistoryPage(1);
+                }}
                 className="h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-admin-secondary font-medium cursor-pointer"
               >
                 <option value="all">Todos los Estados</option>
@@ -1385,7 +1454,8 @@ export default function VentasPage() {
                               return (
                                 <>
                                   {/* Devolución de productos (con PIN supervisor) */}
-                                  {(sale.status === "completed" || sale.status === "refunded") && (
+                                  {(sale.status === "completed" || sale.status === "refunded") &&
+                                    sale.items.some((it) => it.returnableQuantity > 0) && (
                                     <Button
                                       variant="outline"
                                       size="sm"
@@ -1427,7 +1497,7 @@ export default function VentasPage() {
             </div>
 
             <PaginationBar
-              currentPage={historyPage}
+              currentPage={activeHistoryPage}
               totalPages={totalHistoryPages}
               totalItems={filteredSalesHistory.length}
               pageSize={HISTORY_PAGE_SIZE}
@@ -1443,11 +1513,11 @@ export default function VentasPage() {
           ========================================================================= */}
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
         <DialogContent className="sm:max-w-xs p-6 rounded-xl bg-white text-slate-900 border border-slate-200 print:p-0 print:border-none print:shadow-none">
-          <div id="thermal-receipt" className="space-y-3 font-mono text-xs">
+          <div id={receiptOpen ? "thermal-receipt" : undefined} className="space-y-3 font-mono text-xs">
             {/* Encabezado del ticket */}
             <div className="text-center pb-3 border-b border-dashed border-slate-300">
               <h2 className="text-base font-semibold tracking-tight uppercase">
-                Aura Commerce
+                {STORE_NAME}
               </h2>
               <p className="text-[10px] text-slate-500 mt-0.5">
                 Punto de Venta Central
@@ -1592,10 +1662,10 @@ export default function VentasPage() {
           ========================================================================= */}
       <Dialog open={reprintModalOpen} onOpenChange={setReprintModalOpen}>
         <DialogContent className="sm:max-w-xs p-6 rounded-xl bg-white text-slate-900 border border-slate-200 print:p-0 print:border-none print:shadow-none">
-          <div id="thermal-receipt" className="space-y-3 font-mono text-xs">
+          <div id={!receiptOpen && reprintModalOpen ? "thermal-receipt" : undefined} className="space-y-3 font-mono text-xs">
             <div className="text-center pb-3 border-b border-dashed border-slate-300">
               <h2 className="text-base font-semibold tracking-tight uppercase">
-                Aura Commerce
+                {STORE_NAME}
               </h2>
               <div className="mt-1 text-[11px] font-bold text-slate-800">
                 Ticket: <span>#{ticketToReprint?.saleNumber}</span>
@@ -1665,7 +1735,11 @@ export default function VentasPage() {
                 <span className="font-bold uppercase text-slate-700">
                   {ticketToReprint?.paymentMethod === "cash"
                     ? "Efectivo"
-                    : "QR / Transf."}
+                    : ticketToReprint?.paymentMethod === "card"
+                    ? "Tarjeta"
+                    : ticketToReprint?.paymentMethod === "transfer"
+                    ? "QR / Transf."
+                    : "Otro"}
                 </span>
               </div>
               {ticketToReprint?.notes && (
@@ -1836,7 +1910,10 @@ export default function VentasPage() {
                   const maxReturnable =
                     item.returnableQuantity ?? Math.max(0, item.quantity - returned);
                   const selectedQty = refundQuantities[item.id] || 0;
-                  const itemRefundSubtotal = selectedQty * item.unitPrice;
+                  const itemRefundSubtotal =
+                    selectedQty > 0 && refundProrationMap
+                      ? (refundProrationMap.get(item.id)?.(returned, selectedQty) ?? 0) / 100
+                      : 0;
 
                   return (
                     <div
@@ -1924,11 +2001,15 @@ export default function VentasPage() {
                 </label>
                 <select
                   value={refundMethod}
-                  onChange={(e) => setRefundMethod(e.target.value as any)}
+                  onChange={(e) =>
+                    setRefundMethod(e.target.value as "cash" | "card" | "transfer" | "other")
+                  }
                   className="w-full h-9 text-xs rounded-xl border border-admin-card-border bg-admin-card-bg px-3 font-medium text-admin-text focus:outline-none focus:ring-2 focus:ring-admin-brand"
                 >
                   <option value="cash">Efectivo (Resta de la Gaveta de Caja)</option>
+                  <option value="card">Tarjeta</option>
                   <option value="transfer">QR / Transferencia Bancaria</option>
+                  <option value="other">Otro medio</option>
                 </select>
                 <p className="text-[10px] text-slate-400">
                   {refundMethod === "cash"
@@ -2034,11 +2115,11 @@ export default function VentasPage() {
           ========================================================================= */}
       <Dialog open={refundReceiptOpen} onOpenChange={setRefundReceiptOpen}>
         <DialogContent className="sm:max-w-xs p-6 rounded-xl bg-white text-slate-900 border border-slate-200 print:p-0 print:border-none print:shadow-none">
-          <div id="thermal-refund-receipt" className="space-y-3 font-mono text-xs">
+          <div id={refundReceiptOpen ? "thermal-refund-receipt" : undefined} className="space-y-3 font-mono text-xs">
             {/* Encabezado */}
             <div className="text-center pb-3 border-b border-dashed border-slate-300">
               <h2 className="text-base font-semibold tracking-tight uppercase">
-                Aura Commerce
+                {STORE_NAME}
               </h2>
               <div className="my-1 py-1 px-2 rounded bg-amber-50 text-amber-800 font-semibold text-[11px] text-center border border-amber-200">
                 *** VALE DE DEVOLUCIÓN ***
@@ -2101,7 +2182,11 @@ export default function VentasPage() {
                 <span className="font-bold uppercase text-slate-700">
                   {refundReceiptData?.refundMethod === "cash"
                     ? "Efectivo (Gaveta)"
-                    : "Transferencia / QR"}
+                    : refundReceiptData?.refundMethod === "card"
+                    ? "Tarjeta"
+                    : refundReceiptData?.refundMethod === "transfer"
+                    ? "Transferencia / QR"
+                    : "Otro"}
                 </span>
               </div>
             </div>

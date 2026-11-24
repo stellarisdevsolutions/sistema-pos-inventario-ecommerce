@@ -7,6 +7,7 @@ export interface SessionUser {
   email: string;
   role: UserRole;
   phone?: string | null;
+  sessionVersion?: number;
 }
 
 export const SESSION_COOKIE_NAME = "aura_session";
@@ -34,13 +35,16 @@ export async function encodeSessionToken(user: SessionUser): Promise<string> {
     v: 1,
     id: user.id,
     role: user.role,
+    ...(user.sessionVersion !== undefined ? { sv: user.sessionVersion } : {}),
     exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
   })).toString("base64url");
   const signature = await crypto.subtle.sign("HMAC", await signingKey(), Buffer.from(payload));
   return `${payload}.${Buffer.from(signature).toString("hex")}`;
 }
 
-export async function decodeSessionToken(token: string): Promise<Pick<SessionUser, "id" | "role"> | null> {
+export async function decodeSessionToken(
+  token: string
+): Promise<(Pick<SessionUser, "id" | "role"> & { sessionVersion?: number }) | null> {
   if (typeof token !== "string" || token.length > 512) return null;
 
   const [payload, signature, extra] = token.split(".");
@@ -61,10 +65,13 @@ export async function decodeSessionToken(token: string): Promise<Pick<SessionUse
     if (
       claims.v !== 1 || !Number.isSafeInteger(claims.id) || claims.id <= 0 ||
       !USER_ROLES.includes(claims.role) ||
+      (claims.sv !== undefined && (!Number.isSafeInteger(claims.sv) || claims.sv < 1)) ||
       !Number.isSafeInteger(claims.exp) || claims.exp <= Math.floor(Date.now() / 1000)
     ) return null;
 
-    return { id: claims.id, role: claims.role };
+    return claims.sv !== undefined
+      ? { id: claims.id, role: claims.role, sessionVersion: claims.sv }
+      : { id: claims.id, role: claims.role };
   } catch {
     return null;
   }

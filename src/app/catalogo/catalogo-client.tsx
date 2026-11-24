@@ -1,591 +1,697 @@
 "use client";
 
-import { useState, useMemo, Suspense } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter, StoreTrustBadges } from "@/components/layout/store-footer";
 import { StoreMobileNav } from "@/components/layout/store-mobile-nav";
 import { StoreCartSheet } from "@/components/layout/store-cart-sheet";
+import { StoreProductCard } from "@/components/store/product-card";
 import { StoreProduct, StoreCategory } from "@/app/actions/store";
 import { useCart } from "@/context/cart-context";
-import { formatCurrency } from "@/lib/currency";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  Search,
-  SlidersHorizontal,
-  Heart,
-  ShoppingCart,
-  ArrowUpDown,
-  Filter,
-  X,
-  Check,
-  ChevronRight,
-  RotateCcw,
-  Package,
-  Layers,
-} from "lucide-react";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Check, ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
 
 interface CatalogoClientProps {
   initialProducts: StoreProduct[];
   categories: StoreCategory[];
 }
 
+type PriceRangeKey = "all" | "under-250" | "250-1000" | "over-1000";
+
+const PRICE_RANGES: { key: PriceRangeKey; label: string }[] = [
+  { key: "all", label: "Cualquier precio" },
+  { key: "under-250", label: "Hasta Bs 250" },
+  { key: "250-1000", label: "Bs 250 a Bs 1.000" },
+  { key: "over-1000", label: "Más de Bs 1.000" },
+];
+
+type SortKey = "recent" | "price-asc" | "price-desc" | "name-asc";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "recent", label: "Más recientes" },
+  { key: "price-asc", label: "Menor precio" },
+  { key: "price-desc", label: "Mayor precio" },
+  { key: "name-asc", label: "Nombre A - Z" },
+];
+
 export function CatalogoClient({ initialProducts, categories }: CatalogoClientProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const initialCatSlug = searchParams.get("cat") || "todos";
-  const initialQuery = searchParams.get("q") || "";
+  const selectedCategory = searchParams.get("cat") || "todos";
+  const urlQuery = searchParams.get("q") || "";
   const onlyFavs = searchParams.get("favs") === "true";
 
-  const [selectedCategory, setSelectedCategory] = useState<string>(initialCatSlug);
-  const [searchQuery, setSearchQuery] = useState(initialQuery);
+  const [localSearch, setLocalSearch] = useState<{ base: string; value: string }>({
+    base: urlQuery,
+    value: urlQuery,
+  });
+  const searchQuery = localSearch.base === urlQuery ? localSearch.value : urlQuery;
+  const setSearchQuery = (nextVal: string) =>
+    setLocalSearch({ base: urlQuery, value: nextVal });
+
   const [onlyInStock, setOnlyInStock] = useState(false);
-  const [sortBy, setSortBy] = useState<"recent" | "price-asc" | "price-desc" | "name-asc">("recent");
+  const [priceRange, setPriceRange] = useState<PriceRangeKey>("all");
+  const [selectedBrand, setSelectedBrand] = useState<string>("all");
+  const [selectedColorHex, setSelectedColorHex] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"recent" | "price-asc" | "price-desc" | "name-asc">(
+    "recent"
+  );
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  const { addToCart, toggleFavorite, isFavorite, favorites } = useCart();
+  const { favorites } = useCart();
 
-  // Filtrado 100% con datos reales de la base de datos
+  // Marcas y colores reales extraídos dinámicamente de los productos publicados
+  const availableBrands = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of initialProducts) {
+      if (p.brand?.slug && p.brand.name) {
+        map.set(p.brand.slug, p.brand.name);
+      }
+    }
+    return [...map.entries()]
+      .map(([slug, name]) => ({ slug, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [initialProducts]);
+
+  const availableColors = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of initialProducts) {
+      for (const sw of p.colorSwatches ?? []) {
+        const key = sw.hex.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, sw.name);
+        }
+      }
+    }
+    return [...map.entries()].map(([hex, name]) => ({ hex, name }));
+  }, [initialProducts]);
+
+  const updateUrlParam = (updates: {
+    cat?: string | null;
+    favs?: boolean | null;
+    q?: string | null;
+  }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (updates.cat !== undefined) {
+      if (!updates.cat || updates.cat === "todos") params.delete("cat");
+      else params.set("cat", updates.cat);
+    }
+    if (updates.favs !== undefined) {
+      if (updates.favs) params.set("favs", "true");
+      else params.delete("favs");
+    }
+    if (updates.q !== undefined) {
+      if (updates.q && updates.q.trim()) params.set("q", updates.q.trim());
+      else params.delete("q");
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/catalogo?${qs}` : "/catalogo", { scroll: false });
+  };
+
+  const setSelectedCategory = (cat: string) => {
+    updateUrlParam({ cat });
+  };
+
+  const clearSearch = () => {
+    setLocalSearch({ base: "", value: "" });
+    if (urlQuery) {
+      updateUrlParam({ q: null });
+    }
+  };
+
   const filteredProducts = useMemo(() => {
     return initialProducts
       .filter((p) => {
-        // Filtro favoritos
         if (onlyFavs && !favorites.includes(p.id)) return false;
 
-        // Filtro de categoría real por slug o ID
         if (selectedCategory !== "todos") {
           const matchSlug = p.category?.slug === selectedCategory;
-          const matchName = p.category?.name.toLowerCase() === selectedCategory.toLowerCase();
+          const matchName =
+            p.category?.name.toLowerCase() === selectedCategory.toLowerCase();
           if (!matchSlug && !matchName) return false;
         }
 
-        // Filtro de solo stock disponible
-        if (onlyInStock && p.stock <= 0) return false;
+        if (selectedBrand !== "all" && p.brand?.slug !== selectedBrand) return false;
 
-        // Búsqueda en tiempo real por nombre o descripción
+        if (selectedColorHex) {
+          const hasColor = (p.colorSwatches ?? []).some(
+            (sw) => sw.hex.toLowerCase() === selectedColorHex.toLowerCase()
+          );
+          if (!hasColor) return false;
+        }
+
+        const effectiveStock = p.totalStock ?? p.stock;
+        if (onlyInStock && effectiveStock <= 0) return false;
+
+        const effectivePrice = p.minPrice ?? p.price;
+        if (priceRange === "under-250" && effectivePrice > 250) return false;
+        if (
+          priceRange === "250-1000" &&
+          (effectivePrice < 250 || effectivePrice > 1000)
+        ) {
+          return false;
+        }
+        if (priceRange === "over-1000" && effectivePrice <= 1000) return false;
+
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase().trim();
           const inName = p.name.toLowerCase().includes(q);
           const inDesc = p.description ? p.description.toLowerCase().includes(q) : false;
           const inSku = p.sku ? p.sku.toLowerCase().includes(q) : false;
-          if (!inName && !inDesc && !inSku) return false;
+          const inVariant = p.variant ? p.variant.toLowerCase().includes(q) : false;
+          const inBrand = p.brand?.name ? p.brand.name.toLowerCase().includes(q) : false;
+          if (!inName && !inDesc && !inSku && !inVariant && !inBrand) return false;
         }
 
         return true;
       })
       .sort((a, b) => {
-        if (sortBy === "price-asc") return a.price - b.price;
-        if (sortBy === "price-desc") return b.price - a.price;
+        const priceA = a.minPrice ?? a.price;
+        const priceB = b.minPrice ?? b.price;
+        if (sortBy === "price-asc") return priceA - priceB;
+        if (sortBy === "price-desc") return priceB - priceA;
         if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-        return b.id - a.id; // Más recientes por ID descendente
+        return b.id - a.id;
       });
-  }, [initialProducts, selectedCategory, onlyInStock, searchQuery, sortBy, onlyFavs, favorites]);
+  }, [
+    initialProducts,
+    selectedCategory,
+    selectedBrand,
+    selectedColorHex,
+    onlyInStock,
+    priceRange,
+    searchQuery,
+    sortBy,
+    onlyFavs,
+    favorites,
+  ]);
 
   const handleResetFilters = () => {
-    setSelectedCategory("todos");
+    setLocalSearch({ base: "", value: "" });
     setOnlyInStock(false);
-    setSearchQuery("");
+    setPriceRange("all");
+    setSelectedBrand("all");
+    setSelectedColorHex(null);
+    router.replace("/catalogo", { scroll: false });
   };
 
   const selectedCategoryName = useMemo(() => {
-    if (selectedCategory === "todos") return "Todos los Productos";
+    if (selectedCategory === "todos") return "Catálogo completo";
     const found = categories.find(
-      (c) => c.slug === selectedCategory || c.name.toLowerCase() === selectedCategory.toLowerCase()
+      (c) =>
+        c.slug === selectedCategory ||
+        c.name.toLowerCase() === selectedCategory.toLowerCase()
     );
     return found ? found.name : selectedCategory;
   }, [selectedCategory, categories]);
 
-  return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-900 font-sans flex flex-col pb-20 md:pb-0 selection:bg-store-primary selection:text-white">
-      <StoreHeader />
+  const activeFilterCount =
+    (selectedCategory !== "todos" ? 1 : 0) +
+    (onlyInStock ? 1 : 0) +
+    (priceRange !== "all" ? 1 : 0) +
+    (selectedBrand !== "all" ? 1 : 0) +
+    (selectedColorHex ? 1 : 0) +
+    (searchQuery.trim() ? 1 : 0) +
+    (onlyFavs ? 1 : 0);
 
-      {/* Migas de Pan / Breadcrumbs & Banner Superior */}
-      <div className="bg-slate-950 text-white py-8 px-4 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto space-y-2.5">
-          <nav aria-label="Migas de pan" className="flex items-center gap-2 text-xs text-slate-400">
-            <Link href="/" className="hover:text-white transition-colors">
-              Inicio
-            </Link>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-            <Link href="/catalogo" className="text-store-primary font-bold hover:underline">
-              Catálogo
-            </Link>
-            {selectedCategory !== "todos" && (
-              <>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-                <span className="text-slate-200 font-semibold">{selectedCategoryName}</span>
-              </>
-            )}
-          </nav>
+  const hasActiveFilters = activeFilterCount > 0;
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-4xl font-black uppercase tracking-tight text-white">
-                {onlyFavs ? "Mis Productos Favoritos" : selectedCategoryName}
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-400 max-w-2xl mt-1 font-normal">
-                Explora nuestro catálogo en tiempo real con stock real, facturación legal y envíos en Bolivia.
-              </p>
-            </div>
+  const renderSidebarSections = (onAfterSelect?: () => void) => (
+    <div className="divide-y divide-store-border">
+      {/* Disponibilidad */}
+      <div className="pb-5">
+        <button
+          type="button"
+          onClick={() => setOnlyInStock(!onlyInStock)}
+          className="w-full flex items-center justify-between py-1 text-sm font-medium text-store-ink cursor-pointer"
+        >
+          <span>Solo en stock</span>
+          <span
+            aria-hidden="true"
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+              onlyInStock ? "bg-store-primary" : "bg-store-border"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-store-bg transition-transform duration-150 ease-out ${
+                onlyInStock ? "translate-x-4" : "translate-x-0.5"
+              }`}
+            />
+          </span>
+        </button>
+      </div>
 
-            <Badge
-              variant="secondary"
-              className="text-xs font-bold w-fit bg-slate-800 text-slate-200 border border-slate-700 py-1.5 px-3 rounded-xl"
+      {/* Rango de precio */}
+      <div className="py-5 space-y-2.5">
+        <span className="text-xs font-semibold text-store-ink block">
+          Rango de precio
+        </span>
+        <div className="space-y-1">
+          {PRICE_RANGES.map((range) => {
+            const active = priceRange === range.key;
+            return (
+              <button
+                key={range.key}
+                type="button"
+                onClick={() => {
+                  setPriceRange(range.key);
+                  onAfterSelect?.();
+                }}
+                className={`w-full flex items-center justify-between py-1.5 text-xs transition-colors cursor-pointer ${
+                  active
+                    ? "text-store-ink font-semibold"
+                    : "text-store-muted hover:text-store-ink"
+                }`}
+              >
+                <span>{range.label}</span>
+                {active && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-store-primary shrink-0" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Marcas (solo si existen en los productos reales) */}
+      {availableBrands.length > 0 && (
+        <div className="py-5 space-y-2.5">
+          <span className="text-xs font-semibold text-store-ink block">Marcas</span>
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedBrand("all");
+                onAfterSelect?.();
+              }}
+              className={`w-full flex items-center justify-between py-1.5 text-xs transition-colors cursor-pointer ${
+                selectedBrand === "all"
+                  ? "text-store-ink font-semibold"
+                  : "text-store-muted hover:text-store-ink"
+              }`}
             >
-              {filteredProducts.length} {filteredProducts.length === 1 ? "artículo disponible" : "artículos disponibles"}
-            </Badge>
+              <span>Todas las marcas</span>
+              {selectedBrand === "all" && (
+                <span className="h-1.5 w-1.5 rounded-full bg-store-primary shrink-0" />
+              )}
+            </button>
+
+            {availableBrands.map((b) => {
+              const active = selectedBrand === b.slug;
+              return (
+                <button
+                  key={b.slug}
+                  type="button"
+                  onClick={() => {
+                    setSelectedBrand(b.slug);
+                    onAfterSelect?.();
+                  }}
+                  className={`w-full flex items-center justify-between py-1.5 text-xs transition-colors cursor-pointer ${
+                    active
+                      ? "text-store-ink font-semibold"
+                      : "text-store-muted hover:text-store-ink"
+                  }`}
+                >
+                  <span className="truncate pr-2">{b.name}</span>
+                  {active && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-store-primary shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Colores (solo si existen variantes de color reales) */}
+      {availableColors.length > 0 && (
+        <div className="py-5 space-y-3">
+          <span className="text-xs font-semibold text-store-ink block">Color</span>
+          <div className="flex flex-wrap gap-2.5">
+            {availableColors.map((c) => {
+              const active = selectedColorHex?.toLowerCase() === c.hex.toLowerCase();
+              return (
+                <button
+                  key={c.hex}
+                  type="button"
+                  title={c.name}
+                  aria-label={`Filtrar por color ${c.name}`}
+                  aria-pressed={active}
+                  onClick={() => {
+                    setSelectedColorHex(active ? null : c.hex);
+                    onAfterSelect?.();
+                  }}
+                  className={`h-7 w-7 rounded-full border border-black/15 transition-transform duration-150 cursor-pointer ${
+                    active ? "ring-2 ring-offset-2 ring-store-ink scale-105" : "hover:scale-105"
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {hasActiveFilters && (
+        <div className="pt-5">
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            className="text-xs font-medium text-store-primary hover:underline cursor-pointer"
+          >
+            Restablecer filtros
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-store-bg text-store-ink font-store flex flex-col pb-20 md:pb-0 selection:bg-store-primary selection:text-store-on-primary">
+      <StoreHeader categories={categories} activeCategory={selectedCategory} />
+
+      {/* Cabecera editorial limpia */}
+      <div className="max-w-[1320px] w-full mx-auto px-4 sm:px-6 pt-7 pb-6">
+        <nav aria-label="Migas de pan" className="flex items-center gap-1.5 text-xs text-store-muted mb-3">
+          <Link href="/" className="hover:text-store-ink transition-colors">
+            Inicio
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <Link href="/catalogo" className="hover:text-store-ink transition-colors">
+            Catálogo
+          </Link>
+          {selectedCategory !== "todos" && (
+            <>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-store-ink font-medium">{selectedCategoryName}</span>
+            </>
+          )}
+        </nav>
+
+        <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-store-ink">
+            {onlyFavs ? "Mis favoritos" : selectedCategoryName}
+          </h1>
+          <p className="text-sm text-store-muted tabular-nums">
+            {filteredProducts.length}{" "}
+            {filteredProducts.length === 1 ? "producto" : "productos"}
+          </p>
+        </div>
+
+        {/* Cinta horizontal de categorías */}
+        {categories.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-5">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory("todos")}
+              className={`rounded-lg px-4 py-2 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                selectedCategory === "todos"
+                  ? "bg-store-primary text-store-on-primary"
+                  : "bg-store-surface text-store-ink hover:bg-store-surface-hover"
+              }`}
+            >
+              Todas <span className="opacity-75 ml-1 tabular-nums">{initialProducts.length}</span>
+            </button>
+
+            {categories.map((cat) => {
+              const isSelected =
+                selectedCategory === cat.slug ||
+                selectedCategory.toLowerCase() === cat.name.toLowerCase();
+
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat.slug)}
+                  className={`rounded-lg px-4 py-2 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    isSelected
+                      ? "bg-store-primary text-store-on-primary"
+                      : "bg-store-surface text-store-ink hover:bg-store-surface-hover"
+                  }`}
+                >
+                  {cat.name}{" "}
+                  <span className="opacity-75 ml-1 tabular-nums">{cat.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Barra de herramientas */}
+      <div className="bg-store-bg border-y border-store-border">
+        <div className="max-w-[1320px] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen(true)}
+              className="lg:hidden inline-flex items-center gap-2 bg-store-surface hover:bg-store-surface-hover px-3.5 h-9 rounded-lg text-xs font-semibold text-store-ink transition-colors cursor-pointer shrink-0"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>Filtros</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-store-primary text-store-on-primary text-[10px] font-semibold h-4 min-w-4 px-1 rounded-full flex items-center justify-center tabular-nums">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-store-muted pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar en el catálogo..."
+                aria-label="Buscar en el catálogo"
+                className="w-full h-9 rounded-lg bg-store-surface border border-transparent focus:bg-store-bg focus:border-store-ink focus:outline-hidden pl-9 pr-8 text-xs text-store-ink placeholder:text-store-muted transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  aria-label="Limpiar búsqueda"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-store-muted hover:text-store-ink cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <label htmlFor="catalog-sort" className="text-xs text-store-muted hidden sm:inline">
+              Ordenar por
+            </label>
+            <div className="relative inline-flex items-center">
+              <select
+                id="catalog-sort"
+                value={sortBy}
+                onChange={(e) =>
+                  setSortBy(
+                    e.target.value as "recent" | "price-asc" | "price-desc" | "name-asc"
+                  )
+                }
+                className="appearance-none bg-store-surface border border-store-border/60 hover:border-store-border text-store-ink text-xs font-medium rounded-lg h-9 pl-3.5 pr-8 focus:outline-hidden focus:border-store-ink cursor-pointer"
+              >
+                <option value="recent">Más recientes</option>
+                <option value="price-asc">Menor precio</option>
+                <option value="price-desc">Mayor precio</option>
+                <option value="name-asc">Nombre A - Z</option>
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="h-3.5 w-3.5 text-store-muted pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Contenido Principal con Sidebar de Filtros y Grid */}
-      <div className="max-w-7xl w-full mx-auto p-4 md:py-8 flex-1">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* SIDEBAR DE FILTROS (Desktop) */}
-          <aside className="hidden lg:block lg:col-span-3 bg-white rounded-3xl p-6 border border-slate-200/90 shadow-2xs space-y-6 sticky top-28">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="h-4 w-4 text-store-primary" />
-                <h2 className="font-black text-sm uppercase tracking-wider text-slate-900">
-                  Filtros del Catálogo
-                </h2>
-              </div>
+      {/* Layout principal de 2 columnas */}
+      <div className="max-w-[1320px] w-full mx-auto px-4 sm:px-6 py-8 flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+          {/* Sidebar desktop */}
+          <aside className="hidden lg:block lg:col-span-3 sticky top-40">
+            {renderSidebarSections()}
+          </aside>
 
-              {(selectedCategory !== "todos" || onlyInStock || searchQuery) && (
-                <button
-                  type="button"
-                  onClick={handleResetFilters}
-                  className="text-[11px] font-bold text-slate-400 hover:text-store-primary transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  <span>Restablecer</span>
-                </button>
-              )}
-            </div>
-
-            {/* Búsqueda dentro del catálogo */}
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase text-slate-700 tracking-wider block">
-                Búsqueda Rápida
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar por nombre o SKU..."
-                  className="pl-8 text-xs h-9 rounded-xl bg-slate-50 border-slate-200 focus:bg-white"
-                />
+          {/* Zona de productos */}
+          <main className="lg:col-span-9 space-y-6">
+            {hasActiveFilters && (
+              <div className="flex flex-wrap items-center gap-2">
+                {onlyFavs && (
+                  <button
+                    type="button"
+                    onClick={() => updateUrlParam({ favs: null })}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
+                  >
+                    <span>Favoritos</span>
+                    <X className="h-3 w-3 text-store-muted" />
+                  </button>
+                )}
+                {selectedCategory !== "todos" && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory("todos")}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
+                  >
+                    <span>{selectedCategoryName}</span>
+                    <X className="h-3 w-3 text-store-muted" />
+                  </button>
+                )}
+                {priceRange !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setPriceRange("all")}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
+                  >
+                    <span>{PRICE_RANGES.find((r) => r.key === priceRange)?.label}</span>
+                    <X className="h-3 w-3 text-store-muted" />
+                  </button>
+                )}
+                {selectedBrand !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBrand("all")}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
+                  >
+                    <span>
+                      {availableBrands.find((b) => b.slug === selectedBrand)?.name ??
+                        selectedBrand}
+                    </span>
+                    <X className="h-3 w-3 text-store-muted" />
+                  </button>
+                )}
+                {selectedColorHex && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedColorHex(null)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full border border-black/15"
+                      style={{ backgroundColor: selectedColorHex }}
+                    />
+                    <span>
+                      {availableColors.find(
+                        (c) => c.hex.toLowerCase() === selectedColorHex.toLowerCase()
+                      )?.name ?? "Color"}
+                    </span>
+                    <X className="h-3 w-3 text-store-muted" />
+                  </button>
+                )}
+                {onlyInStock && (
+                  <button
+                    type="button"
+                    onClick={() => setOnlyInStock(false)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
+                  >
+                    <span>Solo en stock</span>
+                    <X className="h-3 w-3 text-store-muted" />
+                  </button>
+                )}
                 {searchQuery && (
                   <button
                     type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    title="Limpiar búsqueda"
+                    onClick={clearSearch}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <span>&ldquo;{searchQuery}&rdquo;</span>
+                    <X className="h-3 w-3 text-store-muted" />
                   </button>
                 )}
-              </div>
-            </div>
 
-            {/* Filtro por Categorías Reales de la BD */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-black uppercase text-slate-700 tracking-wider block">
-                  Categorías
-                </label>
-                <Layers className="h-3.5 w-3.5 text-slate-400" />
-              </div>
-
-              <div className="space-y-1">
-                {/* Opción Todos */}
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory("todos")}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    selectedCategory === "todos"
-                      ? "bg-store-primary text-white shadow-xs"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <span>Todas las Categorías</span>
-                  <span
-                    className={`text-[10px] ${
-                      selectedCategory === "todos" ? "text-white/80" : "text-slate-400"
-                    }`}
-                  >
-                    {initialProducts.length}
-                  </span>
-                </button>
-
-                {/* Categorías Reales */}
-                {categories.map((cat) => {
-                  const isSelected =
-                    selectedCategory === cat.slug ||
-                    selectedCategory.toLowerCase() === cat.name.toLowerCase();
-
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat.slug)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isSelected
-                          ? "bg-store-primary text-white shadow-xs"
-                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                      }`}
-                    >
-                      <span className="truncate pr-2">{cat.name}</span>
-                      <span
-                        className={`text-[10px] shrink-0 ${
-                          isSelected ? "text-white/80" : "text-slate-400"
-                        }`}
-                      >
-                        {cat.count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Filtro de Disponibilidad Real */}
-            <div className="pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setOnlyInStock(!onlyInStock)}
-                className={`w-full flex items-center justify-between p-3 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
-                  onlyInStock
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-xs"
-                    : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Package className={`h-4 w-4 ${onlyInStock ? "text-emerald-600" : "text-slate-400"}`} />
-                  <span>Solo con Stock</span>
-                </div>
-                <span
-                  className={`h-4 w-4 rounded-md border flex items-center justify-center ${
-                    onlyInStock ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-300 bg-white"
-                  }`}
-                >
-                  {onlyInStock && <Check className="h-2.5 w-2.5 stroke-[3]" />}
-                </span>
-              </button>
-            </div>
-          </aside>
-
-          {/* LISTA Y CONTENIDO DEL CATÁLOGO */}
-          <main className="lg:col-span-9 space-y-5">
-            {/* Barra Superior de Orden y Conteo */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="flex items-center justify-between sm:justify-start gap-3">
-                <span className="text-xs font-black text-slate-900">
-                  {filteredProducts.length}{" "}
-                  {filteredProducts.length === 1 ? "Producto encontrado" : "Productos encontrados"}
-                </span>
-
-                {/* Botón Filtros Mobile */}
-                <button
-                  type="button"
-                  onClick={() => setMobileFiltersOpen(true)}
-                  className="lg:hidden flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
-                >
-                  <Filter className="h-3.5 w-3.5" />
-                  <span>Filtros</span>
-                </button>
-              </div>
-
-              {/* Selector de Ordenamiento Real */}
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Ordenar por:</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-store-primary cursor-pointer"
-                >
-                  <option value="recent">Más Recientes</option>
-                  <option value="price-asc">Precio: Menor a Mayor</option>
-                  <option value="price-desc">Precio: Mayor a Menor</option>
-                  <option value="name-asc">Nombre (A - Z)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Badges de filtros activos */}
-            {(selectedCategory !== "todos" || onlyInStock || searchQuery) && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-bold text-slate-400 uppercase">Filtros activos:</span>
-                {selectedCategory !== "todos" && (
-                  <Badge variant="secondary" className="gap-1 bg-white border border-slate-200 text-slate-700 rounded-lg">
-                    Categoría: {selectedCategoryName}
-                    <X className="h-3 w-3 cursor-pointer hover:text-rose-500" onClick={() => setSelectedCategory("todos")} />
-                  </Badge>
-                )}
-                {onlyInStock && (
-                  <Badge className="gap-1 bg-emerald-600 text-white rounded-lg">
-                    Solo con Stock
-                    <X className="h-3 w-3 cursor-pointer hover:text-white" onClick={() => setOnlyInStock(false)} />
-                  </Badge>
-                )}
-                {searchQuery && (
-                  <Badge variant="secondary" className="gap-1 bg-white border border-slate-200 text-slate-700 rounded-lg">
-                    &quot;{searchQuery}&quot;
-                    <X className="h-3 w-3 cursor-pointer hover:text-rose-500" onClick={() => setSearchQuery("")} />
-                  </Badge>
-                )}
                 <button
                   type="button"
                   onClick={handleResetFilters}
-                  className="text-xs text-rose-600 hover:underline font-bold ml-1 cursor-pointer"
+                  className="text-xs font-medium text-store-primary hover:underline ml-1 cursor-pointer"
                 >
-                  Borrar filtros
+                  Limpiar todo
                 </button>
               </div>
             )}
 
-            {/* GRILLA DE PRODUCTOS REALES */}
             {filteredProducts.length === 0 ? (
-              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/90 shadow-2xs space-y-4">
-                <div className="h-16 w-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                  <Search className="h-8 w-8" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="font-black text-lg text-slate-900">No encontramos productos</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Intenta ajustar tus criterios de búsqueda o restablecer los filtros para ver todos los artículos.
-                  </p>
-                </div>
+              <div className="bg-store-surface rounded-2xl p-12 text-center space-y-4">
+                <p className="font-semibold text-base text-store-ink">
+                  No encontramos productos con esos criterios
+                </p>
+                <p className="text-xs text-store-muted max-w-sm mx-auto leading-relaxed">
+                  Prueba limpiando la búsqueda o seleccionando otra categoría para ver el inventario disponible.
+                </p>
                 <Button
                   onClick={handleResetFilters}
-                  className="bg-store-primary hover:bg-store-primary-hover text-white text-xs font-bold rounded-xl"
+                  className="bg-store-primary hover:bg-store-primary-hover text-store-on-primary text-xs font-semibold rounded-lg px-6 h-10 cursor-pointer"
                 >
-                  Ver Todo el Catálogo
+                  Ver todo el catálogo
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4">
-                {filteredProducts.map((p) => {
-                  const isFav = isFavorite(p.id);
-                  const inStock = p.stock > 0;
-
-                  return (
-                    <article
-                      key={p.id}
-                      className="card bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between group relative"
-                    >
-                      {/* Estado de Stock en esquina superior izquierda */}
-                      <span
-                        className={`absolute top-3 left-3 text-[10px] font-black px-2 py-0.5 rounded-md z-10 shadow-2xs border ${
-                          inStock
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/60"
-                            : "bg-slate-100 text-slate-500 border-slate-200"
-                        }`}
-                      >
-                        {inStock ? `En stock (${p.stock})` : "Agotado"}
-                      </span>
-
-                      {/* Botón Favorito */}
-                      <button
-                        type="button"
-                        onClick={() => toggleFavorite(p.id)}
-                        className={`absolute top-3 right-3 h-8 w-8 rounded-full flex items-center justify-center transition-colors z-10 cursor-pointer ${
-                          isFav
-                            ? "bg-rose-50 text-rose-500"
-                            : "bg-slate-100/90 text-slate-400 hover:text-slate-600"
-                        }`}
-                        title="Guardar en favoritos"
-                        aria-label="Guardar en favoritos"
-                      >
-                        <Heart className={`h-4 w-4 ${isFav ? "fill-rose-500" : ""}`} />
-                      </button>
-
-                      {/* Enlace Imagen Producto */}
-                      <Link
-                        href={`/producto/${p.slug}`}
-                        className="h-40 sm:h-48 w-full rounded-xl bg-slate-50 flex items-center justify-center p-3 mb-2 overflow-hidden block"
-                      >
-                        <img
-                          src={p.imageUrl}
-                          alt={p.name}
-                          className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                      </Link>
-
-                      {/* Información Real del Producto (SIN estrellas ni reseñas inventadas) */}
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">
-                          {p.category?.name || "Tecnología"}
-                        </div>
-
-                        <Link href={`/producto/${p.slug}`} className="block">
-                          <h3 className="font-extrabold text-xs text-slate-900 line-clamp-2 leading-snug hover:text-store-primary transition-colors">
-                            {p.name}
-                          </h3>
-                        </Link>
-
-                        <div className="pt-2 flex items-baseline justify-between border-t border-slate-100">
-                          <div>
-                            <span className="text-sm sm:text-base font-black text-slate-900">
-                              {formatCurrency(p.price)}
-                            </span>
-                          </div>
-
-                          {/* Botón Carrito */}
-                          <button
-                            type="button"
-                            disabled={!inStock}
-                            onClick={() => {
-                              if (inStock) {
-                                if (p.modelCode) { window.location.assign("/producto/" + p.slug); return; }
-                                addToCart({
-                                  id: p.id,
-                                  name: p.name,
-                                  price: p.price,
-                                  image: p.imageUrl,
-                                  quantity: 1,
-                                });
-                              }
-                            }}
-                            className={`h-8 w-8 rounded-xl flex items-center justify-center transition-all shadow-xs active:scale-95 ${
-                              inStock
-                                ? "bg-slate-950 hover:bg-store-primary text-white group-hover:bg-store-primary cursor-pointer"
-                                : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                            }`}
-                            title={inStock ? "Añadir al carrito" : "Producto sin stock"}
-                            aria-label={`Añadir ${p.name} al carrito`}
-                          >
-                            <ShoppingCart className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-5">
+                {filteredProducts.map((p) => (
+                  <StoreProductCard key={p.id} product={p} />
+                ))}
               </div>
             )}
           </main>
         </div>
       </div>
 
-      {/* MODAL MÓVIL DE FILTROS */}
+      {/* Drawer móvil de filtros */}
       {mobileFiltersOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end lg:hidden">
-          <div className="w-full max-w-xs bg-white h-full p-6 flex flex-col justify-between overflow-y-auto custom-scrollbar">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <h3 className="font-black text-sm uppercase tracking-wider text-slate-900">
-                  Filtros de Catálogo
-                </h3>
+        <div className="fixed inset-0 z-50 bg-black/40 flex justify-end lg:hidden">
+          <div className="w-full max-w-xs bg-store-bg h-full p-5 flex flex-col justify-between overflow-y-auto border-l border-store-border">
+            <div>
+              <div className="flex items-center justify-between pb-3.5 mb-5 border-b border-store-border">
+                <h3 className="font-semibold text-sm text-store-ink">Filtros</h3>
                 <button
                   type="button"
                   onClick={() => setMobileFiltersOpen(false)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
+                  aria-label="Cerrar filtros"
+                  className="h-8 w-8 rounded-full text-store-muted hover:text-store-ink hover:bg-store-surface flex items-center justify-center"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-
-              {/* Categorías en Móvil */}
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase text-slate-700 tracking-wider block">
-                  Categorías
-                </label>
-                <div className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedCategory("todos");
-                      setMobileFiltersOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold ${
-                      selectedCategory === "todos"
-                        ? "bg-store-primary text-white"
-                        : "text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    <span>Todas las Categorías</span>
-                    <span>{initialProducts.length}</span>
-                  </button>
-
-                  {categories.map((cat) => {
-                    const isSelected =
-                      selectedCategory === cat.slug ||
-                      selectedCategory.toLowerCase() === cat.name.toLowerCase();
-
-                    return (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedCategory(cat.slug);
-                          setMobileFiltersOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold ${
-                          isSelected
-                            ? "bg-store-primary text-white"
-                            : "text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span className="truncate pr-2">{cat.name}</span>
-                        <span>{cat.count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Solo en stock */}
-              <div className="pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setOnlyInStock(!onlyInStock)}
-                  className={`w-full flex items-center justify-between p-3 rounded-2xl border text-xs font-bold ${
-                    onlyInStock
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                      : "bg-slate-50 border-slate-200 text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4" />
-                    <span>Solo con Stock</span>
-                  </div>
-                  {onlyInStock && <Check className="h-4 w-4 text-emerald-600 stroke-[3]" />}
-                </button>
-              </div>
+              {renderSidebarSections(() => setMobileFiltersOpen(false))}
             </div>
 
-            <div className="pt-6 border-t border-slate-100 space-y-2">
+            <div className="pt-4 mt-6 border-t border-store-border space-y-2">
               <Button
                 onClick={() => setMobileFiltersOpen(false)}
-                className="w-full bg-store-primary text-white font-bold text-xs rounded-xl"
+                className="w-full bg-store-primary hover:bg-store-primary-hover text-store-on-primary font-medium text-xs rounded-full h-11 cursor-pointer"
               >
-                Ver {filteredProducts.length} Resultados
+                Mostrar {filteredProducts.length}{" "}
+                {filteredProducts.length === 1 ? "producto" : "productos"}
               </Button>
-              <Button
-                variant="outline"
-                onClick={handleResetFilters}
-                className="w-full text-slate-600 text-xs font-bold rounded-xl"
-              >
-                Restablecer Filtros
-              </Button>
+              {hasActiveFilters && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleResetFilters();
+                    setMobileFiltersOpen(false);
+                  }}
+                  className="w-full text-store-ink border-store-border text-xs font-medium rounded-full h-10 cursor-pointer"
+                >
+                  Restablecer filtros
+                </Button>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Cart Drawer */}
       <StoreCartSheet />
-
-      {/* Mobile Nav Bar */}
       <StoreMobileNav />
-
-      {/* Footer */}
       <StoreTrustBadges />
       <StoreFooter />
     </div>

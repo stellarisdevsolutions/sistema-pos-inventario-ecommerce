@@ -1,0 +1,40 @@
+/* ============================================================================
+   SISTEMA DE COLOR DE LA TIENDA PÚBLICA — REGLA 60 / 30 / 10 (Estilo GadgetHub)
+   Edita solo las 4 variables maestras para cambiar el tema de toda la tienda.
+   Ejemplos de --store-accent:
+     - Naranja GadgetHub (actual): #f96302
+     - Rojo comercio: #c81e1e
+     - Azul tech: #2563eb
+     - Verde bosque: #15803d
+   ============================================================================ */
+:root {
+  /* 1. LAS 4 VARIABLES MAESTRAS EDITABLES */
+  --store-base: #ffffff;          /* 60% Dominante: fondo blanco limpio y tarjetas */
+  --store-surface-base: #f4f6f9;  /* 30% Secundario claro: categorías, filtros, badges */
+  --store-ink-base: #0f1d32;      /* 30% Estructura navy: header, footer, titulares */
+  --store-accent: #f96302;        /* 10% Acento: CTA, círculo hero, banner, iconos */
+
+  /* 2. TOKENS DERIVADOS AUTOMÁTICOS (no editar) */
+  --store-bg: var(--store-base);
+  --store-surface: var(--store-surface-base);
+  --store-surface-hover: color-mix(in srgb, var(--store-surface-base) 92%, var(--store-ink-base));
+  --store-border: color-mix(in srgb, var(--store-ink-base) 12%, var(--store-base));
+  --store-ink: var(--store-ink-base);
+  --store-ink-deep: color-mix(in srgb, var(--store-ink-base) 82%, #000000);
+  --store-ink-soft: color-mix(in srgb, var(--store-ink-base) 90%, #ffffff);
+  --store-on-ink: #ffffff;
+  --store-on-ink-muted: color-mix(in srgb, #ffffff 68%, var(--store-ink-base));
+  --store-muted: color-mix(in srgb, var(--store-ink-base) 58%, var(--store-base));
+
+  --store-primary: var(--store-accent);
+  --store-primary-hover: color-mix(in srgb, var(--store-accent) 86%, #000000);
+  --store-primary-deep: color-mix(in srgb, var(--store-accent) 68%, var(--store-ink-base));
+  --store-primary-tint: color-mix(in srgb, var(--store-accent) 7%, var(--store-base));
+  --store-primary-light: var(--store-primary-tint);
+  --store-on-primary: #ffffff;
+
+  /* 3. TOKENS DE ESTADO FIJO */
+  --store-success: #16a34a;
+  --store-warning: #d97706;
+  --store-danger: #dc2626;
+}

@@ -161,7 +161,7 @@ export default function ComprasPage() {
 
   // Filtros y búsqueda
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "received" | "cancelled">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "received" | "pending" | "cancelled">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -174,19 +174,24 @@ export default function ComprasPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
 
+  const applyPurchasesResult = (res: Awaited<ReturnType<typeof getPurchasesAction>>) => {
+    if (res.success) {
+      setPurchases(res.data);
+      setSelectedPurchase((previous) =>
+        previous ? res.data.find((purchase) => purchase.id === previous.id) ?? null : null
+      );
+      setKpis(res.kpis);
+    } else {
+      toast.error("Error al cargar compras", { description: res.error });
+    }
+  };
+
   // Cargar lista de compras desde PostgreSQL
   const loadPurchases = async () => {
     try {
       setIsLoading(true);
-      const res = await getPurchasesAction();
-      if (res.success) {
-        setPurchases(res.data);
-        setSelectedPurchase(previous => previous ? res.data.find(purchase => purchase.id === previous.id) ?? null : null);
-        setKpis(res.kpis);
-      } else {
-        toast.error("Error al cargar compras", { description: res.error });
-      }
-    } catch (err: any) {
+      applyPurchasesResult(await getPurchasesAction());
+    } catch (err: unknown) {
       console.error(err);
       toast.error("Error de conexión al cargar compras");
     } finally {
@@ -195,7 +200,21 @@ export default function ComprasPage() {
   };
 
   useEffect(() => {
-    loadPurchases();
+    let cancelled = false;
+    getPurchasesAction()
+      .then((res) => {
+        if (!cancelled) applyPurchasesResult(res);
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        if (!cancelled) toast.error("Error de conexión al cargar compras");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleRefresh = async () => {
@@ -224,7 +243,7 @@ export default function ComprasPage() {
       } else {
         toast.error("No se pudo anular", { description: res.error });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast.error("Error de conexión al anular la orden");
     } finally {
@@ -393,6 +412,21 @@ export default function ComprasPage() {
             <button
               type="button"
               onClick={() => {
+                setStatusFilter("pending");
+                setCurrentPage(1);
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-lg transition-all cursor-pointer",
+                statusFilter === "pending"
+                  ? "bg-admin-card-bg text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-admin-secondary hover:text-slate-900 dark:hover:text-white"
+              )}
+            >
+              Pendientes ({purchases.filter((p) => p.status === "pending").length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 setStatusFilter("cancelled");
                 setCurrentPage(1);
               }}
@@ -534,13 +568,19 @@ export default function ComprasPage() {
                             <span
                               className={cn(
                                 "h-2 w-2 rounded-full",
-                                p.status === "received" ? "bg-emerald-500" : "bg-rose-500"
+                                p.status === "received"
+                                  ? "bg-emerald-500"
+                                  : p.status === "pending"
+                                  ? "bg-amber-500"
+                                  : "bg-rose-500"
                               )}
                             />
                             <span
                               className={
                                 p.status === "received"
                                   ? "text-emerald-700 dark:text-emerald-400"
+                                  : p.status === "pending"
+                                  ? "text-amber-700 dark:text-amber-400"
                                   : "text-rose-700 dark:text-rose-400"
                               }
                             >
@@ -633,13 +673,19 @@ export default function ComprasPage() {
                     <span
                       className={cn(
                         "h-2 w-2 rounded-full",
-                        selectedPurchase.status === "received" ? "bg-emerald-500" : "bg-rose-500"
+                        selectedPurchase.status === "received"
+                          ? "bg-emerald-500"
+                          : selectedPurchase.status === "pending"
+                          ? "bg-amber-500"
+                          : "bg-rose-500"
                       )}
                     />
                     <span
                       className={
                         selectedPurchase.status === "received"
                           ? "text-emerald-700 dark:text-emerald-400"
+                          : selectedPurchase.status === "pending"
+                          ? "text-amber-700 dark:text-amber-400"
                           : "text-rose-700 dark:text-rose-400"
                       }
                     >
@@ -681,8 +727,14 @@ export default function ComprasPage() {
 
                 <div className="p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                   <span className="text-[10px] text-slate-400 font-medium block">Medio de Pago</span>
-                  <span className="text-sm font-bold text-admin-text capitalize mt-0.5 block">
-                    {selectedPurchase.paymentMethod}
+                  <span className="text-sm font-bold text-admin-text mt-0.5 block">
+                    {selectedPurchase.paymentMethod === "transfer"
+                      ? "QR / Transferencia"
+                      : selectedPurchase.paymentMethod === "cash"
+                      ? "Efectivo"
+                      : selectedPurchase.paymentMethod === "card"
+                      ? "Tarjeta"
+                      : "Otro medio"}
                   </span>
                 </div>
               </div>
@@ -714,8 +766,14 @@ export default function ComprasPage() {
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500">Medio de Pago:</span>
-                  <span className="font-medium text-admin-secondary capitalize">
-                    {selectedPurchase.paymentMethod}
+                  <span className="font-medium text-admin-secondary">
+                    {selectedPurchase.paymentMethod === "transfer"
+                      ? "QR / Transferencia"
+                      : selectedPurchase.paymentMethod === "cash"
+                      ? "Efectivo"
+                      : selectedPurchase.paymentMethod === "card"
+                      ? "Tarjeta"
+                      : "Otro medio"}
                   </span>
                 </div>
               </div>

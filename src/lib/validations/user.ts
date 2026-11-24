@@ -15,10 +15,9 @@ export const userFormSchema = z.object({
     .toLowerCase(),
   password: z
     .string()
-    .min(6, "La contraseña debe tener al menos 6 caracteres")
-    .max(100, "La contraseña no debe superar los 100 caracteres")
-    .optional()
-    .or(z.literal("")),
+    .trim()
+    .min(8, "La contraseña debe tener al menos 8 caracteres")
+    .max(128, "La contraseña no debe superar los 128 caracteres"),
   pin: z
     .string()
     .trim()
@@ -39,7 +38,18 @@ export const userFormSchema = z.object({
 
 export type UserFormInput = z.infer<typeof userFormSchema>;
 
-export const userUpdateSchema = userFormSchema.omit({ role: true, isActive: true }).partial().extend({
-  role: userRoleEnumSchema.optional(),
-  isActive: z.boolean().optional(),
-});
+export const userUpdateSchema = userFormSchema
+  .omit({ role: true, isActive: true, password: true })
+  .partial()
+  .extend({
+    password: z
+      .string()
+      .trim()
+      .min(8, "La contraseña debe tener al menos 8 caracteres")
+      .max(128, "La contraseña no debe superar los 128 caracteres")
+      .optional()
+      .or(z.literal("")),
+    role: userRoleEnumSchema.optional(),
+    isActive: z.boolean().optional(),
+    clearPin: z.boolean().optional(),
+  });

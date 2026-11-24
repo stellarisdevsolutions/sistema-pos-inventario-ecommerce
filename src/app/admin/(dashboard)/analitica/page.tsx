@@ -2,7 +2,7 @@
 
 import { addBusinessDays, businessDate } from "@/lib/business-date";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,13 @@ import {
   Building2,
   SlidersHorizontal,
   BarChart2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
+import { csvCell } from "@/lib/sanitize";
+import { STORE_NAME } from "@/lib/store-config";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 import {
   getPeriodAnalyticsAction,
@@ -49,31 +52,86 @@ export default function AnaliticaPage() {
 
   const [data, setData] = useState<PeriodAnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"evolucion" | "productos" | "cajeros" | "ventas">("evolucion");
 
   // Buscador para pestaña de ventas
   const [salesSearch, setSalesSearch] = useState("");
   const [salesFilterMethod, setSalesFilterMethod] = useState("all");
 
-  const loadAnalytics = async (start: string, end: string) => {
+  // Paginación (15 filas por página)
+  const PAGE_SIZE = 15;
+  const [productsPage, setProductsPage] = useState(1);
+  const [salesPage, setSalesPage] = useState(1);
+
+  const loadAnalytics = useCallback(async (start: string, end: string) => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await getPeriodAnalyticsAction(start, end);
       if (res.success && res.data) {
         setData(res.data);
       } else {
-        toast.error(res.error || "No se pudo cargar la analítica.");
+        const msg = res.error || "No se pudo cargar la analítica.";
+        setData(null);
+        setLoadError(msg);
+        toast.error(msg);
       }
     } catch {
-      toast.error("Error al conectar con la base de datos.");
+      const msg = "Error al conectar con la base de datos.";
+      setData(null);
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadAnalytics(startDate, endDate);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getPeriodAnalyticsAction(startDate, endDate);
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setData(res.data);
+          setLoadError(null);
+        } else {
+          const msg = res.error || "No se pudo cargar la analítica.";
+          setData(null);
+          setLoadError(msg);
+          toast.error(msg);
+        }
+      } catch {
+        if (!cancelled) {
+          const msg = "Error al conectar con la base de datos.";
+          setData(null);
+          setLoadError(msg);
+          toast.error(msg);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [startDate, endDate]);
+
+  const applyDateRange = (s: string, e: string) => {
+    setProductsPage(1);
+    setSalesPage(1);
+    if (s !== startDate || e !== endDate) {
+      setIsLoading(true);
+      setLoadError(null);
+      setStartDate(s);
+      setEndDate(e);
+    } else {
+      void loadAnalytics(s, e);
+    }
+  };
 
   // Manejo de botones de acceso rápido
   const handlePresetChange = (type: PresetType) => {
@@ -93,8 +151,7 @@ export default function AnaliticaPage() {
       return; // custom
     }
 
-    setStartDate(s);
-    setEndDate(e);
+    applyDateRange(s, e);
   };
 
   // Filtrado de ventas en la tabla
@@ -114,19 +171,6 @@ export default function AnaliticaPage() {
       return matchQ && matchMethod;
     });
   }, [data, salesSearch, salesFilterMethod]);
-
-  // Paginación (15 filas por página)
-  const PAGE_SIZE = 15;
-  const [productsPage, setProductsPage] = useState(1);
-  const [salesPage, setSalesPage] = useState(1);
-
-  useEffect(() => {
-    setSalesPage(1);
-  }, [salesSearch, salesFilterMethod, startDate, endDate]);
-
-  useEffect(() => {
-    setProductsPage(1);
-  }, [startDate, endDate]);
 
   const totalProductsPages = Math.ceil((data?.topProducts.length || 0) / PAGE_SIZE) || 1;
   const paginatedProducts = useMemo(() => {
@@ -150,41 +194,77 @@ export default function AnaliticaPage() {
     if (!data) return;
     try {
       let csv = "\uFEFF"; // UTF-8 BOM
-      csv += `REPORTE FINANCIERO CONSOLIDADO (${data.startDate} al ${data.endDate})\n\n`;
+      csv += `${csvCell(`REPORTE FINANCIERO CONSOLIDADO - ${STORE_NAME.toUpperCase()} (${data.startDate} al ${data.endDate})`)}\n\n`;
 
       csv += `RESUMEN EJECUTIVO\n`;
-      csv += `Ventas Brutas;${data.summary.grossSales.toFixed(2)} Bs\n`;
-      csv += `Devoluciones (-);${data.summary.refunds.toFixed(2)} Bs\n`;
-      csv += `Ventas Netas;${data.summary.netSales.toFixed(2)} Bs\n`;
-      csv += `Costo Mercaderia Vendida;${data.summary.totalCost.toFixed(2)} Bs\n`;
-      csv += `Ganancia Bruta Real;${data.summary.grossProfit.toFixed(2)} Bs\n`;
-      csv += `Margen de Ganancia;${data.summary.profitMargin.toFixed(1)}%\n`;
-      csv += `Tickets Emitidos;${data.summary.totalSalesCount}\n`;
-      csv += `Ticket Promedio;${data.summary.averageTicket.toFixed(2)} Bs\n`;
-      csv += `Venta Diaria Promedio;${data.summary.averageDailySales.toFixed(2)} Bs\n\n`;
+      csv += `Ventas Brutas;${csvCell(`${data.summary.grossSales.toFixed(2)} Bs`)}\n`;
+      csv += `Devoluciones (-);${csvCell(`${data.summary.refunds.toFixed(2)} Bs`)}\n`;
+      csv += `Ventas Netas;${csvCell(`${data.summary.netSales.toFixed(2)} Bs`)}\n`;
+      csv += `Costo Mercaderia Vendida;${csvCell(`${data.summary.totalCost.toFixed(2)} Bs`)}\n`;
+      csv += `Ganancia Bruta Real;${csvCell(`${data.summary.grossProfit.toFixed(2)} Bs`)}\n`;
+      csv += `Margen de Ganancia;${csvCell(`${data.summary.profitMargin.toFixed(1)}%`)}\n`;
+      csv += `Tickets Emitidos;${csvCell(data.summary.totalSalesCount)}\n`;
+      csv += `Ticket Promedio;${csvCell(`${data.summary.averageTicket.toFixed(2)} Bs`)}\n`;
+      csv += `Venta Diaria Promedio;${csvCell(`${data.summary.averageDailySales.toFixed(2)} Bs`)}\n\n`;
 
       csv += `MEDIOS DE PAGO\n`;
-      csv += `Efectivo en Gaveta;${data.payments.cashAmount.toFixed(2)} Bs (${data.payments.cashCount} tickets)\n`;
-      csv += `QR Simple / Bancario;${data.payments.transferAmount.toFixed(2)} Bs (${data.payments.transferCount} tickets)\n\n`;
+      csv += `Efectivo en Gaveta;${csvCell(`${data.payments.cashAmount.toFixed(2)} Bs (${data.payments.cashCount} tickets)`)}\n`;
+      csv += `Tarjeta;${csvCell(`${data.payments.cardAmount.toFixed(2)} Bs (${data.payments.cardCount} tickets)`)}\n`;
+      csv += `QR Simple / Bancario;${csvCell(`${data.payments.transferAmount.toFixed(2)} Bs (${data.payments.transferCount} tickets)`)}\n`;
+      csv += `Otros Medios;${csvCell(`${data.payments.otherAmount.toFixed(2)} Bs (${data.payments.otherCount} tickets)`)}\n\n`;
 
       csv += `EVOLUCION DIARIA\n`;
       csv += `Fecha;Dia;Venta Neta;Costo;Ganancia;Tickets\n`;
       data.dailyTrend.forEach((d) => {
-        csv += `${d.date};${d.dayLabel};${d.netSales.toFixed(2)};${d.cost.toFixed(2)};${d.profit.toFixed(2)};${d.salesCount}\n`;
+        csv += [
+          d.date,
+          d.dayLabel,
+          d.netSales.toFixed(2),
+          d.cost.toFixed(2),
+          d.profit.toFixed(2),
+          d.salesCount,
+        ]
+          .map(csvCell)
+          .join(";") + "\n";
       });
       csv += `\n`;
 
       csv += `TOP PRODUCTOS DEL PERIODO\n`;
       csv += `Producto;SKU;Categoria;Vendidas;Devueltas;Netas;Recaudacion;Costo;Ganancia;Margen %\n`;
       data.topProducts.forEach((p) => {
-        csv += `${p.productName};${p.sku || "N/A"};${p.categoryName};${p.unitsSold};${p.unitsReturned};${p.netUnits};${p.revenue.toFixed(2)};${p.cost.toFixed(2)};${p.profit.toFixed(2)};${p.marginPercent.toFixed(1)}%\n`;
+        csv += [
+          p.productName,
+          p.sku || "N/A",
+          p.categoryName,
+          p.unitsSold,
+          p.unitsReturned,
+          p.netUnits,
+          p.revenue.toFixed(2),
+          p.cost.toFixed(2),
+          p.profit.toFixed(2),
+          `${p.marginPercent.toFixed(1)}%`,
+        ]
+          .map(csvCell)
+          .join(";") + "\n";
       });
       csv += `\n`;
 
       csv += `DETALLE DE VENTAS\n`;
       csv += `Ticket;Fecha;Hora;Cliente;Cajero;Metodo;Total Neto;Ganancia;Estado\n`;
       data.sales.forEach((s) => {
-        csv += `${s.saleNumber};${s.date};${s.time};${s.customerName};${s.cashierName};${s.paymentMethod};${s.netTotal.toFixed(2)};${s.profit.toFixed(2)};${s.status}\n`;
+        csv += [
+          s.saleNumber,
+          s.date,
+          s.time,
+          s.customerName,
+          s.cashierName,
+          s.paymentMethod,
+          s.netTotal.toFixed(2),
+          s.profit.toFixed(2),
+          s.status,
+        ]
+          .map(csvCell)
+          .join(";") + "\n";
       });
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -195,6 +275,7 @@ export default function AnaliticaPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success("Archivo Excel/CSV exportado exitosamente.");
     } catch {
       toast.error("Error al exportar los datos.");
@@ -267,7 +348,7 @@ export default function AnaliticaPage() {
               value={startDate}
               onChange={(e) => {
                 setPreset("custom");
-                setStartDate(e.target.value);
+                applyDateRange(e.target.value, endDate);
               }}
               className="font-bold text-admin-text bg-transparent border-none p-0 focus:outline-none cursor-pointer"
             />
@@ -277,7 +358,7 @@ export default function AnaliticaPage() {
               value={endDate}
               onChange={(e) => {
                 setPreset("custom");
-                setEndDate(e.target.value);
+                applyDateRange(startDate, e.target.value);
               }}
               className="font-bold text-admin-text bg-transparent border-none p-0 focus:outline-none cursor-pointer"
             />
@@ -306,6 +387,24 @@ export default function AnaliticaPage() {
           </Button>
         </div>
       </div>
+
+      {loadError && !isLoading && (
+        <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{loadError}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadAnalytics(startDate, endDate)}
+            className="h-8 rounded-lg text-xs font-bold gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:text-rose-200 cursor-pointer shrink-0"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Reintentar</span>
+          </Button>
+        </div>
+      )}
 
       {/* =========================================================================
           2. TARJETAS BENTO KPI DEL PERIODO CONSOLIDADO
@@ -349,7 +448,7 @@ export default function AnaliticaPage() {
               {formatCurrency(data?.summary.grossProfit || 0)}
             </span>
             <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              ({data?.summary.profitMargin.toFixed(1)}% margen)
+              ({(data?.summary.profitMargin ?? 0).toFixed(1)}% margen)
             </span>
           </div>
           <div className="mt-2 pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-admin-muted">
@@ -400,11 +499,25 @@ export default function AnaliticaPage() {
               </span>
             </div>
             <div className="flex justify-between">
+              <span className="text-admin-muted">Tarjeta ({data?.payments.cardCount || 0}):</span>
+              <span className="font-semibold text-admin-text">
+                {formatCurrency(data?.payments.cardAmount || 0)}
+              </span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-admin-muted">QR Bancario ({data?.payments.transferCount || 0}):</span>
               <span className="font-semibold text-admin-brand-text">
                 {formatCurrency(data?.payments.transferAmount || 0)}
               </span>
             </div>
+            {(data?.payments.otherAmount || 0) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-admin-muted">Otros ({data?.payments.otherCount || 0}):</span>
+                <span className="font-semibold text-admin-text">
+                  {formatCurrency(data?.payments.otherAmount || 0)}
+                </span>
+              </div>
+            )}
           </div>
           <div className="mt-2 pt-2 border-t border-admin-card-border flex items-center justify-between text-[11px] text-admin-muted">
             <span>Devoluciones:</span>
@@ -464,6 +577,15 @@ export default function AnaliticaPage() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {data && data.dailyTrend.length > 60 && (
+        <div className="p-4 admin-panel flex items-center gap-3 text-xs text-admin-muted">
+          <BarChart2 className="h-4 w-4 text-admin-brand-text shrink-0" />
+          <span>
+            El gráfico de barras se omite para rangos mayores a 60 días ({data.dailyTrend.length} días consultados). El detalle completo permanece disponible en la tabla inferior y en la exportación CSV.
+          </span>
         </div>
       )}
 
@@ -555,7 +677,7 @@ export default function AnaliticaPage() {
                             {formatCurrency(d.grossSales)}
                           </td>
                           <td className="py-3 px-4 text-right text-amber-600">
-                            {d.refunds > 0 ? `-${formatCurrency(d.refunds)}` : "0.00 Bs"}
+                            {d.refunds > 0 ? `-${formatCurrency(d.refunds)}` : formatCurrency(0)}
                           </td>
                           <td className="py-3 px-4 text-right font-semibold text-admin-text">
                             {formatCurrency(d.netSales)}
@@ -720,7 +842,10 @@ export default function AnaliticaPage() {
                 <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-admin-muted" />
                 <Input
                   value={salesSearch}
-                  onChange={(e) => setSalesSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSalesSearch(e.target.value);
+                    setSalesPage(1);
+                  }}
                   placeholder="Buscar ticket, cliente o cajero..."
                   className="h-9 pl-8 text-xs rounded-xl bg-admin-raised border-slate-200"
                 />
@@ -729,12 +854,17 @@ export default function AnaliticaPage() {
               <div className="flex items-center gap-2">
                 <select
                   value={salesFilterMethod}
-                  onChange={(e) => setSalesFilterMethod(e.target.value)}
+                  onChange={(e) => {
+                    setSalesFilterMethod(e.target.value);
+                    setSalesPage(1);
+                  }}
                   className="h-9 px-3 text-xs rounded-xl bg-admin-raised border border-slate-200 font-medium text-slate-700"
                 >
                   <option value="all">Todos los Métodos</option>
                   <option value="cash">Efectivo</option>
+                  <option value="card">Tarjeta</option>
                   <option value="transfer">QR / Transferencia</option>
+                  <option value="other">Otro</option>
                 </select>
               </div>
             </div>
@@ -776,7 +906,13 @@ export default function AnaliticaPage() {
                           {s.cashierName}
                         </td>
                         <td className="py-3 px-4 font-medium text-slate-700">
-                          {s.paymentMethod === "cash" ? "Efectivo" : "QR / Transf."}
+                          {s.paymentMethod === "cash"
+                            ? "Efectivo"
+                            : s.paymentMethod === "card"
+                            ? "Tarjeta"
+                            : s.paymentMethod === "other"
+                            ? "Otro"
+                            : "QR / Transf."}
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-admin-text">
                           {formatCurrency(s.netTotal)}

@@ -1,15 +1,19 @@
 "use client";
 
-import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { ShoppingBag, X, Plus, Minus, ArrowRight } from "lucide-react";
+import { ShoppingBag, X, Plus, Minus, Trash2 } from "lucide-react";
 import { useCart } from "@/context/cart-context";
+import { formatCurrency } from "@/lib/currency";
+import {
+  STORE_FREE_SHIPPING_MIN_BS,
+  STORE_NAME,
+  STORE_WHATSAPP_NUMBER,
+} from "@/lib/store-config";
 
 export function StoreCartSheet() {
   const {
@@ -21,113 +25,187 @@ export function StoreCartSheet() {
     isCartOpen,
     setIsCartOpen,
     updateQuantity,
+    removeFromCart,
   } = useCart();
+
+  const missingForFreeShipping = Math.max(0, STORE_FREE_SHIPPING_MIN_BS - subtotal);
+  const shippingProgress = Math.min(
+    100,
+    Math.round((subtotal / STORE_FREE_SHIPPING_MIN_BS) * 100)
+  );
 
   return (
     <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
-      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] p-0 flex flex-col bg-white">
-        <SheetHeader className="p-4 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="h-5 w-5 text-store-primary" />
-            <SheetTitle className="text-base font-black">Mi Carrito de Compras</SheetTitle>
-            <Badge variant="secondary" className="text-[10px] font-bold">
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="data-[side=right]:w-full data-[side=right]:sm:max-w-[420px] p-0 gap-0 flex flex-col bg-store-bg border-l border-store-border font-store"
+      >
+        <SheetHeader className="px-5 py-4 border-b border-store-border flex flex-row items-center justify-between space-y-0">
+          <div className="flex items-baseline gap-2">
+            <SheetTitle className="text-base font-semibold tracking-[-0.02em] text-store-ink">
+              Tu bolsa
+            </SheetTitle>
+            <span className="text-xs text-store-muted tabular-nums">
               {cartCount} {cartCount === 1 ? "artículo" : "artículos"}
-            </Badge>
+            </span>
           </div>
           <button
+            type="button"
             onClick={() => setIsCartOpen(false)}
-            className="p-1 rounded-full text-slate-400 hover:bg-slate-100"
+            aria-label="Cerrar carrito"
+            className="h-8 w-8 rounded-full text-store-muted hover:text-store-ink hover:bg-store-surface flex items-center justify-center transition-colors cursor-pointer"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {cart.length > 0 && (
+          <div className="bg-store-surface px-5 py-3 border-b border-store-border space-y-2">
+            {missingForFreeShipping > 0 ? (
+              <p className="text-xs text-store-ink">
+                Agrega{" "}
+                <span className="font-semibold tabular-nums">
+                  {formatCurrency(missingForFreeShipping)}
+                </span>{" "}
+                más para obtener envío gratis.
+              </p>
+            ) : (
+              <p className="text-xs font-medium text-store-success">
+                Tienes envío gratuito a toda Bolivia.
+              </p>
+            )}
+            <div className="h-1 w-full bg-store-border rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-[width] duration-300 ease-out ${
+                  missingForFreeShipping === 0 ? "bg-store-success" : "bg-store-primary"
+                }`}
+                style={{ width: `${shippingProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto px-5 divide-y divide-store-border">
           {cart.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 space-y-2">
-              <ShoppingBag className="h-12 w-12 mx-auto opacity-30" />
-              <p className="text-xs font-bold">Tu carrito está vacío</p>
-              <p className="text-[11px]">Agrega productos tocando el botón de añadir.</p>
+            <div className="py-16 text-center text-store-muted space-y-2.5">
+              <ShoppingBag className="h-10 w-10 mx-auto stroke-[1.25] opacity-40" />
+              <p className="text-sm font-semibold text-store-ink">Tu bolsa está vacía</p>
+              <p className="text-xs max-w-[240px] mx-auto leading-relaxed">
+                Explora el catálogo y agrega los productos que quieras pedir.
+              </p>
             </div>
           ) : (
-            cart.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3 flex items-center justify-between gap-3"
-              >
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="h-14 w-14 rounded-xl object-contain bg-white p-1 border border-slate-200/80 shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <h5 className="font-extrabold text-xs text-slate-900 truncate">
-                    {item.name}
-                  </h5>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-store-primary">
-                      ${item.price.toFixed(2)}
-                    </span>
-                    {item.selectedColor && (
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        • {item.selectedColor}
-                      </span>
+            cart.map((item) => {
+              const atMaxStock =
+                item.maxStock !== undefined && item.quantity >= item.maxStock;
+              return (
+                <div key={item.id} className="py-4 flex items-start gap-3.5">
+                  <div className="h-20 w-20 rounded-xl bg-store-surface p-2 flex items-center justify-center shrink-0">
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h5 className="font-semibold text-[13px] text-store-ink leading-snug line-clamp-2">
+                        {item.name}
+                      </h5>
+                      <button
+                        type="button"
+                        onClick={() => removeFromCart(item.id)}
+                        aria-label={`Eliminar ${item.name}`}
+                        className="text-store-muted hover:text-store-primary p-1 -mt-1 -mr-1 rounded-full transition-colors cursor-pointer shrink-0"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {(item.selectedVariant || item.selectedColor) && (
+                      <p className="text-[11px] text-store-muted truncate">
+                        {[item.selectedVariant, item.selectedColor]
+                          .filter(Boolean)
+                          .join(" / ")}
+                      </p>
                     )}
+
+                    <div className="pt-1.5 flex items-center justify-between gap-2">
+                      <div className="inline-flex items-center rounded-full bg-store-surface p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.id, -1)}
+                          aria-label={`Disminuir cantidad de ${item.name}`}
+                          className="h-7 w-7 rounded-full flex items-center justify-center hover:bg-store-bg text-store-ink transition-colors cursor-pointer"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </button>
+                        <span className="text-xs font-semibold w-6 text-center tabular-nums text-store-ink">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={atMaxStock}
+                          onClick={() => updateQuantity(item.id, 1)}
+                          aria-label={`Aumentar cantidad de ${item.name}`}
+                          className={`h-7 w-7 rounded-full flex items-center justify-center transition-colors ${
+                            atMaxStock
+                              ? "text-store-muted/40 cursor-not-allowed"
+                              : "hover:bg-store-bg text-store-ink cursor-pointer"
+                          }`}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </div>
+
+                      <span className="text-sm font-semibold text-store-ink tabular-nums">
+                        {formatCurrency(item.price * item.quantity)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-1.5 shrink-0 bg-white border border-slate-200 rounded-xl p-1">
-                  <button
-                    onClick={() => updateQuantity(item.id, -1)}
-                    className="h-6 w-6 rounded-lg flex items-center justify-center hover:bg-slate-100 text-slate-600"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </button>
-                  <span className="text-xs font-black w-5 text-center">{item.quantity}</span>
-                  <button
-                    onClick={() => updateQuantity(item.id, 1)}
-                    className="h-6 w-6 rounded-lg flex items-center justify-center hover:bg-slate-100 text-slate-600"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
         {cart.length > 0 && (
-          <div className="p-4 border-t border-slate-100 bg-slate-50/80 space-y-3">
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Subtotal:</span>
-                <span className="font-semibold text-slate-900">${subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Costo de Envío:</span>
-                <span className="font-semibold text-emerald-600">
-                  {deliveryFee === 0 ? "¡Gratis!" : `$${deliveryFee.toFixed(2)}`}
+          <div className="p-5 border-t border-store-border bg-store-bg space-y-4">
+            <div className="space-y-1.5 text-xs">
+              <div className="flex justify-between text-store-muted">
+                <span>Subtotal</span>
+                <span className="font-medium text-store-ink tabular-nums">
+                  {formatCurrency(subtotal)}
                 </span>
               </div>
-              <div className="flex justify-between text-base font-black text-slate-900 pt-1 border-t border-slate-200/80">
-                <span>Total a Pagar:</span>
-                <span className="text-store-primary">${totalPrice.toFixed(2)}</span>
+              <div className="flex justify-between text-store-muted">
+                <span>Envío estimado</span>
+                <span className="font-medium text-store-success tabular-nums">
+                  {deliveryFee === 0 ? "Gratis" : formatCurrency(deliveryFee)}
+                </span>
+              </div>
+              <div className="flex justify-between text-base font-semibold text-store-ink pt-2.5 border-t border-store-border">
+                <span>Total</span>
+                <span className="tabular-nums">{formatCurrency(totalPrice)}</span>
               </div>
             </div>
 
             <a
-              href={`https://wa.me/?text=${encodeURIComponent(
-                `¡Hola GadgetHub! Quiero confirmar mi pedido por un total de $${totalPrice.toFixed(
-                  2
+              href={`https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+                `¡Hola ${STORE_NAME}! Quiero confirmar mi pedido por un total de ${formatCurrency(
+                  totalPrice
                 )} con ${cartCount} productos:\n` +
-                  cart.map((i) => `- ${i.quantity}x ${i.name} ($${i.price})`).join("\n")
+                  cart
+                    .map((i) => `- ${i.quantity}x ${i.name} (${formatCurrency(i.price)})`)
+                    .join("\n")
               )}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full bg-store-primary hover:bg-store-primary-hover text-white text-xs font-black py-3.5 rounded-2xl shadow-md shadow-store-primary/25 flex items-center justify-center gap-2 uppercase tracking-wide transition-all"
+              className="w-full h-12 rounded-lg bg-store-primary hover:bg-store-primary-hover text-store-on-primary text-sm font-bold flex items-center justify-center transition-[background-color,transform] duration-150 ease-out active:scale-[0.98]"
             >
-              <span>Confirmar Pedido vía WhatsApp</span>
-              <ArrowRight className="h-4 w-4" />
+              Confirmar pedido por WhatsApp
             </a>
           </div>
         )}

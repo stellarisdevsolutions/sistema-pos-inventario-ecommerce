@@ -4,13 +4,20 @@ import { adminActionError } from "@/lib/admin-action-error";
 import { productName } from "@/lib/product-name";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { and, gte, lt, desc, eq } from "drizzle-orm";
-import { businessDate, businessDayStart, addBusinessDays } from "@/lib/business-date";
+import { and, gte, lt, desc } from "drizzle-orm";
+import {
+  BUSINESS_TIME_ZONE,
+  businessDate,
+  businessDayStart,
+  addBusinessDays,
+  formatBusinessDate,
+  formatBusinessTime,
+} from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
 
 export interface AnalyticsDailyItem {
-  date: string;       // YYYY-MM-DD
-  dayLabel: string;   // Lun, Mar, etc.
+  date: string;
+  dayLabel: string;
   formattedDate: string;
   grossSales: number;
   refunds: number;
@@ -65,8 +72,12 @@ export interface PeriodAnalyticsData {
   payments: {
     cashAmount: number;
     cashCount: number;
+    cardAmount: number;
+    cardCount: number;
     transferAmount: number;
     transferCount: number;
+    otherAmount: number;
+    otherCount: number;
   };
   channels: {
     posRevenue: number;
@@ -111,31 +122,46 @@ export async function getPeriodAnalyticsAction(
       return { success: false, error: "Selecciona un rango de entre 1 y 366 días." };
     }
 
-    // Consultar todas las ventas del rango
-    const sales = await db.query.sales.findMany({
-      where: and(
-        gte(schema.sales.createdAt, startOfDay),
-        lt(schema.sales.createdAt, endOfDay)
-      ),
-      with: {
-        items: {
-          with: {
-            product: {
-              with: {
-                category: true,
+    const [sales, periodRefunds] = await Promise.all([
+      db.query.sales.findMany({
+        where: and(
+          gte(schema.sales.createdAt, startOfDay),
+          lt(schema.sales.createdAt, endOfDay)
+        ),
+        with: {
+          items: {
+            with: {
+              product: {
+                with: {
+                  category: true,
+                },
               },
             },
           },
-        },
-        user: true,
-        cashShift: {
-          with: {
-            cashRegister: true,
+          user: true,
+          cashShift: {
+            with: {
+              cashRegister: true,
+            },
+          },
+          refunds: {
+            columns: { id: true },
           },
         },
-      },
-      orderBy: [desc(schema.sales.createdAt)],
-    });
+        orderBy: [desc(schema.sales.createdAt)],
+      }),
+      db.query.saleRefunds.findMany({
+        where: and(
+          gte(schema.saleRefunds.createdAt, startOfDay),
+          lt(schema.saleRefunds.createdAt, endOfDay)
+        ),
+        with: {
+          sale: {
+            columns: { id: true, cashShiftId: true, userId: true },
+          },
+        },
+      }),
+    ]);
 
     let grossSales = 0;
     let refunds = 0;
@@ -147,8 +173,12 @@ export async function getPeriodAnalyticsAction(
 
     let cashAmount = 0;
     let cashCount = 0;
+    let cardAmount = 0;
+    let cardCount = 0;
     let transferAmount = 0;
     let transferCount = 0;
+    let otherAmount = 0;
+    let otherCount = 0;
 
     let posRevenue = 0;
     let posCount = 0;
@@ -161,11 +191,17 @@ export async function getPeriodAnalyticsAction(
 
     const formattedSalesList: PeriodAnalyticsData["sales"] = [];
 
-    // Inicializar mapa de días en el rango para que los días con 0 ventas aparezcan en el gráfico
     for (let curr = startOfDay; curr < endOfDay; curr = addBusinessDays(curr, 1)) {
       const dayKey = businessDate(curr);
-      const dayLabel = curr.toLocaleDateString("es-BO", { weekday: "short", timeZone: "America/La_Paz" });
-      const formattedDate = curr.toLocaleDateString("es-BO", { day: "2-digit", month: "short", timeZone: "America/La_Paz" });
+      const dayLabel = curr.toLocaleDateString("es-BO", {
+        weekday: "short",
+        timeZone: BUSINESS_TIME_ZONE,
+      });
+      const formattedDate = curr.toLocaleDateString("es-BO", {
+        day: "2-digit",
+        month: "short",
+        timeZone: BUSINESS_TIME_ZONE,
+      });
 
       dailyMap.set(dayKey, {
         date: dayKey,
@@ -178,13 +214,23 @@ export async function getPeriodAnalyticsAction(
         profit: 0,
         salesCount: 0,
       });
-
     }
 
     for (const s of sales) {
       const origTotal = parseFloat(s.totalAmount) || 0;
       const refAmount = parseFloat(s.refundedAmount || "0") || 0;
-      const netTotal = parseFloat(s.netAmount || (origTotal - refAmount).toString()) || 0;
+      const isCountedSale = s.status === "completed" || s.status === "refunded";
+      const persistedNet =
+        !isCountedSale
+          ? 0
+          : s.netAmount !== null && s.netAmount !== undefined
+          ? parseFloat(s.netAmount) || 0
+          : Math.max(0, origTotal - refAmount);
+
+      const saleSubtotal = parseFloat(s.subtotal) || 0;
+      const saleDiscount = parseFloat(s.discountAmount) || 0;
+      const discountRatio =
+        saleSubtotal > 0 ? Math.max(0, (saleSubtotal - saleDiscount) / saleSubtotal) : 1;
 
       let saleCost = 0;
       for (const item of s.items) {
@@ -192,11 +238,10 @@ export async function getPeriodAnalyticsAction(
         const returnedQty = item.returnedQuantity || 0;
         const netQty = Math.max(0, qty - returnedQty);
         const unitCost = parseFloat(item.unitCost) || 0;
-        const itemCost = netQty * unitCost;
+        const itemCost = isCountedSale ? netQty * unitCost : 0;
         saleCost += itemCost;
 
-        // Ranking de productos
-        if (s.status !== "cancelled") {
+        if (isCountedSale) {
           const prevP = productMap.get(item.productId) || {
             productId: item.productId,
             productName: item.product ? productName(item.product) : "Producto",
@@ -214,7 +259,7 @@ export async function getPeriodAnalyticsAction(
           prevP.unitsSold += qty;
           prevP.unitsReturned += returnedQty;
           prevP.netUnits += netQty;
-          prevP.revenue += netQty * (parseFloat(item.unitPrice) || 0);
+          prevP.revenue += netQty * (parseFloat(item.unitPrice) || 0) * discountRatio;
           prevP.cost += itemCost;
           prevP.profit = prevP.revenue - prevP.cost;
           prevP.marginPercent = prevP.revenue > 0 ? (prevP.profit / prevP.revenue) * 100 : 0;
@@ -222,55 +267,68 @@ export async function getPeriodAnalyticsAction(
         }
       }
 
-      const saleProfit = s.status === "cancelled" ? 0 : netTotal - saleCost;
+      const saleProfit = isCountedSale ? persistedNet - saleCost : 0;
+      const hasLegacyRefund = s.status === "refunded" && s.refunds.length === 0 && refAmount > 0;
 
       if (s.status === "completed") {
         completedCount += 1;
         grossSales += origTotal;
-        netSales += netTotal;
+        netSales += origTotal;
         totalCost += saleCost;
       } else if (s.status === "refunded") {
         refundedCount += 1;
         grossSales += origTotal;
-        refunds += refAmount;
-        netSales += netTotal;
+        netSales += origTotal;
         totalCost += saleCost;
+        if (hasLegacyRefund) {
+          refunds += refAmount;
+          netSales -= refAmount;
+        }
       } else if (s.status === "cancelled") {
         cancelledCount += 1;
       }
 
-      // Distribución diaria
       const saleDayKey = businessDate(s.createdAt);
       const dayRecord = dailyMap.get(saleDayKey);
-      if (dayRecord && s.status !== "cancelled") {
+      if (dayRecord && isCountedSale) {
         dayRecord.grossSales += origTotal;
-        dayRecord.refunds += refAmount;
-        dayRecord.netSales += netTotal;
+        if (hasLegacyRefund) {
+          dayRecord.refunds += refAmount;
+          dayRecord.netSales += origTotal - refAmount;
+          dayRecord.profit += origTotal - refAmount - saleCost;
+        } else {
+          dayRecord.netSales += origTotal;
+          dayRecord.profit += origTotal - saleCost;
+        }
         dayRecord.cost += saleCost;
-        dayRecord.profit += saleProfit;
         dayRecord.salesCount += 1;
       }
 
-      // Desglose por método de pago y cajero (no cancelados)
-      if (s.status !== "cancelled") {
+      if (isCountedSale) {
+        const legacyDeduction = hasLegacyRefund ? refAmount : 0;
         if (s.paymentMethod === "cash") {
-          cashAmount += netTotal;
+          cashAmount += origTotal - legacyDeduction;
           cashCount += 1;
-        } else {
-          transferAmount += netTotal;
+        } else if (s.paymentMethod === "card") {
+          cardAmount += origTotal - legacyDeduction;
+          cardCount += 1;
+        } else if (s.paymentMethod === "transfer") {
+          transferAmount += origTotal - legacyDeduction;
           transferCount += 1;
+        } else {
+          otherAmount += origTotal - legacyDeduction;
+          otherCount += 1;
         }
 
-        const isAdm = !s.cashShiftId || (s.notes?.includes("[Venta Administrativa Directa]") ?? false);
+        const isAdm = !s.cashShiftId;
         if (isAdm) {
-          administrativeRevenue += netTotal;
+          administrativeRevenue += origTotal - legacyDeduction;
           administrativeCount += 1;
         } else {
-          posRevenue += netTotal;
+          posRevenue += origTotal - legacyDeduction;
           posCount += 1;
         }
 
-        // Rendimiento por cajero
         if (s.user) {
           const prevC = cashierMap.get(s.user.id) || {
             userId: s.user.id,
@@ -281,31 +339,70 @@ export async function getPeriodAnalyticsAction(
             profitGenerated: 0,
           };
           prevC.salesCount += 1;
-          prevC.netRevenue += netTotal;
-          prevC.profitGenerated += saleProfit;
+          prevC.netRevenue += origTotal - legacyDeduction;
+          prevC.profitGenerated += origTotal - legacyDeduction - saleCost;
           cashierMap.set(s.user.id, prevC);
         }
       }
 
-      formattedSalesList.push({
-        id: s.id,
-        saleNumber: s.saleNumber,
-        date: s.createdAt.toLocaleDateString("es-BO", { day: "2-digit", month: "2-digit", year: "numeric" }),
-        time: s.createdAt.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" }),
-        customerName: s.customerName,
-        cashierName: s.user?.name || "Cajero",
-        paymentMethod: s.paymentMethod,
-        isAdministrative: !s.cashShiftId,
-        status: s.status,
-        originalTotal: origTotal,
-        refundedAmount: refAmount,
-        netTotal,
-        cost: saleCost,
-        profit: saleProfit,
-      });
+      if (s.status !== "pending") {
+        formattedSalesList.push({
+          id: s.id,
+          saleNumber: s.saleNumber,
+          date: formatBusinessDate(s.createdAt),
+          time: formatBusinessTime(s.createdAt),
+          customerName: s.customerName,
+          cashierName: s.user?.name || "Cajero",
+          paymentMethod: s.paymentMethod,
+          isAdministrative: !s.cashShiftId,
+          status: s.status,
+          originalTotal: origTotal,
+          refundedAmount: isCountedSale ? refAmount : 0,
+          netTotal: persistedNet,
+          cost: isCountedSale ? saleCost : 0,
+          profit: saleProfit,
+        });
+      }
     }
 
-    const grossProfit = Math.max(0, netSales - totalCost);
+    for (const r of periodRefunds) {
+      const amount = parseFloat(r.amount) || 0;
+      refunds += amount;
+      netSales -= amount;
+
+      if (r.refundMethod === "cash") {
+        cashAmount -= amount;
+      } else if (r.refundMethod === "card") {
+        cardAmount -= amount;
+      } else if (r.refundMethod === "transfer") {
+        transferAmount -= amount;
+      } else {
+        otherAmount -= amount;
+      }
+
+      if (r.sale && !r.sale.cashShiftId) {
+        administrativeRevenue -= amount;
+      } else {
+        posRevenue -= amount;
+      }
+
+      const refundDay = dailyMap.get(businessDate(r.createdAt));
+      if (refundDay) {
+        refundDay.refunds += amount;
+        refundDay.netSales -= amount;
+        refundDay.profit -= amount;
+      }
+
+      if (r.sale?.userId) {
+        const prevC = cashierMap.get(r.sale.userId);
+        if (prevC) {
+          prevC.netRevenue -= amount;
+          prevC.profitGenerated -= amount;
+        }
+      }
+    }
+
+    const grossProfit = netSales - totalCost;
     const profitMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
     const totalSalesCount = completedCount + refundedCount;
     const averageTicket = totalSalesCount > 0 ? netSales / totalSalesCount : 0;
@@ -316,8 +413,7 @@ export async function getPeriodAnalyticsAction(
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 15);
 
-    const cashiers = Array.from(cashierMap.values())
-      .sort((a, b) => b.netRevenue - a.netRevenue);
+    const cashiers = Array.from(cashierMap.values()).sort((a, b) => b.netRevenue - a.netRevenue);
 
     const dailyTrend = Array.from(dailyMap.values());
 
@@ -345,8 +441,12 @@ export async function getPeriodAnalyticsAction(
         payments: {
           cashAmount,
           cashCount,
+          cardAmount,
+          cardCount,
           transferAmount,
           transferCount,
+          otherAmount,
+          otherCount,
         },
         channels: {
           posRevenue,

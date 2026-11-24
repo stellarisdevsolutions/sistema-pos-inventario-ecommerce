@@ -1,4 +1,5 @@
 import { hashPassword } from "@/lib/auth/password";
+import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 dotenv.config();
@@ -28,6 +29,16 @@ async function runSeed() {
   const sql = neon(connectionString);
   const db = drizzle(sql, { schema });
 
+  const pinSecret = process.env.SUPERVISOR_PIN_SECRET || process.env.SESSION_SECRET;
+  let defaultPinHash: string | null = null;
+  if (pinSecret && Buffer.byteLength(pinSecret) >= 32) {
+    defaultPinHash = encodeSupervisorPin("1234");
+  } else {
+    console.warn(
+      "⚠️ [AVISO]: SESSION_SECRET / SUPERVISOR_PIN_SECRET no tiene al menos 32 bytes; admin y supervisor se crearán sin PIN."
+    );
+  }
+
   try {
     // 1. Sembrar Usuarios con Roles
     console.log("👤 Insertando usuarios y roles del sistema...");
@@ -38,6 +49,7 @@ async function runSeed() {
           name: "Administrador General",
           email: "admin@aurastudio.com",
           passwordHash: hashPassword(seedPassword.trim()),
+          pin: defaultPinHash,
           role: "admin",
           phone: "+54 11 9999-0001",
         },
@@ -45,6 +57,7 @@ async function runSeed() {
           name: "Martín Supervisor",
           email: "supervisor@aurastudio.com",
           passwordHash: hashPassword(seedPassword.trim()),
+          pin: defaultPinHash,
           role: "manager",
           phone: "+54 11 9999-0002",
         },

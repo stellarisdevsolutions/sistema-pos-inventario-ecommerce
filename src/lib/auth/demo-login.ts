@@ -7,14 +7,7 @@ const demoAccounts = [
 ];
 
 export function isDemoLoginEnabled(): boolean {
-  if (process.env.NODE_ENV === "development") {
-    return process.env.ENABLE_DEMO_LOGIN === "1";
-  }
-
-  return process.env.NODE_ENV === "production" &&
-    process.env.VERCEL_ENV === "production" &&
-    process.env.VERCEL_GIT_COMMIT_REF === "main" &&
-    process.env.ENABLE_DEMO_LOGIN !== "0";
+  return process.env.ENABLE_DEMO_LOGIN === "1";
 }
 
 export const demoSupervisorEmails = [demoAccounts[0].email, demoAccounts[1].email];

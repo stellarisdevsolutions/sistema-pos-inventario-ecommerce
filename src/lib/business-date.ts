@@ -1,6 +1,8 @@
+export const BUSINESS_TIME_ZONE = "America/La_Paz";
+
 const DAY_MS = 86_400_000;
 const boliviaDate = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/La_Paz",
+  timeZone: BUSINESS_TIME_ZONE,
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -17,6 +19,58 @@ export function businessDayStart(day: string): Date {
   return date;
 }
 
+export function businessMonthStart(date = new Date()): Date {
+  return businessDayStart(`${businessDate(date).slice(0, 7)}-01`);
+}
+
 export function addBusinessDays(date: Date, numberOfDays: number): Date {
   return new Date(date.getTime() + numberOfDays * DAY_MS);
+}
+
+export function formatBusinessDate(date: Date | string): string {
+  return new Date(date).toLocaleDateString("es-BO", {
+    timeZone: BUSINESS_TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+export function formatBusinessTime(date: Date | string, includeSeconds = false): string {
+  return new Date(date).toLocaleTimeString("es-BO", {
+    timeZone: BUSINESS_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(includeSeconds ? { second: "2-digit" } : {}),
+  });
+}
+
+export function formatBusinessDateTime(date: Date | string): string {
+  return new Date(date).toLocaleDateString("es-BO", {
+    timeZone: BUSINESS_TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function formatBusinessShortDateTime(date: Date | string): string {
+  return new Date(date).toLocaleDateString("es-BO", {
+    timeZone: BUSINESS_TIME_ZONE,
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function formatBusinessShortDate(date: Date | string): string {
+  return new Date(date).toLocaleDateString("es-BO", {
+    timeZone: BUSINESS_TIME_ZONE,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }

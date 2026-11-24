@@ -1,8 +1,10 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { getStoreProducts, getStoreCategories } from "@/app/actions/store";
 import { HomeClient } from "./home-client";
 
 async function HomeDataLoader() {
+  await connection();
   const [products, categories] = await Promise.all([
     getStoreProducts(),
     getStoreCategories(),
@@ -15,11 +17,11 @@ export default function HomePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-100/70 flex items-center justify-center p-8">
+        <div className="min-h-screen bg-store-bg flex items-center justify-center p-8 font-store">
           <div className="text-center space-y-3">
-            <div className="h-10 w-10 border-4 border-store-primary border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Cargando tienda online...
+            <div className="h-8 w-8 border-2 border-store-border border-t-store-primary rounded-full animate-spin mx-auto" />
+            <p className="text-xs text-store-muted">
+              Cargando tienda...
             </p>
           </div>
         </div>

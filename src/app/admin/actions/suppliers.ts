@@ -4,8 +4,9 @@ import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { supplierFormSchema, type SupplierFormInput } from "@/lib/validations/supplier";
+import { businessMonthStart, formatBusinessDate } from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
 
 function safeRevalidatePath(path: string) {
@@ -34,7 +35,7 @@ export type SupplierItem = {
 };
 
 /**
- * Obtiene todos los proveedores con agregados de compras y productos suministrados
+ * Obtiene todos los proveedores con agregados netos de compras y productos suministrados
  */
 export async function getSuppliersAction(): Promise<{
   success: boolean;
@@ -53,6 +54,18 @@ export async function getSuppliersAction(): Promise<{
             status: true,
             createdAt: true,
           },
+          with: {
+            returns: {
+              with: {
+                items: {
+                  columns: {
+                    quantity: true,
+                    originalUnitCost: true,
+                  },
+                },
+              },
+            },
+          },
         },
         products: {
           columns: {
@@ -64,26 +77,26 @@ export async function getSuppliersAction(): Promise<{
       orderBy: (s, { desc }) => [desc(s.id)],
     });
 
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const startOfMonth = businessMonthStart();
 
     const formatted: SupplierItem[] = list.map((s) => {
-      const validPurchases = s.purchases || [];
-      const totalPurchased = validPurchases.reduce(
-        (acc, p) => acc + (parseFloat(p.totalAmount) || 0),
-        0
-      );
+      const validPurchases = (s.purchases || []).filter((p) => p.status !== "cancelled");
+
+      const netPurchaseAmount = (p: (typeof validPurchases)[number]) => {
+        const total = parseFloat(p.totalAmount) || 0;
+        const returned = (p.returns || []).reduce(
+          (sum, r) =>
+            sum + r.items.reduce((itemSum, it) => itemSum + it.quantity * (parseFloat(it.originalUnitCost) || 0), 0),
+          0
+        );
+        return Math.max(0, total - returned);
+      };
+
+      const totalPurchased = validPurchases.reduce((acc, p) => acc + netPurchaseAmount(p), 0);
 
       const monthlyPurchased = validPurchases
         .filter((p) => p.createdAt && new Date(p.createdAt) >= startOfMonth)
-        .reduce((acc, p) => acc + (parseFloat(p.totalAmount) || 0), 0);
-
-      const dateObj = new Date(s.createdAt);
-      const formattedDate = dateObj.toLocaleDateString("es-BO", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
+        .reduce((acc, p) => acc + netPurchaseAmount(p), 0);
 
       return {
         id: s.id,
@@ -95,7 +108,7 @@ export async function getSuppliersAction(): Promise<{
         address: s.address || null,
         notes: s.notes || null,
         isActive: s.isActive ?? true,
-        createdAt: formattedDate,
+        createdAt: formatBusinessDate(s.createdAt),
         purchasesCount: validPurchases.length,
         totalPurchased,
         monthlyPurchased,
@@ -114,7 +127,7 @@ export async function getSuppliersAction(): Promise<{
  */
 export async function createSupplierAction(
   input: SupplierFormInput
-): Promise<{ success: boolean; data?: any; error?: string }> {
+): Promise<{ success: boolean; data?: typeof schema.suppliers.$inferSelect; error?: string }> {
   try {
     await requireRole(["admin", "manager"]);
 
@@ -158,7 +171,7 @@ export async function createSupplierAction(
 export async function updateSupplierAction(
   id: number,
   input: SupplierFormInput
-): Promise<{ success: boolean; data?: any; error?: string }> {
+): Promise<{ success: boolean; data?: typeof schema.suppliers.$inferSelect; error?: string }> {
   try {
     await requireRole(["admin", "manager"]);
 
@@ -192,7 +205,7 @@ export async function updateSupplierAction(
     safeRevalidatePath("/admin/inventario/nuevo");
 
     return { success: true, data: updated };
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Error al actualizar proveedor #${id}:`, error);
     return { success: false, error: adminActionError(error, "Error al actualizar el proveedor.") };
   }
@@ -204,7 +217,7 @@ export async function updateSupplierAction(
 export async function toggleSupplierActiveAction(
   id: number,
   isActive: boolean
-): Promise<{ success: boolean; data?: any; error?: string }> {
+): Promise<{ success: boolean; data?: typeof schema.suppliers.$inferSelect; error?: string }> {
   try {
     await requireRole(["admin", "manager"]);
 
@@ -218,7 +231,7 @@ export async function toggleSupplierActiveAction(
     safeRevalidatePath("/admin/inventario");
 
     return { success: true, data: updated };
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Error al cambiar estado de proveedor #${id}:`, error);
     return { success: false, error: adminActionError(error, "Error al cambiar estado del proveedor.") };
   }
@@ -226,7 +239,6 @@ export async function toggleSupplierActiveAction(
 
 /**
  * Server Action: Eliminar proveedor de forma segura
- * - Si tiene compras registradas o productos asociados, desvincula o previene según seguridad
  */
 export async function deleteSupplierAction(
   id: number
@@ -234,7 +246,6 @@ export async function deleteSupplierAction(
   try {
     await requireRole(["admin"]);
 
-    // 1. Verificar si tiene compras registradas
     const purchasesCount = await db.query.purchases.findMany({
       where: eq(schema.purchases.supplierId, id),
       columns: { id: true },
@@ -256,7 +267,7 @@ export async function deleteSupplierAction(
     safeRevalidatePath("/admin/inventario");
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Error al eliminar proveedor #${id}:`, error);
     return { success: false, error: adminActionError(error, "Error al eliminar el proveedor.") };
   }

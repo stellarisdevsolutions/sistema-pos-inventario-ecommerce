@@ -2,11 +2,12 @@ import { z } from "zod";
 
 export const purchaseItemSchema = z.object({
   productId: z.number().int().positive("Debes seleccionar un producto valido"),
-  quantity: z.number().int().positive("La cantidad debe ser al menos 1 unidad"),
+  quantity: z.number().int().positive("La cantidad debe ser al menos 1 unidad").max(2_147_483_647),
   unitCost: z.number().min(0, "El costo unitario no puede ser negativo").max(99999999.99),
 });
 
 export const purchaseFormSchema = z.object({
+  requestId: z.uuid().optional(),
   supplierId: z.number().int().positive("Selecciona un proveedor valido"),
   invoiceNumber: z
     .string()
@@ -16,7 +17,7 @@ export const purchaseFormSchema = z.object({
     .nullable(),
   paymentMethod: z.enum(["cash", "card", "transfer", "other"]).default("transfer"),
   paymentStatus: z.enum(["paid", "pending", "partial"]).optional().default("paid"),
-  status: z.enum(["received", "pending", "cancelled"]).optional().default("received"),
+  status: z.enum(["received", "pending"]).optional().default("received"),
   notes: z
     .string()
     .trim()

@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/auth-context";
 import {
   getUsersAction,
   createUserAction,
@@ -43,6 +44,7 @@ import {
 import type { UserFormInput } from "@/lib/validations/user";
 
 export default function UsuariosPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [kpis, setKpis] = useState<UsersKpisSummary>({
     totalUsers: 0,
@@ -71,12 +73,13 @@ export default function UsuariosPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [userToEdit, setUserToEdit] = useState<UserListItem | null>(null);
+  const [clearPin, setClearPin] = useState(false);
   const [editForm, setEditForm] = useState<{
     name: string;
     email: string;
-    role: "admin" | "manager" | "cashier" | "warehouse";
+    role: UserFormInput["role"];
     phone: string;
-    password: "";
+    password: string;
     pin: string;
     isActive: boolean;
   }>({
@@ -89,16 +92,19 @@ export default function UsuariosPage() {
     isActive: true,
   });
 
+  const applyUsersResponse = (res: Awaited<ReturnType<typeof getUsersAction>>) => {
+    if (res.success) {
+      setUsers(res.users);
+      setKpis(res.kpis);
+    } else {
+      toast.error(res.error || "Error al cargar la lista de usuarios.");
+    }
+  };
+
   const loadUsersData = async () => {
     setIsLoading(true);
     try {
-      const res = await getUsersAction();
-      if (res.success) {
-        setUsers(res.users);
-        setKpis(res.kpis);
-      } else {
-        toast.error(res.error || "Error al cargar la lista de usuarios.");
-      }
+      applyUsersResponse(await getUsersAction());
     } catch {
       toast.error("Error de conexión al cargar usuarios.");
     } finally {
@@ -107,7 +113,20 @@ export default function UsuariosPage() {
   };
 
   useEffect(() => {
-    loadUsersData();
+    let cancelled = false;
+    getUsersAction()
+      .then((res) => {
+        if (!cancelled) applyUsersResponse(res);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Error de conexión al cargar usuarios.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Filtrado de usuarios
@@ -131,6 +150,10 @@ export default function UsuariosPage() {
     e.preventDefault();
     if (!createForm.name.trim() || !createForm.email.trim()) {
       toast.error("Por favor completa el nombre y correo electrónico.");
+      return;
+    }
+    if (createForm.password.trim().length < 8) {
+      toast.error("La contraseña inicial debe tener al menos 8 caracteres.");
       return;
     }
 
@@ -163,6 +186,7 @@ export default function UsuariosPage() {
   // Abrir Modal Editar
   const openEditModal = (user: UserListItem) => {
     setUserToEdit(user);
+    setClearPin(false);
     setEditForm({
       name: user.name,
       email: user.email,
@@ -187,7 +211,8 @@ export default function UsuariosPage() {
         email: editForm.email,
         role: editForm.role,
         phone: editForm.phone,
-        pin: editForm.pin || undefined,
+        pin: clearPin ? undefined : editForm.pin || undefined,
+        clearPin,
         password: editForm.password ? editForm.password : undefined,
         isActive: editForm.isActive,
       });
@@ -449,7 +474,7 @@ export default function UsuariosPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={user.id === 1}
+                          disabled={currentUser?.id === user.id}
                           onClick={() => handleToggleStatus(user)}
                           className={cn(
                             "h-8 rounded-lg text-xs gap-1 cursor-pointer",
@@ -457,7 +482,11 @@ export default function UsuariosPage() {
                               ? "border-rose-200 text-rose-600 hover:bg-rose-50"
                               : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
                           )}
-                          title={user.id === 1 ? "El administrador principal no puede ser desactivado" : undefined}
+                          title={
+                            currentUser?.id === user.id
+                              ? "No puedes desactivar tu propia cuenta"
+                              : undefined
+                          }
                         >
                           <Power className="h-3 w-3" />
                           <span className="hidden sm:inline">
@@ -524,7 +553,9 @@ export default function UsuariosPage() {
                 </label>
                 <select
                   value={createForm.role}
-                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as any })}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, role: e.target.value as UserFormInput["role"] })
+                  }
                   className="w-full h-9 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-slate-800 dark:text-slate-200 font-bold"
                 >
                   <option value="cashier">Cajero de Mostrador</option>
@@ -549,13 +580,15 @@ export default function UsuariosPage() {
 
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Contraseña Inicial (Mínimo 6 caracteres)
+                Contraseña Inicial (Mínimo 8 caracteres) *
               </label>
               <Input
+                required
+                minLength={8}
                 type="password"
                 value={createForm.password}
                 onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                placeholder="Por defecto: aura123456"
+                placeholder="Mínimo 8 caracteres"
                 className="h-9 text-xs rounded-xl bg-admin-raised"
               />
             </div>
@@ -659,7 +692,9 @@ export default function UsuariosPage() {
                 </label>
                 <select
                   value={editForm.role}
-                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value as any })}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, role: e.target.value as UserFormInput["role"] })
+                  }
                   className="w-full h-9 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border text-slate-800 dark:text-slate-200 font-bold"
                 >
                   <option value="cashier">Cajero de Mostrador</option>
@@ -688,16 +723,17 @@ export default function UsuariosPage() {
               </label>
               <Input
                 type="password"
+                minLength={8}
                 value={editForm.password}
-                onChange={(e) => setEditForm({ ...editForm, password: e.target.value as any })}
-                placeholder="Nueva contraseña..."
+                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                placeholder="Nueva contraseña (mínimo 8 caracteres)..."
                 className="h-9 text-xs rounded-xl bg-admin-raised"
               />
             </div>
 
             {/* PIN de autorización */}
             {(editForm.role === "admin" || editForm.role === "manager") && (
-              <div className="p-3 rounded-xl bg-admin-brand-subtle border border-admin-brand-light space-y-1.5">
+              <div className="p-3 rounded-xl bg-admin-brand-subtle border border-admin-brand-light space-y-2">
                 <div className="flex items-center gap-1.5 text-admin-brand-text font-bold text-xs">
                   <KeyRound className="h-3.5 w-3.5 text-admin-brand-text" />
                   <span>PIN de Autorización (4-6 dígitos)</span>
@@ -708,11 +744,26 @@ export default function UsuariosPage() {
                 <Input
                   type="password"
                   maxLength={6}
-                  value={editForm.pin}
+                  disabled={clearPin}
+                  value={clearPin ? "" : editForm.pin}
                   onChange={(e) => setEditForm({ ...editForm, pin: e.target.value })}
-                  placeholder="Ej: 1234"
-                  className="h-8 text-xs font-mono font-bold tracking-widest bg-admin-card-bg border-admin-brand-light w-32"
+                  placeholder="Nuevo PIN (4-6 dígitos)"
+                  className="h-8 text-xs font-mono font-bold tracking-widest bg-admin-card-bg border-admin-brand-light w-40"
                 />
+                {userToEdit?.hasPin && (
+                  <label className="flex items-center gap-2 text-[11px] text-rose-700 dark:text-rose-300 font-semibold cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={clearPin}
+                      onChange={(e) => {
+                        setClearPin(e.target.checked);
+                        if (e.target.checked) setEditForm((prev) => ({ ...prev, pin: "" }));
+                      }}
+                      className="rounded border-rose-300"
+                    />
+                    <span>Eliminar PIN de supervisor actual</span>
+                  </label>
+                )}
               </div>
             )}
 

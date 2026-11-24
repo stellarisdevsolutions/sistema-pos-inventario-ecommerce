@@ -1,4 +1,6 @@
 import { db } from "@/db";
+import * as schema from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import {
   type SessionUser,
@@ -40,19 +42,35 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
     const user = await db.query.users.findFirst({
       where: (users, { and, eq }) => and(eq(users.id, claims.id), eq(users.isActive, true)),
-      columns: { id: true, name: true, email: true, role: true, phone: true },
+      columns: { id: true, name: true, email: true, role: true, phone: true, sessionVersion: true },
     });
-    return user?.role === claims.role ? user : null;
+    if (!user || user.role !== claims.role) return null;
+    if ((claims.sessionVersion ?? 1) !== user.sessionVersion) return null;
+    return user;
   } catch {
     return null;
   }
 }
 
 /**
- * Destruye la sesión activa eliminando la cookie
+ * Destruye la sesión activa invalidando el token y eliminando la cookie
  */
 export async function destroySession(): Promise<void> {
   const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (token) {
+    try {
+      const claims = await decodeSessionToken(token);
+      if (claims) {
+        await db
+          .update(schema.users)
+          .set({ sessionVersion: sql`${schema.users.sessionVersion} + 1` })
+          .where(eq(schema.users.id, claims.id));
+      }
+    } catch {
+      // No bloquear el cierre de sesión si falla la actualización en BD
+    }
+  }
   cookieStore.delete(SESSION_COOKIE_NAME);
 }
 

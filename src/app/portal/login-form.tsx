@@ -9,6 +9,7 @@ import { Activity, ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { loginAction } from "@/app/admin/actions/auth";
 import type { getDemoLoginOptions } from "@/lib/auth/demo-login";
+import { STORE_NAME } from "@/lib/store-config";
 
 export function PortalLoginForm({ demo }: { demo: ReturnType<typeof getDemoLoginOptions> }) {
   const router = useRouter();
@@ -55,7 +56,7 @@ export function PortalLoginForm({ demo }: { demo: ReturnType<typeof getDemoLogin
       <div className="admin-login-brand">
         <Link href="/" className="flex w-fit items-center gap-3 text-sm font-semibold">
           <span className="admin-rail-mark"><Activity size={19} aria-hidden /></span>
-          Aura Commerce
+          {STORE_NAME}
         </Link>
         <div className="hidden lg:block">
           <p className="max-w-xs text-[clamp(2rem,4vw,3.4rem)] font-semibold leading-[1.04] tracking-[-0.055em]">

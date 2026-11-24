@@ -7,6 +7,14 @@ import { requireRole } from "@/lib/auth/session";
 import { adminActionError } from "@/lib/admin-action-error";
 import { CATALOG_FILE_LIMIT, catalogIdentity, readCatalogWorkbook } from "@/lib/catalog-workbook";
 
+function safeRevalidatePath(path: string) {
+  try {
+    revalidatePath(path);
+  } catch {
+    // Ignorar en entornos de prueba fuera de Next.js
+  }
+}
+
 export async function importCatalogAction(form: FormData, confirm = false): Promise<{
   success: boolean;
   count?: number;
@@ -68,7 +76,9 @@ export async function importCatalogAction(form: FormData, confirm = false): Prom
     }
 
     const result = await db.execute(createCatalogProductsQuery(entries.map(({ entry }) => entry), actor.id));
-    for (const path of ["/admin/inventario", "/admin/ventas", "/admin/compras/nueva", "/catalogo", "/"]) revalidatePath(path);
+    for (const path of ["/admin/inventario", "/admin/ventas", "/admin/compras/nueva", "/catalogo", "/"]) {
+      safeRevalidatePath(path);
+    }
     return { success: true, count: result.rows.length };
   } catch (error) {
     return { success: false, error: adminActionError(error, "No se confirmó la carga. Revisa los duplicados y vuelve a validar el archivo.") };

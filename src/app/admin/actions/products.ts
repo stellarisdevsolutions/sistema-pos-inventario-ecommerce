@@ -6,14 +6,17 @@ import { db } from "@/db";
 import { automaticModelCode, automaticSku, createCatalogProductsQuery, type CatalogEntry } from "@/db/operations/catalog";
 import { productName } from "@/lib/product-name";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
-import { businessDate } from "@/lib/business-date";
+import { businessDate, formatBusinessDateTime } from "@/lib/business-date";
 import { z } from "zod";
 import * as schema from "@/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import {
   productFormSchema,
   productOptionsSchema,
+  productOptionConfigSchema,
+  categoryInputSchema,
   type ProductOptionInput,
+  type ProductOptionConfig,
   productDbInsertSchema,
   slugify,
   type ProductFormInput,
@@ -44,33 +47,55 @@ export async function getInventoryProducts() {
     const prods = await db.query.products.findMany({
       with: {
         category: true,
+        brand: true,
+        supplier: true,
+        model: true,
       },
       orderBy: (p, { desc }) => [desc(p.id)],
     });
 
     if (prods.length === 0) return [];
 
-    return prods.map((p) => ({
-      id: p.id,
-      name: productName(p),
-      sku: p.sku || `PROD-${p.id.toString().padStart(4, "0")}`,
-      barcode: p.barcode || "-",
-      category: p.category?.name || "Sin categoría",
-      price: parseFloat(p.price) || 0,
-      costPrice: parseFloat(p.costPrice) || 0,
-      stock: p.stock,
-      minStock: p.minStock,
-      status: (p.stock === 0
-        ? "out_of_stock"
-        : p.stock <= p.minStock
-        ? "low_stock"
-        : "in_stock") as "in_stock" | "low_stock" | "out_of_stock",
-      isActive: p.isActive ?? true,
-      description: p.description || null,
-      image:
-        p.imageUrl ||
-        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&auto=format&fit=crop&q=80",
-    }));
+    return prods.map((p) => {
+      const images = [
+        ...new Set(
+          [p.imageUrl, ...(p.images ?? [])].filter((img): img is string => Boolean(img && img.trim()))
+        ),
+      ];
+
+      return {
+        id: p.id,
+        name: productName(p),
+        slug: p.slug,
+        sku: p.sku || `PROD-${p.id.toString().padStart(4, "0")}`,
+        barcode: p.barcode || "-",
+        category: p.category?.name || "Sin categoría",
+        price: parseFloat(p.price) || 0,
+        costPrice: parseFloat(p.costPrice) || 0,
+        stock: p.stock,
+        minStock: p.minStock,
+        status: (p.stock === 0
+          ? "out_of_stock"
+          : p.stock <= p.minStock
+          ? "low_stock"
+          : "in_stock") as "in_stock" | "low_stock" | "out_of_stock",
+        isActive: p.isActive ?? true,
+        isVisibleWeb: p.isVisibleWeb ?? true,
+        isFeatured: p.isFeatured ?? false,
+        description: p.description || null,
+        image:
+          p.imageUrl ||
+          images[0] ||
+          "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&auto=format&fit=crop&q=80",
+        images,
+        modelCode: p.modelCode || null,
+        variant: p.variant || null,
+        variantColor: p.variantColor || null,
+        attributes: p.attributes ?? null,
+        brand: p.brand?.name || null,
+        supplier: p.supplier?.name || null,
+      };
+    });
   } catch (error) {
     console.error("Error al obtener productos de inventario:", error);
     return [];
@@ -105,7 +130,7 @@ export async function getInventoryFormData() {
 export async function getProductModelsForForm() {
   await requireRole(["admin", "manager", "warehouse"]);
   return db.query.productModels.findMany({
-    columns: { code: true, name: true, variantSelector: true },
+    columns: { code: true, name: true, variantSelector: true, options: true },
     orderBy: (model, { asc }) => [asc(model.name), asc(model.code)],
   });
 }
@@ -137,15 +162,32 @@ export async function getProductById(id: number) {
 /**
  * Server Action: Crear un nuevo producto en Neon DB y registrar Kárdex inicial
  */
-export async function createProductAction(input: ProductFormInput, options?: ProductOptionInput[]): Promise<ActionResult> {
+export async function createProductAction(
+  input: ProductFormInput,
+  options?: ProductOptionInput[],
+  optionConfigs?: ProductOptionConfig[]
+): Promise<ActionResult> {
   try {
     const currentUser = await requireRole(["admin", "manager", "warehouse"]);
     let entries: CatalogEntry[];
 
+    let parsedConfigs: ProductOptionConfig[] | null = null;
+    if (optionConfigs && optionConfigs.length > 0) {
+      const cfgResult = z.array(productOptionConfigSchema).max(3).safeParse(optionConfigs);
+      if (!cfgResult.success) {
+        return { success: false, error: cfgResult.error.issues[0]?.message || "Configuración de opciones inválida." };
+      }
+      parsedConfigs = cfgResult.data;
+    }
+
     if (options === undefined) {
       const validated = productFormSchema.safeParse(input);
       if (!validated.success) return { success: false, error: validated.error.issues[0]?.message };
-      entries = [{ ...productDbInsertSchema.parse(validated.data), variantSelector: validated.data.variantSelector || null }];
+      entries = [{
+        ...productDbInsertSchema.parse(validated.data),
+        variantSelector: validated.data.variantSelector || null,
+        options: parsedConfigs,
+      }];
     } else {
       const validated = productOptionsSchema.safeParse(options);
       if (!validated.success) {
@@ -158,7 +200,9 @@ export async function createProductAction(input: ProductFormInput, options?: Pro
       const model = existingCode ? await db.query.productModels.findFirst({ where: eq(schema.productModels.code, existingCode) }) : undefined;
       if (existingCode && !model) return { success: false, error: "El modelo seleccionado ya no está disponible." };
       const modelCode = model?.code ?? automaticModelCode();
+      const modelOptionsToSave = parsedConfigs ?? model?.options ?? null;
       entries = validated.data.map(option => {
+        const mergedAttributes = option.attributes ?? input.attributes ?? null;
         const product = productFormSchema.parse({
           ...input,
           ...option,
@@ -166,13 +210,14 @@ export async function createProductAction(input: ProductFormInput, options?: Pro
           name: model?.name ?? input.name,
           variantSelector: model ? model.variantSelector : input.variantSelector,
           mainImage: option.mainImage || input.mainImage,
-          additionalImages: option.mainImage ? [] : input.additionalImages,
-          attributes: option.attributes ?? input.attributes,
+          additionalImages: input.additionalImages,
+          attributes: mergedAttributes,
         });
         return {
           ...productDbInsertSchema.parse(product),
           variantSelector: product.variantSelector || null,
-          attributes: option.attributes ?? null,
+          attributes: mergedAttributes,
+          options: modelOptionsToSave,
         };
       });
     }
@@ -233,7 +278,7 @@ export async function updateProductAction(
 
     const payload = productDbInsertSchema.parse(validated.data);
 
-    const update = db.update(schema.products).set({
+    const setData: Partial<typeof schema.products.$inferInsert> = {
       name: payload.name,
       description: payload.description,
       price: payload.price,
@@ -242,7 +287,6 @@ export async function updateProductAction(
       modelCode: payload.modelCode,
       variant: payload.variant,
       variantColor: payload.variantColor,
-      attributes: payload.attributes,
       minStock: payload.minStock,
       imageUrl: payload.imageUrl,
       images: payload.images,
@@ -253,16 +297,22 @@ export async function updateProductAction(
       isVisibleWeb: payload.isVisibleWeb,
       isFeatured: payload.isFeatured,
       updatedAt: new Date(),
-    }).where(eq(schema.products.id, id)).returning();
+    };
+    if (input.attributes !== undefined) {
+      setData.attributes = payload.attributes;
+    }
+
+    const update = db.update(schema.products).set(setData).where(eq(schema.products.id, id)).returning();
 
     let updatedProduct;
     if (payload.modelCode) {
       const model = { code: payload.modelCode, name: payload.name, variantSelector: validated.data.variantSelector || null };
-      const [, [updated]] = await db.batch([
+      const [, , [updated]] = await db.batch([
         db.insert(schema.productModels).values(model).onConflictDoUpdate({
           target: schema.productModels.code,
           set: { name: model.name, variantSelector: model.variantSelector },
         }),
+        db.update(schema.products).set({ name: model.name, updatedAt: new Date() }).where(eq(schema.products.modelCode, payload.modelCode)),
         update,
       ]);
       updatedProduct = updated;
@@ -277,7 +327,7 @@ export async function updateProductAction(
     safeRevalidatePath(`/producto/${existing.slug}`);
 
     return { success: true, data: updatedProduct };
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Error al actualizar producto #${id}:`, error);
     return {
       success: false,
@@ -295,10 +345,12 @@ export async function createCategoryAction(
 ): Promise<ActionResult> {
   try {
     await requireRole(["admin", "manager", "warehouse"]);
-    const trimmed = name.trim();
-    if (!trimmed) {
-      return { success: false, error: "El nombre de la categoría no puede estar vacío." };
+    const parsedCat = categoryInputSchema.safeParse({ name, imageUrl: imageUrl ?? "" });
+    if (!parsedCat.success) {
+      return { success: false, error: parsedCat.error.issues[0]?.message || "Datos de categoría inválidos." };
     }
+    const trimmed = parsedCat.data.name;
+    const validImageUrl = parsedCat.data.imageUrl || null;
 
     const baseSlug = slugify(trimmed) || `cat-${Date.now()}`;
     let slug = baseSlug;
@@ -314,7 +366,7 @@ export async function createCategoryAction(
       .values({
         name: trimmed,
         slug,
-        imageUrl: imageUrl || null,
+        imageUrl: validImageUrl,
       })
       .returning();
 
@@ -338,18 +390,19 @@ export async function updateCategoryAction(
 ): Promise<ActionResult> {
   try {
     await requireRole(["admin", "manager", "warehouse"]);
-    const trimmed = newName.trim();
-    if (!trimmed) {
-      return { success: false, error: "El nombre no puede estar vacío." };
+    const parsedCat = categoryInputSchema.safeParse({ name: newName, imageUrl: imageUrl ?? "" });
+    if (!parsedCat.success) {
+      return { success: false, error: parsedCat.error.issues[0]?.message || "Datos de categoría inválidos." };
     }
+    const trimmed = parsedCat.data.name;
 
-    const slug = slugify(trimmed);
+    const slug = slugify(trimmed) || `cat-${id}`;
     const updateData: { name: string; slug: string; imageUrl?: string | null } = {
       name: trimmed,
       slug,
     };
     if (imageUrl !== undefined) {
-      updateData.imageUrl = imageUrl;
+      updateData.imageUrl = parsedCat.data.imageUrl || null;
     }
 
     const [updated] = await db
@@ -471,14 +524,7 @@ export async function getProductKardexAction(productId?: number) {
           typeLabel = "Devolución Cliente";
         }
 
-        const dateObj = new Date(m.createdAt);
-        const formattedDate = dateObj.toLocaleDateString("es-BO", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
+        const formattedDate = formatBusinessDateTime(m.createdAt);
 
         const isNegative =
           m.movementType === "sale_out" ||
@@ -521,6 +567,7 @@ export interface CreateAdjustmentInput {
   quantity: number;
   reason: "damaged" | "defective" | "expired" | "loss_theft" | "supplier_return" | "internal_use";
   notes?: string;
+  requestId?: string;
 }
 
 /**
@@ -540,22 +587,51 @@ export async function createInventoryAdjustmentAction(
       quantity: z.number().int().positive().max(2_147_483_647),
       reason: z.enum(["damaged", "defective", "expired", "loss_theft", "supplier_return", "internal_use"]),
       notes: z.string().trim().max(500).optional(),
+      requestId: z.uuid().optional(),
     }).safeParse(input);
 
     if (!parsed.success) return { success: false, error: "Revisa los datos de la baja." };
 
-    const { rows: [result] } = await db.execute(inventoryAdjustmentQuery({
+    if (parsed.data.requestId) {
+      const existing = await db.query.inventoryAdjustments.findFirst({
+        where: eq(schema.inventoryAdjustments.requestId, parsed.data.requestId),
+        with: { items: { with: { product: true } } },
+      });
+      if (existing) {
+        const firstItem = existing.items[0];
+        return {
+          success: true,
+          data: {
+            adjustment: { id: existing.id, adjustmentNumber: existing.adjustmentNumber },
+            newStock: firstItem?.product?.stock ?? 0,
+            previousStock: (firstItem?.product?.stock ?? 0) + (firstItem?.quantity ?? 0),
+            productName: firstItem?.product ? productName(firstItem.product) : "Producto",
+          },
+        };
+      }
+    }
+
+    const { rows: [result] } = await db.execute<{
+      id: number;
+      adjustmentNumber: string;
+      newStock: number;
+      previousStock: number;
+      productName: string;
+    }>(inventoryAdjustmentQuery({
       ...parsed.data,
       notes: parsed.data.notes || `Baja por ${parsed.data.reason}`,
       userId: currentUser.id,
       authorizedByUserId: currentUser.role === "warehouse" ? null : currentUser.id,
       prefix: `BAJA-${businessDate().slice(0, 4)}-`,
+      requestId: parsed.data.requestId ?? null,
     }));
     if (!result) {
       return { success: false, error: "El producto no existe o no tiene stock suficiente." };
     }
 
     safeRevalidatePath("/admin/inventario");
+    safeRevalidatePath("/admin");
+    safeRevalidatePath("/admin/ventas");
     safeRevalidatePath("/catalogo");
     safeRevalidatePath("/");
 
@@ -606,28 +682,21 @@ export async function getInventoryAdjustmentsAction() {
       const firstItem = a.items[0];
       const product = firstItem?.product;
 
-      const dateObj = new Date(a.createdAt);
-      const formattedDate = dateObj.toLocaleDateString("es-BO", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const formattedDate = formatBusinessDateTime(a.createdAt);
 
       return {
         id: a.id,
         adjustmentNumber: a.adjustmentNumber,
         date: formattedDate,
         productId: product?.id || 0,
-        productName: product?.name || "Varios productos",
+        productName: product ? productName(product) : "Varios productos",
         sku: product?.sku || "N/A",
         quantity: firstItem ? firstItem.quantity : 1,
         reason: a.reason,
         reasonLabel: reasonLabels[a.reason] || a.reason,
         totalLoss: Number(a.totalCost || 0),
         reportedBy: a.user?.name || "Almacenero",
-        authorizedBy: a.authorizedByUser?.name || "Supervisor General",
+        authorizedBy: a.authorizedByUser?.name || "Pendiente de autorización",
         notes: a.notes || "Sin observaciones adicionales",
       };
     });

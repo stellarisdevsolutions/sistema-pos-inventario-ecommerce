@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { products, categories, productModels } from "@/db/schema";
+import { products, categories, brands, productModels, type ProductOptionConfig } from "@/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 
 export interface StoreProduct {
@@ -9,6 +9,8 @@ export interface StoreProduct {
   variant?: string | null;
   variantColor?: string | null;
   variantSelector?: string | null;
+  attributes?: Record<string, string> | null;
+  modelOptions?: ProductOptionConfig[] | null;
   slug: string;
   sku: string | null;
   barcode: string | null;
@@ -23,9 +25,19 @@ export interface StoreProduct {
     name: string;
     slug: string;
   } | null;
+  brand?: {
+    id: number;
+    name: string;
+    slug: string;
+  } | null;
   isActive: boolean;
   isVisibleWeb: boolean;
   isFeatured: boolean;
+  variantCount?: number;
+  totalStock?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  colorSwatches?: { name: string; hex: string }[];
 }
 
 export interface StoreCategory {
@@ -43,6 +55,7 @@ const DEFAULT_PRODUCT_IMAGE =
 type ProductRow = typeof products.$inferSelect & {
   category: typeof categories.$inferSelect | null;
   model: typeof productModels.$inferSelect | null;
+  brand: typeof brands.$inferSelect | null;
 };
 
 function toStoreProduct(p: ProductRow, modelImage?: string | null): StoreProduct {
@@ -52,8 +65,11 @@ function toStoreProduct(p: ProductRow, modelImage?: string | null): StoreProduct
     id: p.id, name: p.model?.name ?? p.name, slug: p.slug, sku: p.sku, barcode: p.barcode,
     modelCode: p.modelCode, variant: p.variant, variantColor: p.variantColor,
     variantSelector: p.model?.variantSelector,
+    attributes: p.attributes ?? null,
+    modelOptions: p.model?.options ?? null,
     description: p.description, price: Number(p.price), stock: p.stock, minStock: p.minStock,
     imageUrl, images: [...new Set([imageUrl, ...images])], category: p.category,
+    brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
     isActive: p.isActive, isVisibleWeb: p.isVisibleWeb, isFeatured: p.isFeatured,
   };
 }
@@ -62,7 +78,7 @@ export async function getStoreProducts(): Promise<StoreProduct[]> {
   try {
     const rows = await db.query.products.findMany({
       where: and(eq(products.isActive, true), eq(products.isVisibleWeb, true)),
-      with: { category: true, model: true },
+      with: { category: true, model: true, brand: true },
       orderBy: [desc(products.id)],
     });
     const groups = new Map<string, ProductRow[]>();
@@ -76,7 +92,38 @@ export async function getStoreProducts(): Promise<StoreProduct[]> {
       const representative = group.find(row => row.stock > 0) ?? group[0];
       const modelImage = group.find(row => row.imageUrl || row.images[0]);
       const product = toStoreProduct(representative, modelImage?.imageUrl || modelImage?.images[0]);
-      return { ...product, isFeatured: group.some(row => row.isFeatured) };
+      const prices = group.map(row => Number(row.price));
+      const totalStock = group.reduce((sum, row) => sum + Math.max(0, row.stock), 0);
+
+      const swatchMap = new Map<string, string>();
+      for (const row of group) {
+        if (row.variantColor && /^#[0-9A-Fa-f]{6}$/.test(row.variantColor)) {
+          const label = row.variant || row.variantColor;
+          if (!swatchMap.has(row.variantColor.toLowerCase())) {
+            swatchMap.set(row.variantColor.toLowerCase(), label);
+          }
+        }
+        if (row.attributes) {
+          for (const val of Object.values(row.attributes)) {
+            if (typeof val === "string" && val.includes("|")) {
+              const [label, hex] = val.split("|");
+              if (hex && /^#[0-9A-Fa-f]{6}$/.test(hex) && !swatchMap.has(hex.toLowerCase())) {
+                swatchMap.set(hex.toLowerCase(), label || hex);
+              }
+            }
+          }
+        }
+      }
+
+      return {
+        ...product,
+        isFeatured: group.some(row => row.isFeatured),
+        variantCount: group.length,
+        totalStock,
+        minPrice: Math.min(...prices),
+        maxPrice: Math.max(...prices),
+        colorSwatches: [...swatchMap.entries()].map(([hex, name]) => ({ hex, name })),
+      };
     });
   } catch (error) {
     console.error("Error al obtener productos para la tienda:", error);
@@ -138,7 +185,7 @@ export async function getStoreProductBySlug(slug: string): Promise<StoreProduct 
         eq(p.slug, slug),
         /^\d+$/.test(slug) && Number(slug) <= 2147483647 ? eq(p.id, Number(slug)) : undefined
       ),
-      with: { category: true, model: true },
+      with: { category: true, model: true, brand: true },
     });
     return p?.isActive && p.isVisibleWeb ? toStoreProduct(p) : null;
   } catch (error) {
@@ -148,11 +195,16 @@ export async function getStoreProductBySlug(slug: string): Promise<StoreProduct 
 }
 
 export async function getStoreVariants(modelCode: string): Promise<StoreProduct[]> {
-  const rows = await db.query.products.findMany({
-    where: and(eq(products.modelCode, modelCode), eq(products.isActive, true), eq(products.isVisibleWeb, true)),
-    with: { category: true, model: true },
-    orderBy: (p, { asc }) => [asc(p.variant), asc(p.id)],
-  });
-  const firstImage = rows.find(row => row.imageUrl || row.images[0]);
-  return rows.map(row => toStoreProduct(row, firstImage?.imageUrl || firstImage?.images[0]));
+  try {
+    const rows = await db.query.products.findMany({
+      where: and(eq(products.modelCode, modelCode), eq(products.isActive, true), eq(products.isVisibleWeb, true)),
+      with: { category: true, model: true, brand: true },
+      orderBy: (p, { asc }) => [asc(p.variant), asc(p.id)],
+    });
+    const firstImage = rows.find(row => row.imageUrl || row.images[0]);
+    return rows.map(row => toStoreProduct(row, firstImage?.imageUrl || firstImage?.images[0]));
+  } catch (error) {
+    console.error("Error al obtener variantes del producto:", error);
+    return [];
+  }
 }

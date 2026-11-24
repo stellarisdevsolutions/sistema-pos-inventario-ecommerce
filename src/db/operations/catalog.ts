@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { ProductDbInsert } from "@/lib/validations/product";
+import type { ProductDbInsert, ProductOptionConfig } from "@/lib/validations/product";
 
 export type CatalogEntry = ProductDbInsert & {
   variantSelector?: string | null;
   importKey?: string;
-  options?: any;
+  options?: ProductOptionConfig[] | null;
   attributes?: Record<string, string> | null;
 };
 

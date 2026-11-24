@@ -15,16 +15,19 @@ import {
   MapPin,
   Clock,
   Send,
-  HelpCircle,
   CheckCircle2,
-  Sparkles,
   ChevronRight,
-  ShieldCheck,
-  FileText,
   QrCode,
   Building2,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  STORE_ADDRESS,
+  STORE_EMAIL,
+  STORE_NAME,
+  STORE_PHONE_DISPLAY,
+  STORE_WHATSAPP_NUMBER,
+} from "@/lib/store-config";
 
 export default function ContactoPage() {
   const [formData, setFormData] = useState({
@@ -35,8 +38,15 @@ export default function ContactoPage() {
     asunto: "consulta-producto",
     mensaje: "",
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
+
+  const directWhatsappMessage =
+    `¡Hola ${STORE_NAME}! Mi nombre es ${formData.nombre || "un cliente"} desde ${formData.ciudad}.\n\n` +
+    (formData.correo ? `Correo: ${formData.correo}\n` : "") +
+    (formData.telefono ? `Teléfono: ${formData.telefono}\n` : "") +
+    `Asunto: ${formData.asunto}\n` +
+    `Mensaje: ${formData.mensaje || "Deseo consultar sobre disponibilidad de productos y envíos."}`;
+  const directWhatsappText = encodeURIComponent(directWhatsappMessage);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,14 +57,12 @@ export default function ContactoPage() {
       return;
     }
 
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setSentSuccess(true);
-      toast.success("¡Mensaje recibido con éxito!", {
-        description: `Gracias ${formData.nombre}, nuestro equipo en Bolivia te responderá a la brevedad.`,
-      });
-    }, 700);
+    const waUrl = `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${directWhatsappText}`;
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+    setSentSuccess(true);
+    toast.success("Abriendo WhatsApp con tu consulta", {
+      description: `Si la ventana no se abrió automáticamente, usa el botón "Continuar por WhatsApp".`,
+    });
   };
 
   const handleResetForm = () => {
@@ -69,42 +77,40 @@ export default function ContactoPage() {
     });
   };
 
-  const directWhatsappText = encodeURIComponent(
-    `¡Hola Aura Store! Mi nombre es ${formData.nombre || "un cliente"} desde ${formData.ciudad}.\n\n` +
-      `Asunto: ${formData.asunto}\n` +
-      `Mensaje: ${formData.mensaje || "Deseo consultar sobre disponibilidad de productos y envíos."}`
-  );
+  const whatsappDisplay = STORE_WHATSAPP_NUMBER.startsWith("591")
+    ? `+591 ${STORE_WHATSAPP_NUMBER.slice(3)}`
+    : `+${STORE_WHATSAPP_NUMBER}`;
+  const telHref = `tel:${STORE_PHONE_DISPLAY.replace(/[^\d+]/g, "")}`;
 
   const contactChannels = [
     {
       icon: MessageCircle,
-      title: "WhatsApp Atención Inmediata",
-      value: "+591 70000000",
-      description: "Lunes a Sábado de 08:30 a 20:00",
+      title: "WhatsApp atención inmediata",
+      value: whatsappDisplay,
+      description: "Lunes a sábado de 08:30 a 20:00",
       actionText: "Chatear por WhatsApp",
-      href: "https://wa.me/59170000000?text=Hola%20Aura%20Store,%20deseo%20hacer%20una%20consulta",
-      bg: "bg-emerald-50 text-emerald-600 border-emerald-200",
-      btnClass: "bg-emerald-600 hover:bg-emerald-700 text-white",
+      href: `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+        `Hola ${STORE_NAME}, deseo hacer una consulta`
+      )}`,
+      primary: true,
     },
     {
       icon: Phone,
-      title: "Línea Directa & Ventas",
-      value: "+591 2 2440000",
+      title: "Línea directa y ventas",
+      value: STORE_PHONE_DISPLAY,
       description: "Atención telefónica a nivel nacional",
-      actionText: "Llamar por Teléfono",
-      href: "tel:+59122440000",
-      bg: "bg-sky-50 text-sky-600 border-sky-200",
-      btnClass: "bg-sky-600 hover:bg-sky-700 text-white",
+      actionText: "Llamar por teléfono",
+      href: telHref,
+      primary: false,
     },
     {
       icon: Mail,
-      title: "Correo Institucional",
-      value: "ventas@auracommerce.bo",
+      title: "Correo institucional",
+      value: STORE_EMAIL,
       description: "Cotizaciones, empresas y facturación",
-      actionText: "Enviar Correo",
-      href: "mailto:ventas@auracommerce.bo",
-      bg: "bg-orange-50 text-store-primary border-orange-200",
-      btnClass: "bg-store-primary hover:bg-store-primary-hover text-white",
+      actionText: "Enviar correo",
+      href: `mailto:${STORE_EMAIL}`,
+      primary: false,
     },
   ];
 
@@ -128,59 +134,48 @@ export default function ContactoPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-900 font-sans flex flex-col pb-20 md:pb-0 selection:bg-store-primary selection:text-white">
+    <div className="min-h-screen bg-store-bg text-store-ink font-store flex flex-col pb-20 md:pb-0 selection:bg-store-primary selection:text-store-on-primary">
       <StoreHeader />
 
-      {/* Migas de Pan */}
-      <div className="bg-white border-b border-slate-200 py-3 px-4 shadow-2xs">
-        <div className="max-w-7xl mx-auto flex items-center gap-2 text-xs text-slate-500">
-          <Link href="/" className="hover:text-store-primary transition-colors">
-            Inicio
-          </Link>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-          <span className="text-slate-900 font-bold">Contacto & Soporte</span>
-        </div>
-      </div>
+      {/* Cabecera limpia sobre blanco puro */}
+      <section className="border-b border-store-border py-10 sm:py-14 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1380px] mx-auto">
+          <div className="max-w-2xl space-y-4">
+            <nav aria-label="Migas de pan" className="flex items-center gap-1.5 text-xs text-store-muted">
+              <Link href="/" className="hover:text-store-ink transition-colors">
+                Inicio
+              </Link>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span className="text-store-ink font-medium">Contacto y soporte</span>
+            </nav>
 
-      {/* Hero Banner de Contacto */}
-      <section className="bg-slate-950 text-white py-12 sm:py-16 px-4 border-b border-slate-800 relative overflow-hidden">
-        <div className="max-w-4xl mx-auto text-center space-y-3 relative z-10">
-          <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-store-primary bg-orange-500/10 px-3.5 py-1.5 rounded-full border border-store-primary/30 inline-flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5" />
-            CANALES DE ATENCIÓN DIRECTA EN BOLIVIA
-          </span>
-
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tight text-white">
-            Estamos listos para <span className="text-store-primary">ayudarte</span>
-          </h1>
-
-          <p className="text-slate-300 text-xs sm:text-sm max-w-xl mx-auto leading-relaxed">
-            ¿Tienes dudas sobre especificaciones, stock, envíos departamentales o necesitas una cotización empresarial con factura? Contáctanos por cualquiera de nuestros canales.
-          </p>
+            <h1 className="text-3xl sm:text-5xl font-semibold tracking-[-0.03em] text-store-ink leading-[1.08]">
+              Contacto y soporte
+            </h1>
+            <p className="text-store-muted text-sm sm:text-base leading-relaxed">
+              ¿Tienes dudas sobre especificaciones, stock, envíos departamentales o necesitas una cotización empresarial con factura? Escríbenos por cualquiera de nuestros canales.
+            </p>
+          </div>
         </div>
       </section>
 
       {/* Contenido Principal */}
-      <main className="max-w-7xl w-full mx-auto p-4 md:py-10 flex-1 space-y-12">
-        {/* 1. Tarjetas de Canales de Contacto Directo */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 -mt-8 relative z-20">
+      <main className="max-w-[1380px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 flex-1 space-y-14">
+        {/* 1. Canales de Contacto Directo */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {contactChannels.map((c, idx) => {
             const Icon = c.icon;
             return (
               <div
                 key={idx}
-                className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                className="bg-store-surface rounded-2xl p-6 flex flex-col justify-between space-y-6"
               >
                 <div className="space-y-3">
-                  <div className={`h-12 w-12 rounded-2xl flex items-center justify-center border ${c.bg}`}>
-                    <Icon className="h-6 w-6" />
-                  </div>
+                  <Icon className="h-5 w-5 text-store-ink stroke-[1.5]" />
                   <div>
-                    <h3 className="font-black text-sm uppercase text-slate-900 tracking-tight">
-                      {c.title}
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">{c.description}</p>
-                    <span className="text-base font-black text-slate-900 block mt-2 font-mono">
+                    <h2 className="font-semibold text-sm text-store-ink">{c.title}</h2>
+                    <p className="text-xs text-store-muted mt-0.5">{c.description}</p>
+                    <span className="text-base font-semibold text-store-ink block mt-3 font-mono tabular-nums">
                       {c.value}
                     </span>
                   </div>
@@ -190,7 +185,11 @@ export default function ContactoPage() {
                   href={c.href}
                   target={c.href.startsWith("http") ? "_blank" : undefined}
                   rel={c.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs uppercase tracking-wider text-center block transition-all shadow-xs ${c.btnClass}`}
+                  className={`w-full h-10 px-4 rounded-lg font-bold text-xs text-center flex items-center justify-center transition-[background-color,transform] duration-150 ease-out active:scale-[0.98] ${
+                    c.primary
+                      ? "bg-store-primary hover:bg-store-primary-hover text-store-on-primary"
+                      : "bg-store-ink hover:bg-store-primary text-store-on-primary"
+                  }`}
                 >
                   {c.actionText}
                 </a>
@@ -199,40 +198,42 @@ export default function ContactoPage() {
           })}
         </section>
 
-        {/* 2. Formulario de Contacto y Horarios de Sucursal */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* 2. Formulario de Contacto y Horarios */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           {/* Formulario Interactivo (7 cols) */}
-          <div className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-2xs space-y-6">
+          <div className="lg:col-span-7 border border-store-border rounded-2xl p-6 sm:p-8 space-y-6">
             <div className="space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-store-primary">
+              <p className="text-xs font-medium text-store-primary">
                 Envíanos un mensaje
-              </span>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-950 uppercase tracking-tight">
-                Formulario de Consulta Directa
+              </p>
+              <h2 className="text-xl sm:text-2xl font-semibold text-store-ink tracking-[-0.025em]">
+                Formulario de consulta directa
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-store-muted">
                 Completa tus datos y un asesor se pondrá en contacto en menos de 2 horas hábiles.
               </p>
             </div>
 
             {sentSuccess ? (
-              <div className="p-8 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-4">
-                <div className="h-14 w-14 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-sm">
-                  <CheckCircle2 className="h-7 w-7" />
+              <div className="p-8 rounded-2xl bg-store-surface text-center space-y-4">
+                <div className="h-12 w-12 rounded-full bg-store-success text-store-on-primary flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="h-6 w-6" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="font-black text-base text-emerald-950">¡Mensaje Enviado con Éxito!</h3>
-                  <p className="text-xs text-emerald-700 max-w-sm mx-auto">
-                    Hemos registrado tu solicitud correctamente. Si necesitas respuesta instantánea, también puedes enviarla directamente a nuestro WhatsApp.
+                  <h3 className="font-semibold text-base text-store-ink">
+                    Consulta lista en WhatsApp
+                  </h3>
+                  <p className="text-xs text-store-muted max-w-sm mx-auto leading-relaxed">
+                    Preparamos tu mensaje para atención directa por WhatsApp. Si no se abrió la pestaña automáticamente, haz clic abajo para continuar.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                   <a
-                    href={`https://wa.me/59170000000?text=${directWhatsappText}`}
+                    href={`https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${directWhatsappText}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-xs"
+                    className="inline-flex items-center gap-2 bg-store-primary hover:bg-store-primary-hover text-store-on-primary font-medium text-xs px-5 h-10 rounded-full transition-colors"
                   >
                     <MessageCircle className="h-4 w-4" />
                     <span>Continuar por WhatsApp</span>
@@ -241,7 +242,7 @@ export default function ContactoPage() {
                   <Button
                     variant="outline"
                     onClick={handleResetForm}
-                    className="text-xs font-bold rounded-xl"
+                    className="text-xs font-medium rounded-full border-store-border h-10 px-5 cursor-pointer"
                   >
                     Enviar otro mensaje
                   </Button>
@@ -250,24 +251,22 @@ export default function ContactoPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Nombre */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      Nombre Completo <span className="text-rose-500">*</span>
+                    <label className="text-xs font-medium text-store-ink block">
+                      Nombre completo <span className="text-store-primary">*</span>
                     </label>
                     <Input
                       required
                       value={formData.nombre}
                       onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                       placeholder="Ej. Carlos Mendoza"
-                      className="text-xs h-10 rounded-xl bg-slate-50 border-slate-200"
+                      className="text-xs h-10 rounded-xl bg-store-surface border-transparent focus-visible:bg-store-bg focus-visible:border-store-ink focus-visible:ring-0 shadow-none"
                     />
                   </div>
 
-                  {/* Correo */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      Correo Electrónico <span className="text-rose-500">*</span>
+                    <label className="text-xs font-medium text-store-ink block">
+                      Correo electrónico <span className="text-store-primary">*</span>
                     </label>
                     <Input
                       required
@@ -275,15 +274,14 @@ export default function ContactoPage() {
                       value={formData.correo}
                       onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
                       placeholder="carlos@correo.com"
-                      className="text-xs h-10 rounded-xl bg-slate-50 border-slate-200"
+                      className="text-xs h-10 rounded-xl bg-store-surface border-transparent focus-visible:bg-store-bg focus-visible:border-store-ink focus-visible:ring-0 shadow-none"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Teléfono / WhatsApp */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
+                    <label className="text-xs font-medium text-store-ink block">
                       Teléfono / WhatsApp
                     </label>
                     <Input
@@ -291,19 +289,18 @@ export default function ContactoPage() {
                       value={formData.telefono}
                       onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
                       placeholder="+591 7XXXXXXX"
-                      className="text-xs h-10 rounded-xl bg-slate-50 border-slate-200"
+                      className="text-xs h-10 rounded-xl bg-store-surface border-transparent focus-visible:bg-store-bg focus-visible:border-store-ink focus-visible:ring-0 shadow-none"
                     />
                   </div>
 
-                  {/* Ciudad / Departamento en Bolivia */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      Ciudad o Departamento
+                    <label className="text-xs font-medium text-store-ink block">
+                      Ciudad o departamento
                     </label>
                     <select
                       value={formData.ciudad}
                       onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
-                      className="w-full h-10 text-xs font-semibold rounded-xl bg-slate-50 border border-slate-200 px-3 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-store-primary"
+                      className="w-full h-10 text-xs font-medium rounded-xl bg-store-surface border border-transparent focus:bg-store-bg focus:border-store-ink px-3 text-store-ink focus:outline-hidden"
                     >
                       <option value="La Paz">La Paz / El Alto</option>
                       <option value="Santa Cruz">Santa Cruz de la Sierra</option>
@@ -319,15 +316,14 @@ export default function ContactoPage() {
                   </div>
                 </div>
 
-                {/* Asunto */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 block">
-                    Motivo de la Consulta
+                  <label className="text-xs font-medium text-store-ink block">
+                    Motivo de la consulta
                   </label>
                   <select
                     value={formData.asunto}
                     onChange={(e) => setFormData({ ...formData, asunto: e.target.value })}
-                    className="w-full h-10 text-xs font-semibold rounded-xl bg-slate-50 border border-slate-200 px-3 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-store-primary"
+                    className="w-full h-10 text-xs font-medium rounded-xl bg-store-surface border border-transparent focus:bg-store-bg focus:border-store-ink px-3 text-store-ink focus:outline-hidden"
                   >
                     <option value="consulta-producto">Consulta sobre producto y disponibilidad</option>
                     <option value="estado-pedido">Seguimiento / Estado de mi pedido</option>
@@ -337,10 +333,9 @@ export default function ContactoPage() {
                   </select>
                 </div>
 
-                {/* Mensaje */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 block">
-                    Mensaje o Detalle del Requerimiento <span className="text-rose-500">*</span>
+                  <label className="text-xs font-medium text-store-ink block">
+                    Mensaje o detalle <span className="text-store-primary">*</span>
                   </label>
                   <textarea
                     required
@@ -348,121 +343,106 @@ export default function ContactoPage() {
                     value={formData.mensaje}
                     onChange={(e) => setFormData({ ...formData, mensaje: e.target.value })}
                     placeholder="Escribe tu consulta detallada aquí..."
-                    className="w-full p-3 text-xs font-medium rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-store-primary"
+                    className="w-full p-3 text-xs rounded-xl bg-store-surface border border-transparent focus:bg-store-bg focus:border-store-ink focus:outline-hidden text-store-ink placeholder:text-store-muted"
                   />
                 </div>
 
                 <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
                   <Button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="w-full sm:w-auto h-12 px-6 rounded-xl bg-store-primary hover:bg-store-primary-hover text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md cursor-pointer disabled:opacity-50"
+                    className="w-full sm:w-auto h-11 px-6 rounded-lg bg-store-primary hover:bg-store-primary-hover text-store-on-primary font-bold text-xs flex items-center justify-center gap-2 transition-[background-color,transform] duration-150 ease-out active:scale-[0.98] cursor-pointer"
                   >
-                    <Send className="h-4 w-4" />
-                    <span>{isSubmitting ? "Enviando..." : "Enviar Formulario"}</span>
+                    <Send className="h-3.5 w-3.5" />
+                    <span>Enviar por WhatsApp</span>
                   </Button>
 
                   <a
-                    href={`https://wa.me/59170000000?text=${directWhatsappText}`}
+                    href={`https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${directWhatsappText}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full sm:w-auto h-12 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-colors"
+                    className="w-full sm:w-auto h-11 px-6 rounded-lg bg-store-ink hover:bg-store-primary text-store-on-primary font-bold text-xs flex items-center justify-center gap-2 transition-colors"
                   >
-                    <MessageCircle className="h-4 w-4" />
-                    <span>Enviar directo a WhatsApp</span>
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span>Abrir chat WhatsApp</span>
                   </a>
                 </div>
               </form>
             )}
           </div>
 
-          {/* Información Institucional, Ubicación y Horarios (5 cols) */}
-          <div className="lg:col-span-5 space-y-6">
-            {/* Tarjeta de Ubicación y Horarios */}
-            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/90 shadow-2xs space-y-5">
-              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                <div className="h-10 w-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center border border-sky-100">
-                  <Building2 className="h-5 w-5" />
-                </div>
+          {/* Ubicación y Horarios (5 cols) */}
+          <div className="lg:col-span-5 space-y-5">
+            <div className="bg-store-surface rounded-2xl p-6 sm:p-7 space-y-5">
+              <div className="flex items-center gap-3 pb-4 border-b border-store-border">
+                <Building2 className="h-5 w-5 text-store-ink stroke-[1.5]" />
                 <div>
-                  <h3 className="font-black text-sm uppercase text-slate-900">
-                    Centro de Distribución
+                  <h3 className="font-semibold text-sm text-store-ink">
+                    Centro de distribución
                   </h3>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">
-                    Almacén Central & Despachos
+                  <span className="text-xs text-store-muted">
+                    Almacén central y despachos
                   </span>
                 </div>
               </div>
 
-              <div className="space-y-4 text-xs text-slate-600">
+              <div className="space-y-4 text-xs text-store-muted">
                 <div className="flex items-start gap-3">
-                  <MapPin className="h-4 w-4 text-store-primary shrink-0 mt-0.5" />
+                  <MapPin className="h-4 w-4 text-store-ink stroke-[1.5] shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-slate-900 block font-bold">Dirección:</strong>
-                    <span>Av. 6 de Agosto esquina Guachalla, Edificio Los Robles, La Paz - Bolivia</span>
+                    <strong className="text-store-ink block font-medium">Dirección</strong>
+                    <span>{STORE_ADDRESS}</span>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <Clock className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <Clock className="h-4 w-4 text-store-ink stroke-[1.5] shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-slate-900 block font-bold">Horarios de Atención:</strong>
-                    <span>Lunes a Viernes: 08:30 - 18:30</span>
-                    <span className="block text-slate-400">Sábados: 09:00 - 13:00 (Soporte y entregas)</span>
+                    <strong className="text-store-ink block font-medium">Horarios de atención</strong>
+                    <span>Lunes a viernes: 08:30 - 18:30</span>
+                    <span className="block">Sábados: 09:00 - 13:00 (Soporte y entregas)</span>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <QrCode className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
+                  <QrCode className="h-4 w-4 text-store-ink stroke-[1.5] shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-slate-900 block font-bold">Cobros y Facturación:</strong>
+                    <strong className="text-store-ink block font-medium">Cobros y facturación</strong>
                     <span>Factura electrónica con QR SIN en todas las compras</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Garantías Oficiales */}
-            <div className="bg-slate-950 text-white rounded-3xl p-6 border border-slate-800 space-y-3">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/20 px-2.5 py-1 rounded-md border border-amber-500/30 inline-block">
-                COMPROMISO DE SERVICIO
-              </span>
-              <h4 className="text-base font-black uppercase tracking-tight">
-                Garantía y Confianza
+            <div className="bg-store-surface rounded-2xl p-6 space-y-2">
+              <h4 className="text-sm font-semibold text-store-ink">
+                Garantía y stock físico real
               </h4>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Toda nuestra mercadería cuenta con stock real inspeccionado en Bolivia. No realizamos dropshipping ni ventas sin disponibilidad física.
+              <p className="text-xs text-store-muted leading-relaxed">
+                Toda nuestra mercadería cuenta con stock inspeccionado en Bolivia. No realizamos dropshipping ni ventas sin disponibilidad física.
               </p>
             </div>
           </div>
         </div>
 
-        {/* 3. Preguntas Frecuentes / FAQs */}
-        <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-2xs space-y-6">
-          <div className="flex items-center gap-2">
-            <HelpCircle className="h-5 w-5 text-store-primary" />
-            <h3 className="text-lg sm:text-xl font-black text-slate-950 uppercase tracking-tight">
-              Preguntas Frecuentes de Clientes
-            </h3>
-          </div>
+        {/* 3. Preguntas Frecuentes */}
+        <section className="pt-10 border-t border-store-border space-y-6">
+          <h2 className="text-2xl font-semibold text-store-ink tracking-[-0.025em]">
+            Preguntas frecuentes
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {faqs.map((faq, idx) => (
-              <div
-                key={idx}
-                className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5"
-              >
-                <h4 className="font-extrabold text-xs text-slate-900 leading-snug">
+              <div key={idx} className="p-6 rounded-2xl bg-store-surface space-y-2">
+                <h3 className="font-semibold text-sm text-store-ink leading-snug">
                   {faq.q}
-                </h4>
-                <p className="text-xs text-slate-600 leading-relaxed">{faq.a}</p>
+                </h3>
+                <p className="text-xs text-store-muted leading-relaxed">{faq.a}</p>
               </div>
             ))}
           </div>
         </section>
       </main>
 
-      {/* Pie de Tienda & Carrito */}
       <StoreTrustBadges />
       <StoreFooter />
       <StoreMobileNav />

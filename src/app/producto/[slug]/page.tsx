@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { Metadata } from "next";
-import { getStoreProductBySlug, getStoreProducts, getStoreVariants } from "@/app/actions/store";
+import { getStoreCategories, getStoreProductBySlug, getStoreProducts, getStoreVariants } from "@/app/actions/store";
+import { STORE_NAME } from "@/lib/store-config";
 import { ProductDetailClient } from "./product-client";
 
 interface PageProps {
@@ -14,12 +16,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!product) {
     return {
-      title: "Producto no encontrado | Tienda Oficial",
+      title: `Producto no encontrado | ${STORE_NAME}`,
     };
   }
 
   return {
-    title: `${product.name} | Tienda Online Bolivia`,
+    title: `${product.name} | ${STORE_NAME}`,
     description:
       product.description ||
       `Compra ${product.name} al mejor precio en Bolivia con garantía y entrega inmediata.`,
@@ -27,6 +29,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 async function ProductDataLoader({ params }: PageProps) {
+  await connection();
   const { slug } = await params;
   const product = await getStoreProductBySlug(slug);
 
@@ -34,22 +37,33 @@ async function ProductDataLoader({ params }: PageProps) {
     notFound();
   }
 
-  const [allProducts, variants] = await Promise.all([getStoreProducts(), product.modelCode ? getStoreVariants(product.modelCode) : []]);
-  const relatedProducts = allProducts.filter(
-    (p) => p.id !== product.id && (!product.modelCode || p.modelCode !== product.modelCode) && p.category?.id === product.category?.id
+  const [allProducts, categories, variants] = await Promise.all([
+    getStoreProducts(),
+    getStoreCategories(),
+    product.modelCode ? getStoreVariants(product.modelCode) : [],
+  ]);
+  const relatedCandidates = allProducts.filter(
+    (p) => p.id !== product.id && (!product.modelCode || p.modelCode !== product.modelCode)
   );
+  const sameCategory = relatedCandidates.filter(
+    (p) => p.category?.id && p.category.id === product.category?.id
+  );
+  const fallbackOthers = relatedCandidates.filter(
+    (p) => !p.category?.id || p.category.id !== product.category?.id
+  );
+  const relatedProducts = [...sameCategory, ...fallbackOthers].slice(0, 4);
 
-  return <ProductDetailClient product={product} variants={variants} relatedProducts={relatedProducts} />;
+  return <ProductDetailClient product={product} variants={variants} relatedProducts={relatedProducts} categories={categories} />;
 }
 
 export default function ProductDetailPage({ params }: PageProps) {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-100/70 flex items-center justify-center p-8">
+        <div className="min-h-screen bg-store-bg flex items-center justify-center p-8 font-store">
           <div className="text-center space-y-3">
-            <div className="h-10 w-10 border-4 border-store-primary border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <div className="h-8 w-8 border-2 border-store-border border-t-store-primary rounded-full animate-spin mx-auto" />
+            <p className="text-xs text-store-muted">
               Cargando producto...
             </p>
           </div>

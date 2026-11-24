@@ -5,6 +5,10 @@ import { CatalogImportDialog } from "@/components/admin/catalog-import-dialog";
 import { MetricCard } from "@/components/admin/metric-card";
 
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
+import {
+  ProductDetailSheet,
+  type InventoryProductDetail,
+} from "@/components/admin/product-detail-sheet";
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
@@ -14,7 +18,6 @@ import {
   getInventoryFormData,
   createCategoryAction,
   updateCategoryAction,
-  renameCategoryAction,
   deleteCategoryAction,
   getProductKardexAction,
   getInventoryAdjustmentsAction,
@@ -23,6 +26,7 @@ import {
 } from "@/app/admin/actions/products";
 import { uploadCategoryPhotoAction } from "@/app/admin/actions/upload";
 import { optimizeImageToWebP } from "@/lib/image-optimizer";
+import { csvCell } from "@/lib/sanitize";
 import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,96 +90,8 @@ import {
 import { cn } from "@/lib/utils";
 import InventarioLoading from "./loading";
 
-// =========================================================================
-// MOCK DATA DE PRODUCTOS
-// =========================================================================
-interface Product {
-  id: number;
-  name: string;
-  sku: string;
-  barcode: string;
-  category: string;
-  price: number;
-  costPrice: number;
-  stock: number;
-  minStock: number;
-  status: "in_stock" | "low_stock" | "out_of_stock";
-  image: string;
-  isActive?: boolean;
-  description?: string | null;
-}
+type Product = InventoryProductDetail;
 
-const initialProducts: Product[] = [
-  {
-    id: 1,
-    name: "GadgetHub Watch X1 Pro",
-    sku: "WAT-X1-PRO",
-    barcode: "750100234501",
-    category: "Smartwatches",
-    price: 199.99,
-    costPrice: 95.0,
-    stock: 3,
-    minStock: 8,
-    status: "low_stock",
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&auto=format&fit=crop&q=80",
-  },
-  {
-    id: 2,
-    name: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    barcode: "750100234502",
-    category: "Audio",
-    price: 129.9,
-    costPrice: 55.0,
-    stock: 24,
-    minStock: 6,
-    status: "in_stock",
-    image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=150&auto=format&fit=crop&q=80",
-  },
-  {
-    id: 3,
-    name: "Teclado Mecánico RGB Wireless",
-    sku: "KEY-RGB-WL",
-    barcode: "750100234503",
-    category: "Gaming",
-    price: 89.0,
-    costPrice: 38.0,
-    stock: 2,
-    minStock: 10,
-    status: "low_stock",
-    image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=150&auto=format&fit=crop&q=80",
-  },
-  {
-    id: 4,
-    name: "Base de Carga Rápida Qi 3 en 1",
-    sku: "CHG-QI-03",
-    barcode: "750100234504",
-    category: "Accesorios",
-    price: 49.99,
-    costPrice: 19.0,
-    stock: 0,
-    minStock: 12,
-    status: "out_of_stock",
-    image: "https://images.unsplash.com/photo-1622445262464-84b1456045b6?w=150&auto=format&fit=crop&q=80",
-  },
-  {
-    id: 5,
-    name: "Cámara Ultra 4K Creator Kit",
-    sku: "CAM-4K-KIT",
-    barcode: "750100234505",
-    category: "Video",
-    price: 349.0,
-    costPrice: 180.0,
-    stock: 15,
-    minStock: 4,
-    status: "in_stock",
-    image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=150&auto=format&fit=crop&q=80",
-  },
-];
-
-// =========================================================================
-// MOCK DATA DE KÁRDEX (LIBRO MAYOR INMUTABLE)
-// =========================================================================
 interface KardexMovement {
   id: number;
   date: string;
@@ -192,82 +108,6 @@ interface KardexMovement {
   reason?: string;
 }
 
-const kardexMovements: KardexMovement[] = [
-  {
-    id: 501,
-    date: "Hoy, 11:20 AM",
-    product: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    type: "sale_out",
-    typeLabel: "Venta en Mostrador (POS)",
-    quantity: -1,
-    previousStock: 25,
-    newStock: 24,
-    unitCost: 55.0,
-    reference: "Ticket VTA-2026-1001",
-    user: "Sofía Cajera",
-  },
-  {
-    id: 502,
-    date: "Hoy, 09:45 AM",
-    product: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    type: "damaged_out",
-    typeLabel: "Baja por Daño Físico",
-    quantity: -1,
-    previousStock: 26,
-    newStock: 25,
-    unitCost: 55.0,
-    reference: "Acta BAJA-2026-001",
-    user: "Lucas Almacenero",
-  },
-  {
-    id: 503,
-    date: "Ayer, 04:30 PM",
-    product: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    type: "purchase_in",
-    typeLabel: "Recepción de Compra",
-    quantity: 20,
-    previousStock: 6,
-    newStock: 26,
-    unitCost: 55.0,
-    reference: "Factura COM-2026-081",
-    user: "Lucas Almacenero",
-  },
-  {
-    id: 504,
-    date: "Ayer, 02:15 PM",
-    product: "Teclado Mecánico RGB Wireless",
-    sku: "KEY-RGB-WL",
-    type: "sale_out",
-    typeLabel: "Venta en Mostrador (POS)",
-    quantity: -2,
-    previousStock: 4,
-    newStock: 2,
-    unitCost: 38.0,
-    reference: "Ticket VTA-2026-0998",
-    user: "Sofía Cajera",
-  },
-  {
-    id: 505,
-    date: "28 Oct, 10:00 AM",
-    product: "GadgetHub Watch X1 Pro",
-    sku: "WAT-X1-PRO",
-    type: "sale_out",
-    typeLabel: "Venta Tienda Online",
-    quantity: -1,
-    previousStock: 4,
-    newStock: 3,
-    unitCost: 95.0,
-    reference: "Orden WEB-2026-442",
-    user: "Sistema E-commerce",
-  },
-];
-
-// =========================================================================
-// MODELO Y DATOS DE BAJAS / MERMAS
-// =========================================================================
 interface AdjustmentItem {
   id: number;
   adjustmentNumber: string;
@@ -283,39 +123,6 @@ interface AdjustmentItem {
   authorizedBy: string;
   notes: string;
 }
-
-const initialAdjustments: AdjustmentItem[] = [
-  {
-    id: 301,
-    adjustmentNumber: "BAJA-2026-001",
-    date: "Hoy, 09:45 AM",
-    productId: 2,
-    productName: "SoundCore Elite Earbuds Pro",
-    sku: "AUD-EAR-PRO",
-    quantity: 1,
-    reason: "damaged",
-    reasonLabel: "Rotura física en transporte",
-    totalLoss: 55.0,
-    reportedBy: "Lucas Almacenero",
-    authorizedBy: "Martín Supervisor",
-    notes: "Auricular izquierdo quebrado por golpe en descarga de camión",
-  },
-  {
-    id: 300,
-    adjustmentNumber: "BAJA-2026-000",
-    date: "26 Oct, 03:00 PM",
-    productId: 4,
-    productName: "Base de Carga Rápida Qi 3 en 1",
-    sku: "CHG-QI-03",
-    quantity: 1,
-    reason: "defective",
-    reasonLabel: "Defecto de fábrica (No enciende)",
-    totalLoss: 19.0,
-    reportedBy: "Sofía Cajera",
-    authorizedBy: "Administrador General",
-    notes: "Cliente reportó falla al abrir caja; derivado a reclamo de garantía con proveedor",
-  },
-];
 
 function getPaginationItems(currentPage: number, totalPages: number): (number | "...")[] {
   if (totalPages <= 6) {
@@ -413,16 +220,9 @@ function PaginationBar({
 }
 
 export default function InventarioPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [dbCategories, setDbCategories] = useState<{ id: number; name: string; imageUrl?: string | null }[]>([]);
-  const [categoriesList, setCategoriesList] = useState<string[]>([
-    "Sin categoría",
-    "Smartwatches",
-    "Audio",
-    "Gaming",
-    "Accesorios",
-    "Video",
-  ]);
+  const [categoriesList, setCategoriesList] = useState<string[]>(["Sin categoría"]);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryImage, setNewCategoryImage] = useState<string | null>(null);
@@ -440,11 +240,11 @@ export default function InventarioPage() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [togglingProductId, setTogglingProductId] = useState<number | null>(null);
   const [kardexFilterType, setKardexFilterType] = useState<"all" | "in" | "out" | "damaged">("all");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [selectedProductForKardex, setSelectedProductForKardex] = useState<Product | null>(null);
   const [selectedProductForDetails, setSelectedProductForDetails] = useState<Product | null>(null);
-  const [showSkeleton, setShowSkeleton] = useState(false);
+  const [showSkeleton, setShowSkeleton] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Estados de Kárdex en vivo desde PostgreSQL
   const [realKardexMovements, setRealKardexMovements] = useState<KardexMovement[]>([]);
@@ -463,6 +263,7 @@ export default function InventarioPage() {
     "damaged" | "defective" | "expired" | "loss_theft" | "supplier_return" | "internal_use"
   >("damaged");
   const [adjustmentNotes, setAdjustmentNotes] = useState("");
+  const [adjustmentRequestId, setAdjustmentRequestId] = useState<string | null>(null);
   const [isSubmittingAdjustment, setIsSubmittingAdjustment] = useState(false);
 
   // Estados de Paginación en las 3 vistas (10 ítems por página exactos)
@@ -475,86 +276,156 @@ export default function InventarioPage() {
   const [adjustmentsPage, setAdjustmentsPage] = useState(1);
   const adjustmentsPageSize = 10;
 
-  // Estados del formulario nuevo producto
-  const [newProductName, setNewProductName] = useState("");
-  const [newProductSku, setNewProductSku] = useState("");
-  const [newProductBarcode, setNewProductBarcode] = useState("");
-  const [newProductPrice, setNewProductPrice] = useState("59.90");
-  const [newProductCost, setNewProductCost] = useState("32.00");
-  const [newProductStock, setNewProductStock] = useState("35");
-  const [newProductMinStock, setNewProductMinStock] = useState("8");
-
-  // Cálculo de margen bruto en vivo
-  const priceNum = parseFloat(newProductPrice) || 0;
-  const costNum = parseFloat(newProductCost) || 0;
-  const marginGross = priceNum > 0 ? (((priceNum - costNum) / priceNum) * 100).toFixed(1) : "0.0";
-
   const [catalogImportOpen, setCatalogImportOpen] = useState(false);
+
+  const applyInitialInventory = (
+    dbProducts: Product[],
+    formData: Awaited<ReturnType<typeof getInventoryFormData>>,
+    adjRes: Awaited<ReturnType<typeof getInventoryAdjustmentsAction>>
+  ) => {
+    setLoadError(null);
+    setProducts(dbProducts || []);
+    setDbCategories(formData?.categories || []);
+    const uniqueNames = Array.from(
+      new Set(["Sin categoría", ...(formData?.categories || []).map((c) => c.name)])
+    );
+    setCategoriesList(uniqueNames);
+    if (adjRes?.success && adjRes.data) {
+      setAdjustments(adjRes.data as unknown as AdjustmentItem[]);
+    }
+  };
+
+  const reloadInitialInventory = async () => {
+    setShowSkeleton(true);
+    setLoadError(null);
+    try {
+      const [dbProducts, formData, adjRes] = await Promise.all([
+        getInventoryProducts(),
+        getInventoryFormData(),
+        getInventoryAdjustmentsAction(),
+      ]);
+      applyInitialInventory(dbProducts, formData, adjRes);
+    } catch {
+      const message = "No se pudo cargar el inventario desde el servidor.";
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setShowSkeleton(false);
+    }
+  };
 
   // Cargar productos, categorías y bajas vivos desde Neon DB
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
       getInventoryProducts(),
       getInventoryFormData(),
       getInventoryAdjustmentsAction(),
-    ]).then(([dbProducts, formData, adjRes]) => {
-      if (dbProducts && dbProducts.length > 0) {
-        setProducts(dbProducts);
-      }
-      if (formData && formData.categories && formData.categories.length > 0) {
-        setDbCategories(formData.categories);
-        const uniqueNames = Array.from(
-          new Set(["Sin categoría", ...formData.categories.map((c) => c.name)])
-        );
-        setCategoriesList(uniqueNames);
-      }
-      if (adjRes && adjRes.success && adjRes.data && adjRes.data.length > 0) {
-        setAdjustments(adjRes.data as unknown as AdjustmentItem[]);
-      }
-    });
+    ])
+      .then(([dbProducts, formData, adjRes]) => {
+        if (!cancelled) applyInitialInventory(dbProducts, formData, adjRes);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          const message = "No se pudo cargar el inventario desde el servidor.";
+          setLoadError(message);
+          toast.error(message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setShowSkeleton(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Cargar movimientos de Kárdex reales desde PostgreSQL para el Drawer de producto
   useEffect(() => {
-    if (selectedProductForKardex) {
-      setLoadingDrawerKardex(true);
-      getProductKardexAction(selectedProductForKardex.id).then((res) => {
+    if (!selectedProductForKardex) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => {
+        if (!cancelled) setLoadingDrawerKardex(true);
+        return getProductKardexAction(selectedProductForKardex.id);
+      })
+      .then((res) => {
+        if (cancelled) return;
         if (res.success && res.data) {
           setProductDrawerMovements(res.data as unknown as KardexMovement[]);
         } else {
           setProductDrawerMovements([]);
+          toast.error(res.error || "No se pudo cargar el Kárdex del producto.");
         }
-        setLoadingDrawerKardex(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProductDrawerMovements([]);
+          toast.error("Error de conexión al cargar Kárdex.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDrawerKardex(false);
       });
-    } else {
-      setProductDrawerMovements([]);
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [selectedProductForKardex]);
 
   // Cargar movimientos de Kárdex reales para la pestaña de Libro Mayor General
   useEffect(() => {
-    if (activeTab === "kardex") {
-      setLoadingTabKardex(true);
-      getProductKardexAction().then((res) => {
-        if (res.success && res.data && res.data.length > 0) {
+    if (activeTab !== "kardex") return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => {
+        if (!cancelled) setLoadingTabKardex(true);
+        return getProductKardexAction();
+      })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
           setRealKardexMovements(res.data as unknown as KardexMovement[]);
+        } else {
+          toast.error(res.error || "No se pudo cargar el libro mayor de Kárdex.");
         }
-        setLoadingTabKardex(false);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Error de conexión al cargar el Kárdex general.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTabKardex(false);
       });
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab]);
 
   // Cargar bajas y mermas para la pestaña correspondiente
   useEffect(() => {
-    if (activeTab === "adjustments") {
-      setLoadingAdjustments(true);
-      getInventoryAdjustmentsAction().then((res) => {
-        if (res.success && res.data && res.data.length > 0) {
+    if (activeTab !== "adjustments") return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => {
+        if (!cancelled) setLoadingAdjustments(true);
+        return getInventoryAdjustmentsAction();
+      })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
           setAdjustments(res.data as unknown as AdjustmentItem[]);
+        } else {
+          toast.error(res.error || "No se pudieron cargar las actas de baja.");
         }
-        setLoadingAdjustments(false);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Error de conexión al cargar actas de baja.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAdjustments(false);
       });
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab]);
 
   const handleCategoryPhotoSelect = async (
@@ -688,6 +559,7 @@ export default function InventarioPage() {
     setAdjustmentQuantity("1");
     setAdjustmentReason("damaged");
     setAdjustmentNotes("");
+    setAdjustmentRequestId(crypto.randomUUID());
     setIsAdjustmentModalOpen(true);
   };
 
@@ -711,6 +583,9 @@ export default function InventarioPage() {
       return;
     }
 
+    const requestIdToSend = adjustmentRequestId || crypto.randomUUID();
+    if (!adjustmentRequestId) setAdjustmentRequestId(requestIdToSend);
+
     try {
       setIsSubmittingAdjustment(true);
       const res = await createInventoryAdjustmentAction({
@@ -718,24 +593,25 @@ export default function InventarioPage() {
         quantity: qtyNum,
         reason: adjustmentReason,
         notes: adjustmentNotes,
+        requestId: requestIdToSend,
       });
 
       if (res.success) {
         toast.success("Baja asentada en Kárdex", {
           description: `Se descontaron ${qtyNum} uds de "${prod?.name || "producto"}".`,
         });
+        setAdjustmentRequestId(null);
         setIsAdjustmentModalOpen(false);
         setAdjustmentProductId(null);
         setAdjustmentQuantity("1");
         setAdjustmentNotes("");
 
-        // Refrescar productos, kárdex y bajas concurrentemente
         const [updatedProds, updatedKardex, updatedAdj] = await Promise.all([
           getInventoryProducts(),
           getProductKardexAction(),
           getInventoryAdjustmentsAction(),
         ]);
-        if (updatedProds && updatedProds.length > 0) setProducts(updatedProds);
+        setProducts(updatedProds || []);
         if (updatedKardex.success && updatedKardex.data) {
           setRealKardexMovements(updatedKardex.data as unknown as KardexMovement[]);
         }
@@ -849,7 +725,7 @@ export default function InventarioPage() {
   );
 
   // Filtrado de kárdex
-  const activeKardexSource = realKardexMovements.length > 0 ? realKardexMovements : kardexMovements;
+  const activeKardexSource = realKardexMovements;
   const filteredKardex = activeKardexSource.filter((m) => {
     if (kardexFilterType === "in") return m.type === "purchase_in" || m.type === "return_in" || m.type === "adjustment_in";
     if (kardexFilterType === "out") return m.type === "sale_out" || m.type === "adjustment_out";
@@ -865,7 +741,7 @@ export default function InventarioPage() {
   );
 
   // Fuente de Bajas & Mermas y Paginación
-  const activeAdjustmentsSource = adjustments.length > 0 ? adjustments : initialAdjustments;
+  const activeAdjustmentsSource = adjustments;
   const totalAdjustmentsPages = Math.ceil(activeAdjustmentsSource.length / adjustmentsPageSize) || 1;
   const paginatedAdjustments = activeAdjustmentsSource.slice(
     (adjustmentsPage - 1) * adjustmentsPageSize,
@@ -873,10 +749,71 @@ export default function InventarioPage() {
   );
 
   // Movimientos de kárdex para el Drawer de producto específico
-  const productSpecificKardex = productDrawerMovements;
+  const productSpecificKardex = selectedProductForKardex ? productDrawerMovements : [];
+
+  const handleExportAuditCsv = () => {
+    if (!selectedProductForKardex) return;
+    const rows = [
+      [
+        "Fecha",
+        "Producto",
+        "SKU",
+        "Tipo",
+        "Variacion",
+        "Stock Anterior",
+        "Stock Nuevo",
+        "Costo Unitario (Bs)",
+        "Comprobante",
+        "Responsable",
+        "Motivo",
+      ],
+      ...productSpecificKardex.map((item) => [
+        item.date,
+        item.product,
+        item.sku,
+        item.typeLabel,
+        item.quantity,
+        item.previousStock,
+        item.newStock,
+        item.unitCost.toFixed(2),
+        item.reference,
+        item.user,
+        item.reason || "",
+      ]),
+    ];
+    const csv = "\uFEFF" + rows.map((row) => row.map((cell) => csvCell(cell)).join(";")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Kardex_${selectedProductForKardex.sku || selectedProductForKardex.id}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast.success("Ficha de Auditoría exportada", {
+      description: "Se descargó el archivo CSV con el historial de Kárdex del producto.",
+    });
+  };
 
   if (showSkeleton) {
     return <InventarioLoading />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="admin-panel p-8 max-w-xl mx-auto mt-10 text-center space-y-4">
+        <AlertTriangle className="h-8 w-8 text-rose-500 mx-auto" />
+        <div className="space-y-1">
+          <h2 className="text-base font-semibold text-admin-text">No se pudo cargar el inventario</h2>
+          <p className="text-xs text-admin-muted">{loadError}</p>
+        </div>
+        <Button onClick={reloadInitialInventory} className="h-9 px-4 rounded-xl bg-admin-brand text-admin-on-solid text-xs font-bold gap-2 cursor-pointer">
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reintentar
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -1003,7 +940,7 @@ export default function InventarioPage() {
               <div className="relative flex-1">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Buscar por nombre o slug..."
+                  placeholder="Buscar por nombre, variante, SKU, código de barras o categoría..."
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -1869,6 +1806,7 @@ export default function InventarioPage() {
                 setAdjustmentQuantity("1");
                 setAdjustmentReason("damaged");
                 setAdjustmentNotes("");
+                setAdjustmentRequestId(crypto.randomUUID());
                 setIsAdjustmentModalOpen(true);
               }}
               className="h-9 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold gap-1.5 cursor-pointer"
@@ -1947,229 +1885,18 @@ export default function InventarioPage() {
           5. DRAWER LATERAL DE DETALLES E INFORMACIÓN DEL PRODUCTO (SOLO LECTURA)
           Se activa al hacer clic en cualquier fila de la lista o tarjeta de cuadros
           ========================================================================= */}
-      {selectedProductForDetails && (
-        <div
-          onClick={() => setSelectedProductForDetails(null)}
-          className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end animate-in fade-in duration-200 cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg sm:max-w-xl bg-admin-card-bg border-l border-admin-card-border h-full flex flex-col justify-between animate-in slide-in-from-right duration-300 cursor-default"
-          >
-            {/* Header del Drawer */}
-            <div className="p-5 border-b border-admin-card-border flex items-center justify-between bg-admin-raised">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-admin-brand text-white flex items-center justify-center">
-                  <Package className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-admin-text">
-                    Detalles del Producto
-                  </h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Ficha informativa y especificaciones
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedProductForDetails(null)}
-                className="h-9 w-9 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Contenido con Scroll */}
-            <div className="p-5 space-y-5 overflow-y-auto flex-1">
-              {/* Fotografía e Identificación Principal con Formato 4:3 */}
-              <div className="rounded-xl border border-admin-card-border overflow-hidden bg-admin-raised">
-                <div className="relative aspect-[4/3] w-full bg-admin-raised">
-                  <ProductThumbnail
-                    src={selectedProductForDetails.image}
-                    alt={selectedProductForDetails.name}
-                    className="h-full w-full object-cover"
-                  />
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
-                    <Badge
-                      className={cn(
-                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border backdrop-blur-md",
-                        selectedProductForDetails.status === "in_stock"
-                          ? "bg-emerald-500/90 text-white border-emerald-400"
-                          : selectedProductForDetails.status === "low_stock"
-                          ? "bg-amber-500/90 text-white border-amber-400"
-                          : "bg-rose-500/90 text-white border-rose-400"
-                      )}
-                    >
-                      {selectedProductForDetails.status === "in_stock"
-                        ? "En stock"
-                        : selectedProductForDetails.status === "low_stock"
-                        ? "Bajo stock"
-                        : "Agotado"}
-                    </Badge>
-                    <Badge
-                      className={cn(
-                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border backdrop-blur-md",
-                        (selectedProductForDetails.isActive ?? true)
-                          ? "bg-admin-brand/90 text-white border-admin-brand"
-                          : "bg-slate-600/90 text-white border-slate-500"
-                      )}
-                    >
-                      {(selectedProductForDetails.isActive ?? true) ? "Habilitado" : "Pausado"}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="p-4">
-                  <span className="text-xs font-bold text-admin-brand-text block uppercase tracking-wider">
-                    {selectedProductForDetails.category}
-                  </span>
-                  <h3 className="text-base font-bold text-admin-text mt-1 leading-snug">
-                    {selectedProductForDetails.name}
-                  </h3>
-                </div>
-              </div>
-
-              {/* Bloque de Descripción del Producto */}
-              <div className="space-y-1.5">
-                <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block px-1">
-                  Descripción del Producto
-                </span>
-                <div className="p-4 rounded-xl bg-admin-raised border border-admin-card-border text-xs text-admin-secondary leading-relaxed whitespace-pre-line">
-                  {selectedProductForDetails.description && selectedProductForDetails.description.trim() ? (
-                    selectedProductForDetails.description
-                  ) : (
-                    <span className="text-slate-400 italic">Sin descripción registrada para este producto.</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Bloque Financiero y Precios */}
-              <div className="space-y-2">
-                <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block px-1">
-                  Valores Financieros
-                </span>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Precio Venta</span>
-                    <span className="text-base font-bold text-emerald-600 font-mono tracking-tight mt-0.5 block">
-                      {CURRENCY_SYMBOL} {selectedProductForDetails.price.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Costo Adquisición</span>
-                    <span className="text-base font-bold text-admin-secondary font-mono tracking-tight mt-0.5 block">
-                      {CURRENCY_SYMBOL} {selectedProductForDetails.costPrice.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Margen Bruto</span>
-                    <span className="text-base font-bold text-admin-brand-text font-mono tracking-tight mt-0.5 block">
-                      {selectedProductForDetails.price > 0
-                        ? (
-                            ((selectedProductForDetails.price - selectedProductForDetails.costPrice) /
-                              selectedProductForDetails.price) *
-                            100
-                          ).toFixed(1)
-                        : "0.0"}
-                      %
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bloque de Existencias Físicas */}
-              <div className="space-y-2">
-                <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block px-1">
-                  Existencias en Almacén
-                </span>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Stock Físico Actual</span>
-                    <span className="text-xl font-bold text-admin-text font-mono mt-0.5 block">
-                      {selectedProductForDetails.stock}
-                    </span>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border">
-                    <span className="text-[10px] text-slate-400 font-medium block">Alerta Stock Bajo</span>
-                    <span className="text-xl font-bold text-amber-600 font-mono mt-0.5 block">
-                      {selectedProductForDetails.minStock}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Valorización en Bodega de este Producto */}
-                <div className="p-3.5 rounded-xl bg-admin-brand-subtle border border-admin-brand-light flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-[10px] text-admin-brand-text font-bold uppercase tracking-wider block">
-                      Valor Total en Bodega (Costo)
-                    </span>
-                    <span className="text-sm font-bold text-admin-text font-mono">
-                      {CURRENCY_SYMBOL}{" "}
-                      {(
-                        selectedProductForDetails.stock * selectedProductForDetails.costPrice
-                      ).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-admin-brand-text font-bold uppercase tracking-wider block">
-                      Potencial Venta
-                    </span>
-                    <span className="text-sm font-bold text-emerald-600 font-mono">
-                      {CURRENCY_SYMBOL}{" "}
-                      {(
-                        selectedProductForDetails.stock * selectedProductForDetails.price
-                      ).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer con Acciones */}
-            <div className="p-4 border-t border-admin-card-border bg-admin-raised flex items-center justify-between gap-2.5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedProductForDetails(null)}
-                className="rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Cerrar
-              </Button>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const prod = selectedProductForDetails;
-                    setSelectedProductForDetails(null);
-                    setSelectedProductForKardex(prod);
-                  }}
-                  className="rounded-xl text-xs font-semibold text-admin-brand-text gap-1.5 cursor-pointer"
-                >
-                  <BookOpen className="h-4 w-4" />
-                  <span>Ver Kárdex</span>
-                </Button>
-
-                <Link href={`/admin/inventario/${selectedProductForDetails.id}/editar`}>
-                  <Button
-                    size="sm"
-                    className="rounded-xl text-xs font-semibold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
-                  >
-                    <Edit className="h-4 w-4" />
-                    <span>Editar</span>
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ProductDetailSheet
+        product={selectedProductForDetails}
+        onClose={() => setSelectedProductForDetails(null)}
+        onOpenKardex={(prod) => {
+          setSelectedProductForDetails(null);
+          setSelectedProductForKardex(prod);
+        }}
+        onOpenAdjustment={(prod) => {
+          setSelectedProductForDetails(null);
+          handleOpenAdjustmentForProduct(prod);
+        }}
+      />
 
       {/* =========================================================================
           6. DRAWER LATERAL DE KÁRDEX ESPECÍFICO POR PRODUCTO (DRILL-DOWN)
@@ -2370,13 +2097,9 @@ export default function InventarioPage() {
               <Button
                 size="sm"
                 className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-2 cursor-pointer"
-                onClick={() =>
-                  toast.success("Ficha de Auditoría exportada", {
-                    description: "El reporte oficial del Kárdex CPP fue generado exitosamente.",
-                  })
-                }
+                onClick={handleExportAuditCsv}
               >
-                <Printer className="h-4 w-4" />
+                <FileSpreadsheet className="h-4 w-4" />
                 <span>Exportar Ficha de Auditoría</span>
               </Button>
             </div>
@@ -2484,10 +2207,10 @@ export default function InventarioPage() {
                 <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-semibold">
-                    ¿Eliminar la categoría "{categoryToDelete}"?
+                    ¿Eliminar la categoría &ldquo;{categoryToDelete}&rdquo;?
                   </p>
                   <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5 leading-tight">
-                    Sus {products.filter((p) => p.category === categoryToDelete).length} producto(s) <strong>no se borrarán</strong>; pasarán automáticamente a <strong>"Sin categoría"</strong> para mantener intacto tu Kárdex contable.
+                    Sus {products.filter((p) => p.category === categoryToDelete).length} producto(s) <strong>no se borrarán</strong>; pasarán automáticamente a <strong>&ldquo;Sin categoría&rdquo;</strong> para mantener intacto tu Kárdex contable.
                   </p>
                 </div>
               </div>

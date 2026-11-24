@@ -1,18 +1,20 @@
-import { productOptionsSchema } from "@/lib/validations/product";
+import { productOptionConfigSchema, productOptionsSchema, safeImageUrlSchema } from "@/lib/validations/product";
 import { importCatalogAction } from "@/app/admin/actions/catalog-import";
 import { returnPurchaseAction } from "@/app/admin/actions/purchases";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
 import { NextRequest } from "next/server";
-import { middleware } from "@/middleware";
+import { proxy } from "@/proxy";
 import { db } from "@/db";
-import { getDemoLoginOptions, verifyDemoLogin } from "@/lib/auth/demo-login";
+import { getDemoLoginOptions, isDemoLoginEnabled, verifyDemoLogin } from "@/lib/auth/demo-login";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { checkRateLimit, recordFailedAttempt, resetRateLimit } from "@/lib/auth/rate-limit";
 import { decodeSessionToken, encodeSessionToken, type SessionUser } from "@/lib/auth/session-edge";
 import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
 import { businessDate, businessDayStart } from "@/lib/business-date";
 import { refundUnitAmounts } from "@/lib/refund-amount";
+import { csvCell, escapeHtml } from "@/lib/sanitize";
 import { refundSaleSchema, saleFormSchema } from "@/lib/validations/sale";
 import { userUpdateSchema } from "@/lib/validations/user";
 import { closeShiftAction, openShiftAction, submitCashCountAction } from "@/app/admin/actions/cash-shifts";
@@ -58,13 +60,24 @@ test("la matriz de rutas concede a cada rol su módulo y restringe usuarios", as
   for (const { role, path } of routes) {
     const token = await encodeSessionToken({ ...user, role });
     const headers = { cookie: `aura_session=${token}` };
-    assert.equal((await middleware(new NextRequest(`http://localhost${path}`, { headers }))).status, 200);
+    assert.equal((await proxy(new NextRequest(`http://localhost${path}`, { headers }))).status, 200);
     if (role !== "admin") {
-      const denied = await middleware(new NextRequest("http://localhost/admin/usuarios", { headers }));
+      const denied = await proxy(new NextRequest("http://localhost/admin/usuarios", { headers }));
       assert.equal(denied.status, 307);
       assert.equal(new URL(denied.headers.get("location")!).searchParams.get("denied"), "1");
     }
   }
+
+  const cashierToken = await encodeSessionToken({ ...user, role: "cashier" });
+  const deniedUnknown = await proxy(
+    new NextRequest("http://localhost/admin/ruta-inexistente", {
+      headers: { cookie: `aura_session=${cashierToken}` },
+    })
+  );
+  assert.equal(deniedUnknown.status, 307);
+  const deniedLocation = new URL(deniedUnknown.headers.get("location")!);
+  assert.equal(deniedLocation.pathname, "/admin/ventas");
+  assert.equal(deniedLocation.searchParams.get("denied"), "1");
 });
 
 test("PBKDF2 verifica contraseñas válidas y rechaza registros sin hash", () => {
@@ -76,7 +89,7 @@ test("PBKDF2 verifica contraseñas válidas y rechaza registros sin hash", () =>
   assert.equal(verifyPassword(password, password), false);
 });
 
-test("las cuentas de prueba funcionan en desarrollo y en el despliegue de main en Vercel", (t) => {
+test("las cuentas de prueba están desactivadas por defecto y requieren ENABLE_DEMO_LOGIN=1", (t) => {
   const keys = ["NODE_ENV", "ENABLE_DEMO_LOGIN", "VERCEL_ENV", "VERCEL_GIT_COMMIT_REF"] as const;
   const previous = keys.map((name) => [name, process.env[name]] as const);
   t.after(() => {
@@ -88,42 +101,29 @@ test("las cuentas de prueba funcionan en desarrollo y en el despliegue de main e
 
   const demo = ["cajera@aurastudio.com", "password123", "$2b$10$hashedpasswordforcashier"] as const;
   delete process.env.ENABLE_DEMO_LOGIN;
-  process.env.VERCEL_ENV = "production";
-  process.env.VERCEL_GIT_COMMIT_REF = "main";
   Reflect.set(process.env, "NODE_ENV", "production");
-  assert.equal(verifyDemoLogin(...demo), true);
-  assert.equal(getDemoLoginOptions()?.accounts.length, 4);
-  assert.equal(verifyDemoLogin(demo[0], demo[1], "different-hash"), false);
-
-  process.env.ENABLE_DEMO_LOGIN = "0";
-  assert.equal(verifyDemoLogin(...demo), false);
-  assert.equal(getDemoLoginOptions(), null);
-
-  process.env.ENABLE_DEMO_LOGIN = "1";
-  process.env.VERCEL_ENV = "preview";
-  assert.equal(verifyDemoLogin(...demo), false);
-  assert.equal(getDemoLoginOptions(), null);
-
-  process.env.VERCEL_ENV = "production";
-  process.env.VERCEL_GIT_COMMIT_REF = "otra-rama";
-  assert.equal(verifyDemoLogin(...demo), false);
-  assert.equal(getDemoLoginOptions(), null);
-
-  delete process.env.VERCEL_ENV;
-  process.env.VERCEL_GIT_COMMIT_REF = "main";
+  assert.equal(isDemoLoginEnabled(), false);
   assert.equal(verifyDemoLogin(...demo), false);
   assert.equal(getDemoLoginOptions(), null);
 
   Reflect.set(process.env, "NODE_ENV", "development");
-  assert.equal(verifyDemoLogin(...demo), true);
+  assert.equal(isDemoLoginEnabled(), false);
+  assert.equal(verifyDemoLogin(...demo), false);
+  assert.equal(getDemoLoginOptions(), null);
+
+  process.env.ENABLE_DEMO_LOGIN = "0";
+  assert.equal(isDemoLoginEnabled(), false);
+  assert.equal(verifyDemoLogin(...demo), false);
+  assert.equal(getDemoLoginOptions(), null);
+
+  process.env.ENABLE_DEMO_LOGIN = "1";
+  assert.equal(isDemoLoginEnabled(), true);
   const options = getDemoLoginOptions();
   assert.equal(options?.password, demo[1]);
   assert.equal(options?.accounts.length, 4);
   assert.deepEqual(options?.accounts.find(({ email }) => email === demo[0]), { label: "Cajera", email: demo[0] });
+  assert.equal(verifyDemoLogin(...demo), true);
   assert.equal(verifyDemoLogin(demo[0], demo[1], "different-hash"), false);
-  delete process.env.ENABLE_DEMO_LOGIN;
-  assert.equal(verifyDemoLogin(...demo), false);
-  assert.equal(getDemoLoginOptions(), null);
 });
 
 test("el PIN se almacena como HMAC y la edición parcial conserva rol y estado", (t) => {
@@ -204,4 +204,61 @@ test("una variante admite solo una talla o un color y detecta opciones repetidas
   assert.equal(parsed[1].variant, "Verde");
   assert.equal(parsed[1].price, 200);
   assert.equal(productOptionsSchema.safeParse([options[1], { ...options[1], variant: " verde " }]).success, false);
+});
+
+test("safeImageUrlSchema y productOptionConfigSchema validan entradas seguras y rechazan XSS", () => {
+  assert.equal(safeImageUrlSchema.safeParse("https://cdn.example.com/foto.jpg").success, true);
+  assert.equal(safeImageUrlSchema.safeParse("/uploads/products/prod_1.webp").success, true);
+  assert.equal(safeImageUrlSchema.safeParse("/uploads/categories/cat_1.webp").success, true);
+  assert.equal(safeImageUrlSchema.safeParse("").success, true);
+  assert.equal(safeImageUrlSchema.safeParse("javascript:alert(1)").success, false);
+  assert.equal(safeImageUrlSchema.safeParse("data:text/html,<script>alert(1)</script>").success, false);
+  assert.equal(safeImageUrlSchema.safeParse("http://inseguro.example.com/foto.png").success, false);
+
+  assert.equal(
+    productOptionConfigSchema.safeParse({
+      id: "color",
+      name: "Color",
+      type: "color",
+      values: [{ name: "Negro", hex: "#111111" }],
+    }).success,
+    true
+  );
+  assert.equal(
+    productOptionConfigSchema.safeParse({
+      id: "color",
+      name: "Color",
+      type: "color",
+      values: [{ name: "Negro", hex: "no-hex" }],
+    }).success,
+    false
+  );
+});
+
+test("escapeHtml y csvCell neutralizan HTML peligroso e inyección de fórmulas CSV", () => {
+  assert.equal(
+    escapeHtml(`<script>"alert('x')" &</script>`),
+    "&lt;script&gt;&quot;alert(&#39;x&#39;)&quot; &amp;&lt;/script&gt;"
+  );
+  assert.equal(csvCell("=1+1"), `"'=1+1"`);
+  assert.equal(csvCell("+SUM(A1:A2)"), `"'+SUM(A1:A2)"`);
+  assert.equal(csvCell("-2+3"), `"'-2+3"`);
+  assert.equal(csvCell("@cmd"), `"'@cmd"`);
+  assert.equal(csvCell("\t=cmd"), `"'\t=cmd"`);
+  assert.equal(csvCell(`Producto "Pro"\nLínea 2`), `"Producto ""Pro"" Línea 2"`);
+});
+
+test("rate limiter bloquea al alcanzar el límite y se reinicia tras resetRateLimit", () => {
+  const key = `test:rate-limit:${randomBytes(6).toString("hex")}`;
+  const windowMs = 60_000;
+  assert.equal(checkRateLimit(key, 3, windowMs).allowed, true);
+  recordFailedAttempt(key, windowMs);
+  recordFailedAttempt(key, windowMs);
+  assert.equal(checkRateLimit(key, 3, windowMs).allowed, true);
+  recordFailedAttempt(key, windowMs);
+  const blocked = checkRateLimit(key, 3, windowMs);
+  assert.equal(blocked.allowed, false);
+  assert.ok(blocked.retryAfterSec >= 1);
+  resetRateLimit(key);
+  assert.equal(checkRateLimit(key, 3, windowMs).allowed, true);
 });

@@ -93,6 +93,18 @@ export const cashShiftStatusEnum = pgEnum("cash_shift_status", [
    2. TABLAS MAESTRAS (USUARIOS, CAJAS, CATÁLOGO, PROVEEDORES, CLIENTES)
    ========================================================================= */
 
+export type ProductOptionValue = {
+  name: string;
+  hex?: string;
+};
+
+export type ProductOptionConfig = {
+  id: string;
+  name: string;
+  type: "text" | "color";
+  values: ProductOptionValue[];
+};
+
 // Usuarios del sistema con control de acceso por rol
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -103,6 +115,7 @@ export const users = pgTable("users", {
   role: userRoleEnum("role").default("cashier").notNull(),
   phone: text("phone"),
   isActive: boolean("is_active").default(true).notNull(),
+  sessionVersion: integer("session_version").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -168,7 +181,7 @@ export const productModels = pgTable("product_models", {
   code: text("code").primaryKey(),
   name: text("name").notNull(),
   variantSelector: text("variant_selector"),
-  options: jsonb("options"),
+  options: jsonb("options").$type<ProductOptionConfig[]>(),
 });
 
 export const products = pgTable("products", {
@@ -178,7 +191,7 @@ export const products = pgTable("products", {
   modelCode: text("model_code").references(() => productModels.code),
   variant: text("variant"),
   variantColor: text("variant_color"),
-  attributes: jsonb("attributes"),
+  attributes: jsonb("attributes").$type<Record<string, string>>(),
   importKey: text("import_key").unique(),
   sku: text("sku").unique(),                                                        // Código SKU interno (opcional / nullable)
   barcode: text("barcode").unique(),                                                // Código de barras (opcional / nullable)
@@ -201,6 +214,9 @@ export const products = pgTable("products", {
   uniqueIndex("products_model_variant_unique").on(t.modelCode, sql`lower(${t.variant})`),
   check("products_model_variant_pair", sql`(${t.modelCode} IS NULL) = (${t.variant} IS NULL)`),
   check("products_variant_color_valid", sql`${t.variantColor} IS NULL OR (${t.variant} IS NOT NULL AND ${t.variantColor} ~ '^#[0-9A-Fa-f]{6}$')`),
+  check("products_stock_non_negative", sql`${t.stock} >= 0`),
+  check("products_price_non_negative", sql`${t.price} >= 0`),
+  check("products_cost_non_negative", sql`${t.costPrice} >= 0`),
 ]);
 
 /* =========================================================================
@@ -218,6 +234,7 @@ export const cashShifts = pgTable("cash_shifts", {
   cashSales: numeric("cash_sales", { precision: 12, scale: 2 }).notNull().default("0"),     // Ventas en efectivo
   cardSales: numeric("card_sales", { precision: 12, scale: 2 }).notNull().default("0"),     // Ventas con tarjeta
   transferSales: numeric("transfer_sales", { precision: 12, scale: 2 }).notNull().default("0"), // Transferencias
+  otherSales: numeric("other_sales", { precision: 12, scale: 2 }).notNull().default("0"),   // Otros medios
   expectedCash: numeric("expected_cash", { precision: 12, scale: 2 }).notNull().default("0"), // Fondo + Efectivo
   actualCash: numeric("actual_cash", { precision: 12, scale: 2 }),                             // Conteo físico final
   difference: numeric("difference", { precision: 12, scale: 2 }),                             // Sobrante (+) o Faltante (-)
@@ -228,6 +245,7 @@ export const cashShifts = pgTable("cash_shifts", {
 }, (t) => [
   uniqueIndex("cash_shifts_open_register_unique").on(t.cashRegisterId).where(sql`${t.status} = 'open'`),
   uniqueIndex("cash_shifts_open_operator_unique").on(t.userId).where(sql`${t.status} = 'open'`),
+  check("cash_shifts_expected_cash_non_negative", sql`${t.expectedCash} >= 0`),
 ]);
 
 /* =========================================================================
@@ -236,6 +254,7 @@ export const cashShifts = pgTable("cash_shifts", {
 
 export const purchases = pgTable("purchases", {
   id: serial("id").primaryKey(),
+  requestId: uuid("request_id").unique(),
   purchaseNumber: text("purchase_number").notNull().unique(), // ej: "COM-2026-081"
   invoiceNumber: text("invoice_number"),                      // Factura / Guía del proveedor
   supplierId: integer("supplier_id").references(() => suppliers.id).notNull(),
@@ -258,7 +277,9 @@ export const purchaseItems = pgTable("purchase_items", {
   quantity: integer("quantity").notNull(),
   unitCost: numeric("unit_cost", { precision: 12, scale: 2 }).notNull(),
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
-});
+}, (t) => [
+  check("purchase_items_qty_positive", sql`${t.quantity} > 0`),
+]);
 
 export const purchaseReturns = pgTable("purchase_returns", {
   id: serial("id").primaryKey(),
@@ -311,7 +332,10 @@ export const sales = pgTable("sales", {
   channel: saleChannelEnum("channel").default("pos").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (t) => [uniqueIndex("sales_operator_checkout_unique").on(t.userId, t.checkoutRequestId)]);
+}, (t) => [
+  uniqueIndex("sales_operator_checkout_unique").on(t.userId, t.checkoutRequestId),
+  check("sales_refunded_bounds", sql`${t.refundedAmount} >= 0 AND ${t.refundedAmount} <= ${t.totalAmount}`),
+]);
 
 // Detalle de ítems cobrados en el ticket de venta
 export const saleItems = pgTable("sale_items", {
@@ -323,7 +347,29 @@ export const saleItems = pgTable("sale_items", {
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(), // Precio cobrado
   unitCost: numeric("unit_cost", { precision: 12, scale: 2 }).notNull(),   // Costo unitario histórico (para calcular utilidad)
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
-});
+}, (t) => [
+  check("sale_items_qty_positive", sql`${t.quantity} > 0`),
+  check("sale_items_returned_bounds", sql`${t.returnedQuantity} >= 0 AND ${t.returnedQuantity} <= ${t.quantity}`),
+]);
+
+// Libro diario de devoluciones de ventas (permite conciliar caja, método y fecha real de devolución)
+export const saleRefunds = pgTable("sale_refunds", {
+  id: serial("id").primaryKey(),
+  saleId: integer("sale_id").references(() => sales.id).notNull(),
+  cashShiftId: integer("cash_shift_id").references(() => cashShifts.id),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  authorizedByUserId: integer("authorized_by_user_id").references(() => users.id).notNull(),
+  requestId: uuid("request_id").unique(),
+  refundMethod: paymentMethodEnum("refund_method").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("sale_refunds_sale_idx").on(t.saleId),
+  index("sale_refunds_created_at_idx").on(t.createdAt),
+  index("sale_refunds_cash_shift_idx").on(t.cashShiftId),
+  check("sale_refunds_amount_positive", sql`${t.amount} > 0`),
+]);
 
 /* =========================================================================
    6. BAJAS Y AJUSTES DE INVENTARIO (DAÑADOS, DEFECTUOSOS, MERMAS)
@@ -332,6 +378,7 @@ export const saleItems = pgTable("sale_items", {
 
 export const inventoryAdjustments = pgTable("inventory_adjustments", {
   id: serial("id").primaryKey(),
+  requestId: uuid("request_id").unique(),
   adjustmentNumber: text("adjustment_number").notNull().unique(), // ej: "BAJA-2026-001"
   reason: adjustmentReasonEnum("reason").notNull(),
   userId: integer("user_id").references(() => users.id).notNull(), // Usuario que reporta la baja/daño
@@ -349,7 +396,9 @@ export const inventoryAdjustmentItems = pgTable("inventory_adjustment_items", {
   quantity: integer("quantity").notNull(),                       // Cantidad de unidades dadas de baja
   unitCost: numeric("unit_cost", { precision: 12, scale: 2 }).notNull(), // Costo unitario al momento de la baja
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(), // Pérdida monetaria (quantity * unitCost)
-});
+}, (t) => [
+  check("inventory_adjustment_items_qty_positive", sql`${t.quantity} > 0`),
+]);
 
 /* =========================================================================
    7. KARDEX / AUDITORÍA DE MOVIMIENTOS DE INVENTARIO (INVENTORY MOVEMENTS)
@@ -456,7 +505,7 @@ export const purchasesRelations = relations(purchases, ({ one, many }) => ({
   returns: many(purchaseReturns),
 }));
 
-export const purchaseItemsRelations = relations(purchaseItems, ({ one }) => ({
+export const purchaseItemsRelations = relations(purchaseItems, ({ one, many }) => ({
   purchase: one(purchases, {
     fields: [purchaseItems.purchaseId],
     references: [purchases.id],
@@ -465,6 +514,7 @@ export const purchaseItemsRelations = relations(purchaseItems, ({ one }) => ({
     fields: [purchaseItems.productId],
     references: [products.id],
   }),
+  returns: many(purchaseReturnItems),
 }));
 
 export const purchaseReturnsRelations = relations(purchaseReturns, ({ one, many }) => ({
@@ -484,6 +534,10 @@ export const purchaseReturnItemsRelations = relations(purchaseReturnItems, ({ on
     fields: [purchaseReturnItems.returnId],
     references: [purchaseReturns.id],
   }),
+  purchaseItem: one(purchaseItems, {
+    fields: [purchaseReturnItems.purchaseItemId],
+    references: [purchaseItems.id],
+  }),
 }));
 
 export const salesRelations = relations(sales, ({ one, many }) => ({
@@ -500,6 +554,26 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
     references: [users.id],
   }),
   items: many(saleItems),
+  refunds: many(saleRefunds),
+}));
+
+export const saleRefundsRelations = relations(saleRefunds, ({ one }) => ({
+  sale: one(sales, {
+    fields: [saleRefunds.saleId],
+    references: [sales.id],
+  }),
+  cashShift: one(cashShifts, {
+    fields: [saleRefunds.cashShiftId],
+    references: [cashShifts.id],
+  }),
+  user: one(users, {
+    fields: [saleRefunds.userId],
+    references: [users.id],
+  }),
+  authorizedByUser: one(users, {
+    fields: [saleRefunds.authorizedByUserId],
+    references: [users.id],
+  }),
 }));
 
 export const saleItemsRelations = relations(saleItems, ({ one }) => ({

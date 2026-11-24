@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import { CartProvider } from "@/context/cart-context";
+import { STORE_NAME, STORE_TAGLINE } from "@/lib/store-config";
 import "./globals.css";
 import "./admin-theme.css";
+import "./store-theme.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +23,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "GadgetHub | Tienda de Tecnología & Gadgets",
+  title: `${STORE_NAME} | ${STORE_TAGLINE}`,
   description: "Lo último en tecnología, accesorios, audio y estilo de vida con entrega rápida",
 };
 

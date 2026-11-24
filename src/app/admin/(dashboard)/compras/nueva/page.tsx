@@ -71,9 +71,10 @@ export default function NuevaCompraPage() {
 
   // Estados de catálogo
   const [availableProducts, setAvailableProducts] = useState<Awaited<ReturnType<typeof getProductsForPurchaseAction>>["data"]>([]);
-  const [availableSuppliers, setAvailableSuppliers] = useState<any[]>([]);
+  const [availableSuppliers, setAvailableSuppliers] = useState<Awaited<ReturnType<typeof getSuppliersForPurchaseAction>>["data"]>([]);
   const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [purchaseRequestId, setPurchaseRequestId] = useState(() => crypto.randomUUID());
 
   // Campos de cabecera
   const [supplierId, setSupplierId] = useState<number | "">("");
@@ -92,14 +93,13 @@ export default function NuevaCompraPage() {
 
   // Cargar productos y proveedores al montar
   useEffect(() => {
-    async function loadData() {
-      try {
-        setIsLoadingCatalogs(true);
-        const [prodsRes, suppsRes] = await Promise.all([
-          getProductsForPurchaseAction(),
-          getSuppliersForPurchaseAction(),
-        ]);
-
+    let cancelled = false;
+    Promise.all([
+      getProductsForPurchaseAction(),
+      getSuppliersForPurchaseAction(),
+    ])
+      .then(([prodsRes, suppsRes]) => {
+        if (cancelled) return;
         if (prodsRes.success && prodsRes.data) {
           setAvailableProducts(prodsRes.data);
         }
@@ -109,14 +109,17 @@ export default function NuevaCompraPage() {
             setSupplierId(suppsRes.data[0].id);
           }
         }
-      } catch (err) {
+      })
+      .catch((err: unknown) => {
         console.error("Error al cargar datos:", err);
-        toast.error("Error de conexión al cargar catálogos");
-      } finally {
-        setIsLoadingCatalogs(false);
-      }
-    }
-    loadData();
+        if (!cancelled) toast.error("Error de conexión al cargar catálogos");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingCatalogs(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Agregar producto a la lista
@@ -124,18 +127,20 @@ export default function NuevaCompraPage() {
     const prod = availableProducts.find((p) => p.id === productId);
     if (!prod) return;
 
-    // Si ya existe en la lista, incrementamos su cantidad
-    const existingIndex = items.findIndex((it) => it.productId === productId);
-    if (existingIndex >= 0) {
-      const updated = [...items];
-      updated[existingIndex].quantity += 1;
-      setItems(updated);
-      toast.info(`"${prod.name}" incrementado a ${updated[existingIndex].quantity} unidades`);
+    const existing = items.find((it) => it.productId === productId);
+    if (existing) {
+      const nextQuantity = existing.quantity + 1;
+      setItems((prev) =>
+        prev.map((it) =>
+          it.productId === productId ? { ...it, quantity: nextQuantity } : it
+        )
+      );
+      toast.info(`"${prod.name}" incrementado a ${nextQuantity} unidades`);
       return;
     }
 
     const newItem: FormItem = {
-      tempId: `${Date.now()}-${Math.random()}`,
+      tempId: crypto.randomUUID(),
       productId: prod.id,
       productName: prod.name,
       productSku: prod.sku,
@@ -232,11 +237,12 @@ export default function NuevaCompraPage() {
     try {
       setIsSubmitting(true);
       const payload = {
+        requestId: purchaseRequestId,
         supplierId: Number(supplierId),
         invoiceNumber: invoiceNumber.trim() || null,
         paymentMethod,
-        paymentStatus: "paid" as const, // Pagada por defecto
-        status: "received" as const,    // Recibida directamente en almacén
+        paymentStatus: "paid" as const,
+        status: "received" as const,
         notes: notes.trim() || null,
         items: items.map((it) => ({
           productId: it.productId,
@@ -247,6 +253,7 @@ export default function NuevaCompraPage() {
 
       const res = await createPurchaseAction(payload);
       if (res.success) {
+        setPurchaseRequestId(crypto.randomUUID());
         toast.success("Compra ingresada a almacén", {
           description: `Se sumaron ${totalUnits} piezas físicas al inventario y se actualizó el Kardex.`,
         });
@@ -254,7 +261,7 @@ export default function NuevaCompraPage() {
       } else {
         toast.error("Error al registrar compra", { description: res.error });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       toast.error("Error inesperado al guardar la compra");
     } finally {
@@ -319,16 +326,29 @@ export default function NuevaCompraPage() {
                     </label>
                     <select
                       value={supplierId}
-                      onChange={(e) => setSupplierId(Number(e.target.value))}
+                      onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : "")}
                       required
-                      className="h-10 w-full rounded-xl border border-admin-card-border bg-admin-card-bg px-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20"
+                      disabled={availableSuppliers.length === 0}
+                      className="h-10 w-full rounded-xl border border-admin-card-border bg-admin-card-bg px-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20 disabled:opacity-60"
                     >
-                      {availableSuppliers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} {s.taxId ? `(NIT: ${s.taxId})` : ""}
-                        </option>
-                      ))}
+                      {availableSuppliers.length === 0 ? (
+                        <option value="">No hay proveedores activos</option>
+                      ) : (
+                        availableSuppliers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} {s.taxId ? `(NIT: ${s.taxId})` : ""}
+                          </option>
+                        ))
+                      )}
                     </select>
+                    {availableSuppliers.length === 0 && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2 text-[11px] text-amber-800 dark:text-amber-300">
+                        <span>No hay proveedores activos para asociar la compra.</span>
+                        <Link href="/admin/proveedores" className="font-bold underline hover:opacity-80 shrink-0">
+                          Crear proveedor
+                        </Link>
+                      </div>
+                    )}
                   </div>
 
                   {/* Número de Factura */}
@@ -351,7 +371,9 @@ export default function NuevaCompraPage() {
                     </label>
                     <select
                       value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value as any)}
+                      onChange={(e) =>
+                        setPaymentMethod(e.target.value as "transfer" | "cash" | "card" | "other")
+                      }
                       className="h-10 w-full rounded-xl border border-admin-card-border bg-admin-card-bg px-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20"
                     >
                       <option value="transfer">Transferencia Bancaria</option>

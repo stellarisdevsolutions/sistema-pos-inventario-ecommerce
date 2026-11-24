@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { SidebarProvider, useSidebar } from "@/context/sidebar-context";
 import { AuthProvider } from "@/context/auth-context";
@@ -10,13 +10,21 @@ import { Header } from "@/components/layout/header";
 
 function AccessDeniedListener() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+
   useEffect(() => {
     if (searchParams.get("denied") === "1") {
       toast.error("Acceso Denegado", {
         description: "Tu rol de usuario no tiene permisos para acceder al módulo solicitado.",
       });
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.delete("denied");
+      const query = nextParams.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname);
     }
-  }, [searchParams]);
+  }, [searchParams, pathname, router]);
+
   return null;
 }
 

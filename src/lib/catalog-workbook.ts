@@ -46,13 +46,26 @@ function checkWorkbookArchive(bytes: ArrayBuffer) {
   if (end < Math.max(0, zip.length - 65557) || zip.readUInt16LE(end + 4) !== 0 || zip.readUInt16LE(end + 6) !== 0) {
     throw new Error("El archivo debe ser un Excel .xlsx válido.");
   }
+  const diskEntries = zip.readUInt16LE(end + 8);
   const entries = zip.readUInt16LE(end + 10);
+  if (diskEntries !== entries) {
+    throw new Error("El archivo Excel no cumple con el formato admitido.");
+  }
   let offset = zip.readUInt32LE(end + 16);
   let expandedSize = 0;
   if (entries > 100) throw new Error("El archivo Excel contiene demasiadas hojas o recursos.");
   for (let i = 0; i < entries; i++) {
     if (offset + 46 > end || zip.readUInt32LE(offset) !== 0x02014b50) throw new Error("El archivo Excel está dañado.");
-    expandedSize += zip.readUInt32LE(offset + 24);
+    const compressedSize = zip.readUInt32LE(offset + 20);
+    const uncompressedSize = zip.readUInt32LE(offset + 24);
+    if (
+      compressedSize === 0xffffffff ||
+      uncompressedSize === 0xffffffff ||
+      (compressedSize > 0 && uncompressedSize === 0)
+    ) {
+      throw new Error("El archivo Excel no cumple con el formato admitido.");
+    }
+    expandedSize += uncompressedSize;
     offset += 46 + zip.readUInt16LE(offset + 28) + zip.readUInt16LE(offset + 30) + zip.readUInt16LE(offset + 32);
   }
   if (expandedSize > 8_000_000) throw new Error("El archivo Excel supera el tamaño admitido.");

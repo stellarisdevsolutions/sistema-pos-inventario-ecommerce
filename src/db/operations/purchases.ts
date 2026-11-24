@@ -7,6 +7,7 @@ export function createPurchaseQuery(input: PurchaseFormInput, userId: number, pr
     quantity,
     unit_cost: unitCost.toFixed(2),
   })));
+  const requestId = input.requestId ?? null;
 
   return sql`
     WITH lines AS MATERIALIZED (
@@ -22,13 +23,17 @@ export function createPurchaseQuery(input: PurchaseFormInput, userId: number, pr
         (SELECT SUM(quantity * unit_cost) FROM lines) AS amount
       WHERE (SELECT count(*) FROM locked_products) = (SELECT count(*) FROM lines)
         AND EXISTS (SELECT 1 FROM suppliers WHERE id = ${input.supplierId} AND is_active)
+        AND (${requestId}::uuid IS NULL OR NOT EXISTS (SELECT 1 FROM purchases WHERE request_id = ${requestId}::uuid))
     ), purchase AS (
       INSERT INTO purchases (id, purchase_number, invoice_number, supplier_id, user_id,
-        subtotal, total_amount, status, payment_status, payment_method, notes)
+        subtotal, total_amount, status, payment_status, payment_method, notes, request_id)
       SELECT id, ${prefix} || lpad(id::text, greatest(4, length(id::text)), '0'), ${input.invoiceNumber || null},
         ${input.supplierId}, ${userId}, amount, amount, ${input.status}::purchase_status,
-        ${input.paymentStatus}::purchase_payment_status, ${input.paymentMethod}::payment_method, ${input.notes || null}
-      FROM numbered RETURNING id, purchase_number, status
+        ${input.paymentStatus}::purchase_payment_status, ${input.paymentMethod}::payment_method, ${input.notes || null},
+        ${requestId}::uuid
+      FROM numbered
+      ON CONFLICT (request_id) DO NOTHING
+      RETURNING id, purchase_number, status
     ), detail AS (
       INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal)
       SELECT purchase.id, product_id, quantity, unit_cost, quantity * unit_cost FROM purchase CROSS JOIN lines
@@ -67,13 +72,23 @@ export function cancelPurchaseQuery(purchaseId: number, userId: number, reason: 
       FROM products p JOIN quantities ON p.id = quantities.product_id
       ORDER BY p.id FOR UPDATE OF p
     ), cancelled AS (
-      UPDATE purchases p SET status = 'cancelled'
+      UPDATE purchases p SET
+        status = 'cancelled',
+        notes = NULLIF(concat_ws(' | ', NULLIF(p.notes, ''), 'Anulada: ' || ${reason}::text), '')
       FROM target WHERE p.id = target.id
         AND NOT EXISTS (SELECT 1 FROM locked_products WHERE stock < quantity)
         AND NOT EXISTS (SELECT 1 FROM purchase_returns WHERE purchase_id = target.id)
       RETURNING p.id, p.purchase_number
     ), stock_change AS (
-      UPDATE products p SET stock = p.stock - l.quantity, updated_at = now()
+      UPDATE products p SET
+        stock = p.stock - l.quantity,
+        cost_price = CASE
+          WHEN p.stock - l.quantity = 0 THEN 0
+          WHEN (p.stock * p.cost_price - l.quantity * l.unit_cost) >= 0
+            THEN round((p.stock * p.cost_price - l.quantity * l.unit_cost) / (p.stock - l.quantity), 2)
+          ELSE p.cost_price
+        END,
+        updated_at = now()
       FROM cancelled CROSS JOIN locked_products l WHERE p.id = l.id
       RETURNING p.id, p.stock, l.quantity, l.unit_cost
     ), movement AS (

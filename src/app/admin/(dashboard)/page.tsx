@@ -30,6 +30,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { CURRENCY_SYMBOL } from "@/lib/currency";
+import { escapeHtml } from "@/lib/sanitize";
+import { STORE_NAME } from "@/lib/store-config";
 import DashboardLoading from "./loading";
 import {
   getDashboardSummaryAction,
@@ -47,39 +49,78 @@ function formatMetric(value: number) {
 export default function AdminDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedSaleId, setSelectedSaleId] = useState<string>("");
   const [activeChannelTab, setActiveChannelTab] = useState<"all" | "pos" | "administrative">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const applySummaryResult = (res: Awaited<ReturnType<typeof getDashboardSummaryAction>>) => {
+    if (res.success && res.data) {
+      setLoadError(null);
+      setData(res.data);
+      if (res.data.recentSales.length > 0) {
+        setSelectedSaleId(res.data.recentSales[0].id);
+      }
+    } else {
+      const message = res.error || "No se pudieron obtener las métricas de la base de datos.";
+      setLoadError(message);
+      toast.error("Error al cargar datos", { description: message });
+    }
+  };
+
   const loadData = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
-      const res = await getDashboardSummaryAction();
-      if (res.success && res.data) {
-        setData(res.data);
-        if (res.data.recentSales.length > 0) {
-          setSelectedSaleId(res.data.recentSales[0].id);
-        }
-      } else {
-        toast.error("Error al cargar datos", {
-          description: res.error || "No se pudieron obtener las métricas de la base de datos.",
-        });
-      }
+      applySummaryResult(await getDashboardSummaryAction());
     } catch {
-      toast.error("Error de conexión", {
-        description: "No se pudo comunicar con el servidor.",
-      });
+      const message = "No se pudo comunicar con el servidor.";
+      setLoadError(message);
+      toast.error("Error de conexión", { description: message });
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+    getDashboardSummaryAction()
+      .then((res) => {
+        if (!cancelled) applySummaryResult(res);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          const message = "No se pudo comunicar con el servidor.";
+          setLoadError(message);
+          toast.error("Error de conexión", { description: message });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return <DashboardLoading />;
+  }
+
+  if (loadError || !data) {
+    return (
+      <div className="admin-panel p-8 max-w-xl mx-auto mt-10 text-center space-y-4">
+        <AlertCircle className="h-8 w-8 text-rose-500 mx-auto" />
+        <div className="space-y-1">
+          <h2 className="text-base font-semibold text-admin-text">No se pudo cargar el resumen</h2>
+          <p className="text-xs text-admin-muted">{loadError || "Error inesperado al consultar datos."}</p>
+        </div>
+        <Button onClick={loadData} className="h-9 px-4 rounded-xl bg-admin-brand text-admin-on-solid text-xs font-bold gap-2 cursor-pointer">
+          <RefreshCw className="h-3.5 w-3.5" />
+          Reintentar
+        </Button>
+      </div>
+    );
   }
 
   const {
@@ -114,23 +155,31 @@ export default function AdminDashboardPage() {
       toast.error("Ventana de impresión bloqueada por el navegador");
       return;
     }
+    printWindow.opener = null;
 
     const itemsHtml = sale.items
       .map(
         (it) => `
         <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px;">
-          <span>${it.quantity}x ${it.name}</span>
-          <span style="font-weight:bold;">${CURRENCY_SYMBOL} ${it.subtotal.toFixed(2)}</span>
+          <span>${escapeHtml(it.quantity)}x ${escapeHtml(it.name)}</span>
+          <span style="font-weight:bold;">${escapeHtml(CURRENCY_SYMBOL)} ${it.subtotal.toFixed(2)}</span>
         </div>
       `
       )
       .join("");
 
+    const safeStoreName = escapeHtml(STORE_NAME.toUpperCase());
+    const safeSaleNumber = escapeHtml(sale.saleNumber);
+    const safeTime = escapeHtml(sale.time);
+    const safeCashier = escapeHtml(sale.cashier);
+    const safeCustomer = escapeHtml(sale.customer);
+    const safeMethod = escapeHtml(sale.paymentMethod);
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Ticket #${sale.saleNumber}</title>
+          <title>Ticket #${safeSaleNumber}</title>
           <style>
             @page { size: 80mm auto; margin: 4mm; }
             body { font-family: monospace; font-size: 11px; margin: 0; padding: 10px; color: #000; }
@@ -142,28 +191,28 @@ export default function AdminDashboardPage() {
         </head>
         <body>
           <div class="text-center">
-            <h2 style="margin:0; font-size:16px;">AURA STUDIO</h2>
-            <p style="margin:2px 0; font-size:10px;">TIENDA & POS OFICIAL</p>
+            <h2 style="margin:0; font-size:16px;">${safeStoreName}</h2>
+            <p style="margin:2px 0; font-size:10px;">TIENDA &amp; POS OFICIAL</p>
             <p style="margin:2px 0; font-size:10px;">La Paz, Bolivia</p>
           </div>
           <div class="divider"></div>
           <div>
-            <div class="flex-between"><span>Ticket:</span><span class="bold">#${sale.saleNumber}</span></div>
-            <div class="flex-between"><span>Fecha:</span><span>${sale.time}</span></div>
-            <div class="flex-between"><span>Cajero:</span><span>${sale.cashier}</span></div>
-            <div class="flex-between"><span>Cliente:</span><span>${sale.customer}</span></div>
+            <div class="flex-between"><span>Ticket:</span><span class="bold">#${safeSaleNumber}</span></div>
+            <div class="flex-between"><span>Fecha:</span><span>${safeTime}</span></div>
+            <div class="flex-between"><span>Cajero:</span><span>${safeCashier}</span></div>
+            <div class="flex-between"><span>Cliente:</span><span>${safeCustomer}</span></div>
           </div>
           <div class="divider"></div>
           <div style="font-size:10px; margin-bottom:4px; font-weight:bold;">DETALLE:</div>
           ${itemsHtml}
           <div class="divider"></div>
-          <div class="flex-between"><span class="bold">TOTAL:</span><span class="bold" style="font-size:14px;">${CURRENCY_SYMBOL} ${sale.total.toFixed(2)}</span></div>
-          <div class="flex-between"><span>Medio de Pago:</span><span class="bold">${sale.paymentMethod}</span></div>
+          <div class="flex-between"><span class="bold">TOTAL:</span><span class="bold" style="font-size:14px;">${escapeHtml(CURRENCY_SYMBOL)} ${sale.total.toFixed(2)}</span></div>
+          <div class="flex-between"><span>Medio de Pago:</span><span class="bold">${safeMethod}</span></div>
           ${
             sale.paymentMethod === "Efectivo" && sale.cashGiven > 0
               ? `
-            <div class="flex-between"><span>Recibido:</span><span>${CURRENCY_SYMBOL} ${sale.cashGiven.toFixed(2)}</span></div>
-            <div class="flex-between"><span>Cambio/Vuelto:</span><span>${CURRENCY_SYMBOL} ${sale.changeGiven.toFixed(2)}</span></div>
+            <div class="flex-between"><span>Recibido:</span><span>${escapeHtml(CURRENCY_SYMBOL)} ${sale.cashGiven.toFixed(2)}</span></div>
+            <div class="flex-between"><span>Cambio/Vuelto:</span><span>${escapeHtml(CURRENCY_SYMBOL)} ${sale.changeGiven.toFixed(2)}</span></div>
           `
               : ""
           }

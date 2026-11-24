@@ -25,6 +25,39 @@ export function generateInternalSku(prefix = "PROD"): string {
   return `${prefix}-${timestamp}-${random}`;
 }
 
+const LOCAL_UPLOAD_REGEX = /^\/uploads\/(products|categories)\/[A-Za-z0-9._-]+\.webp$/;
+
+export const safeImageUrlSchema = z.string().trim().max(1500).refine(
+  (val) => {
+    if (val === "") return true;
+    if (LOCAL_UPLOAD_REGEX.test(val)) return true;
+    try {
+      const u = new URL(val);
+      return u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  },
+  "Usa una imagen subida al sistema o una URL pública HTTPS válida."
+);
+
+export const productOptionConfigSchema = z.object({
+  id: z.string().trim().min(1).max(60),
+  name: z.string().trim().min(1, "Escribe el nombre de la opción.").max(60),
+  type: z.enum(["text", "color"]),
+  values: z.array(z.object({
+    name: z.string().trim().min(1).max(60),
+    hex: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  })).max(50),
+});
+
+export type ProductOptionConfig = z.infer<typeof productOptionConfigSchema>;
+
+export const categoryInputSchema = z.object({
+  name: z.string().trim().min(1, "El nombre de la categoría no puede estar vacío.").max(100, "El nombre es demasiado largo."),
+  imageUrl: safeImageUrlSchema.optional().nullable(),
+});
+
 /**
  * Esquema de validación para los datos ingresados en el formulario de Crear/Editar Producto
  */
@@ -33,13 +66,12 @@ const productFieldsSchema = z.object({
     .string().trim()
     .min(2, "El nombre comercial debe tener al menos 2 caracteres.")
     .max(180, "El nombre no puede superar los 180 caracteres."),
-  description: z.string().optional().default(""),
-  mainImage: z
-    .string()
+  description: z.string().max(5000, "La descripción no puede superar los 5000 caracteres.").optional().default(""),
+  mainImage: safeImageUrlSchema
     .optional()
     .nullable(),
   additionalImages: z
-    .array(z.string())
+    .array(safeImageUrlSchema)
     .max(6, "Puedes cargar hasta un máximo de 6 fotos adicionales.")
     .default([]),
 
@@ -89,7 +121,11 @@ const productFieldsSchema = z.object({
   variant: z.string().trim().max(100).optional().nullable(),
   variantSelector: z.string().trim().max(60).optional().nullable(),
   variantColor: z.string().trim().regex(/^(#[0-9a-fA-F]{6})?$/, "Escribe un color hexadecimal válido.").optional().nullable(),
-  attributes: z.record(z.string(), z.string()).optional().nullable(),
+  attributes: z
+    .record(z.string().trim().min(1).max(60), z.string().trim().min(1).max(100))
+    .refine((obj) => Object.keys(obj).length <= 10, "Máximo 10 atributos por variante.")
+    .optional()
+    .nullable(),
 });
 
 export const productFormSchema = productFieldsSchema.refine(data => Boolean(data.modelCode) === Boolean(data.variant),
@@ -108,10 +144,7 @@ export const productOptionsSchema = z.array(
     attributes: true,
   }).extend({
     variant: z.string().trim().min(1, "Escribe el valor de la variante.").max(100),
-    mainImage: z.union([
-      z.literal(""),
-      z.string().max(1500),
-    ]).optional().nullable(),
+    mainImage: safeImageUrlSchema.optional().nullable(),
   }),
 ).min(1).max(100).superRefine((options, context) => {
   const seen = { variant: new Set<string>(), sku: new Set<string>(), barcode: new Set<string>() };
@@ -142,7 +175,7 @@ export const productDbInsertSchema = productFormSchema.transform((data) => {
     modelCode: data.modelCode?.toUpperCase() || null,
     variant: data.variant || null,
     variantColor: data.variantColor || null,
-    attributes: data.attributes || null,
+    attributes: data.attributes && Object.keys(data.attributes).length > 0 ? data.attributes : null,
     sku: data.sku && data.sku.trim() !== "" ? data.sku.trim() : null,
     barcode: data.barcode && data.barcode.trim() !== "" ? data.barcode.trim() : null,
     description: data.description.trim() || null,

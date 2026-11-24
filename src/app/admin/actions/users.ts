@@ -4,11 +4,13 @@ import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { userFormSchema, userUpdateSchema, type UserFormInput } from "@/lib/validations/user";
 import { requireRole } from "@/lib/auth/session";
 import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
 import { hashPassword } from "@/lib/auth/password";
+import { formatBusinessDate } from "@/lib/business-date";
 
 function safeRevalidatePath(path: string) {
   try {
@@ -62,7 +64,7 @@ export async function getUsersAction(): Promise<{
       if (u.role === "admin" || u.role === "manager") adminsCount += 1;
       if (u.role === "cashier") cashiersCount += 1;
 
-      const dateStr = u.createdAt ? new Date(u.createdAt).toLocaleDateString("es-BO") : "Reciente";
+      const dateStr = u.createdAt ? formatBusinessDate(u.createdAt) : "Reciente";
 
       return {
         id: u.id,
@@ -109,7 +111,6 @@ export async function createUserAction(input: UserFormInput): Promise<{
 
     const parsed = userFormSchema.parse(input);
 
-    // 1. Validar que el email no esté duplicado
     const existing = await db.query.users.findFirst({
       where: eq(schema.users.email, parsed.email),
     });
@@ -118,12 +119,7 @@ export async function createUserAction(input: UserFormInput): Promise<{
       return { success: false, error: "Ya existe un usuario con este correo electrónico." };
     }
 
-    const rawPassword = parsed.password && parsed.password.trim().length >= 6
-      ? parsed.password.trim()
-      : "aura123456";
-
-    const passwordHash = hashPassword(rawPassword);
-
+    const passwordHash = hashPassword(parsed.password);
     const cleanPin = parsed.pin ? encodeSupervisorPin(parsed.pin) : null;
 
     const [newUser] = await db
@@ -154,12 +150,15 @@ export async function createUserAction(input: UserFormInput): Promise<{
  */
 export async function updateUserAction(
   userId: number,
-  input: Partial<UserFormInput>
+  input: Partial<UserFormInput> & { clearPin?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const actor = await requireRole(["admin"]);
-    input = userUpdateSchema.parse(input);
-    if (actor.id === userId && (input.isActive === false || (input.role && input.role !== "admin"))) {
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+      return { success: false, error: "ID de usuario inválido." };
+    }
+    const parsed = userUpdateSchema.parse(input);
+    if (actor.id === userId && (parsed.isActive === false || (parsed.role && parsed.role !== "admin"))) {
       return { success: false, error: "No puedes quitar tus propios permisos de administrador." };
     }
 
@@ -171,26 +170,37 @@ export async function updateUserAction(
       return { success: false, error: "El usuario no fue encontrado." };
     }
 
-    const updates: Partial<typeof schema.users.$inferInsert> = {};
+    const updates: PgUpdateSetSource<typeof schema.users> = {};
 
-    if (input.name !== undefined) updates.name = input.name.trim();
-    if (input.email !== undefined && input.email !== user.email) {
+    if (parsed.name !== undefined) updates.name = parsed.name.trim();
+    if (parsed.email !== undefined && parsed.email !== user.email) {
       const existing = await db.query.users.findFirst({
-        where: eq(schema.users.email, input.email.trim().toLowerCase()),
+        where: eq(schema.users.email, parsed.email.trim().toLowerCase()),
       });
       if (existing) {
         return { success: false, error: "El correo ya está en uso por otro usuario." };
       }
-      updates.email = input.email.trim().toLowerCase();
+      updates.email = parsed.email.trim().toLowerCase();
     }
-    if (input.role !== undefined) updates.role = input.role;
-    if (input.phone !== undefined) updates.phone = input.phone ? input.phone.trim() : null;
-    if (input.isActive !== undefined) updates.isActive = input.isActive;
-    if (input.pin !== undefined) {
-      updates.pin = input.pin ? encodeSupervisorPin(input.pin) : null;
+    if (parsed.role !== undefined) updates.role = parsed.role;
+    if (parsed.phone !== undefined) updates.phone = parsed.phone ? parsed.phone.trim() : null;
+    if (parsed.isActive !== undefined) updates.isActive = parsed.isActive;
+    if (parsed.clearPin) {
+      updates.pin = null;
+    } else if (parsed.pin !== undefined && parsed.pin !== "") {
+      updates.pin = parsed.pin ? encodeSupervisorPin(parsed.pin) : null;
     }
-    if (input.password && input.password.trim().length >= 6) {
-      updates.passwordHash = hashPassword(input.password.trim());
+    if (parsed.password && parsed.password.trim().length >= 8) {
+      updates.passwordHash = hashPassword(parsed.password.trim());
+    }
+
+    const shouldRevokeSessions =
+      Boolean(updates.passwordHash) ||
+      updates.email !== undefined ||
+      (updates.role !== undefined && updates.role !== user.role) ||
+      updates.isActive === false;
+    if (shouldRevokeSessions) {
+      updates.sessionVersion = sql`${schema.users.sessionVersion} + 1`;
     }
 
     if (Object.keys(updates).length === 0) return { success: true };
@@ -214,6 +224,9 @@ export async function toggleUserStatusAction(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const actor = await requireRole(["admin"]);
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+      return { success: false, error: "ID de usuario inválido." };
+    }
 
     const user = await db.query.users.findFirst({
       where: eq(schema.users.id, userId),
@@ -230,9 +243,13 @@ export async function toggleUserStatusAction(
       };
     }
 
+    const nextIsActive = !user.isActive;
     await db
       .update(schema.users)
-      .set({ isActive: !user.isActive })
+      .set({
+        isActive: nextIsActive,
+        ...(nextIsActive ? {} : { sessionVersion: sql`${schema.users.sessionVersion} + 1` }),
+      })
       .where(eq(schema.users.id, userId));
 
     safeRevalidatePath("/admin/usuarios");

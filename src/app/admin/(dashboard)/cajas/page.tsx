@@ -200,14 +200,32 @@ export default function CajasPage() {
   };
 
   useEffect(() => {
-    loadRegistersData();
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getCashRegistersAndShiftsAction();
+        if (cancelled) return;
+        if (res.success) {
+          setRegisters(res.registers);
+          setKpis(res.kpis);
+          setUsers(res.users);
+        } else {
+          toast.error(res.error || "No se pudieron cargar las cajas.");
+        }
+      } catch {
+        if (!cancelled) {
+          toast.error("Error al conectar con la base de datos de cajas.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingRegisters(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  useEffect(() => {
-    if (activeTab === "history") {
-      loadHistoryData();
-    }
-  }, [activeTab]);
 
   // Manejar apertura de turno
   const handleOpenShift = async () => {
@@ -288,7 +306,7 @@ export default function CajasPage() {
         location: newRegisterLocation.trim() || null,
       });
 
-      if (res.success) {
+      if (res.success && res.data) {
         toast.success(`Caja "${res.data.name}" creada exitosamente.`);
         setCreateRegisterModalOpen(false);
         setNewRegisterName("");
@@ -423,7 +441,10 @@ export default function CajasPage() {
           <span>Terminales POS & Turno Activo</span>
         </button>
         <button
-          onClick={() => setActiveTab("history")}
+          onClick={() => {
+            setActiveTab("history");
+            loadHistoryData();
+          }}
           aria-pressed={activeTab === "history"}
           className="admin-segment"
         >
@@ -449,15 +470,17 @@ export default function CajasPage() {
             <h3 className="text-sm font-bold text-admin-text">
               No hay cajas registradoras configuradas
             </h3>
-            <Button
-              onClick={() => {
-                setNewRegisterCode("POS-01");
-                setCreateRegisterModalOpen(true);
-              }}
-              className="bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid rounded-xl text-xs font-bold"
-            >
-              Crear Primera Caja Física
-            </Button>
+            {user && user.role !== "cashier" && (
+              <Button
+                onClick={() => {
+                  setNewRegisterCode("POS-01");
+                  setCreateRegisterModalOpen(true);
+                }}
+                className="bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid rounded-xl text-xs font-bold"
+              >
+                Crear Primera Caja Física
+              </Button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -1091,6 +1114,14 @@ export default function CajasPage() {
                     {formatCurrency(selectedClosedShift.cardSales + selectedClosedShift.transferSales)}
                   </span>
                 </div>
+                {selectedClosedShift.otherSales > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Otros Medios:</span>
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                      {formatCurrency(selectedClosedShift.otherSales)}
+                    </span>
+                  </div>
+                )}
                 <div className="pt-2 border-t border-admin-card-border flex justify-between font-bold">
                   <span>Efectivo Esperado:</span>
                   <span className="font-mono text-sm">{formatCurrency(selectedClosedShift.expectedCash)}</span>
@@ -1240,6 +1271,8 @@ export default function CajasPage() {
                             ? "Efectivo"
                             : sale.paymentMethod === "card"
                             ? "Tarjeta"
+                            : sale.paymentMethod === "other"
+                            ? "Otro"
                             : "QR / Transf."}
                         </span>
                         <span className="font-semibold text-sm text-admin-text">

@@ -5,9 +5,14 @@ import * as schema from "@/db/schema";
 import { DrizzleQueryError, eq } from "drizzle-orm";
 import { createSession, destroySession, getCurrentUser, type SessionUser } from "@/lib/auth/session";
 import { SessionConfigurationError } from "@/lib/auth/session-edge";
-import { isDemoLoginEnabled, verifyDemoLogin } from "@/lib/auth/demo-login";
-import { verifyPassword } from "@/lib/auth/password";
+import { verifyDemoLogin } from "@/lib/auth/demo-login";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { checkRateLimit, recordFailedAttempt, resetRateLimit } from "@/lib/auth/rate-limit";
 import { revalidatePath } from "next/cache";
+
+const DUMMY_PASSWORD_HASH = hashPassword("aura-timing-equalizer-dummy-secret");
+const LOGIN_MAX_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
 export interface LoginResult {
   success: boolean;
@@ -21,8 +26,12 @@ export interface LoginResult {
  */
 export async function loginAction(email: string, password: string): Promise<LoginResult> {
   try {
-    if (typeof email !== "string" || email.length > 254 ||
-        typeof password !== "string" || password.length > 100) {
+    if (
+      typeof email !== "string" ||
+      email.length > 254 ||
+      typeof password !== "string" ||
+      password.length > 128
+    ) {
       return { success: false, error: "Credenciales inválidas." };
     }
     const cleanEmail = email.toLowerCase().trim();
@@ -32,34 +41,47 @@ export async function loginAction(email: string, password: string): Promise<Logi
       return { success: false, error: "Debes ingresar tu correo y contraseña." };
     }
 
-    if (isDemoLoginEnabled() && !process.env.DATABASE_URL) {
-      return { success: false, error: "Falta DATABASE_URL en el entorno de pruebas." };
+    const rateKey = `login:${cleanEmail}`;
+    const limit = checkRateLimit(rateKey, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_MS);
+    if (!limit.allowed) {
+      return {
+        success: false,
+        error: "Demasiados intentos fallidos. Intenta de nuevo en unos minutos.",
+      };
     }
 
-    // 1. Buscar usuario en la base de datos
     const user = await db.query.users.findFirst({
       where: eq(schema.users.email, cleanEmail),
     });
 
-    if (!user?.isActive || (
-      !verifyPassword(cleanPassword, user.passwordHash) &&
-      !verifyDemoLogin(user.email, cleanPassword, user.passwordHash)
-    )) {
+    if (!user?.isActive) {
+      verifyPassword(cleanPassword, DUMMY_PASSWORD_HASH);
+      recordFailedAttempt(rateKey, LOGIN_WINDOW_MS);
       return { success: false, error: "Credenciales inválidas." };
     }
 
-    // 4. Crear sesión
+    const passwordValid =
+      verifyPassword(cleanPassword, user.passwordHash) ||
+      verifyDemoLogin(user.email, cleanPassword, user.passwordHash);
+
+    if (!passwordValid) {
+      recordFailedAttempt(rateKey, LOGIN_WINDOW_MS);
+      return { success: false, error: "Credenciales inválidas." };
+    }
+
+    resetRateLimit(rateKey);
+
     const sessionUser: SessionUser = {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       phone: user.phone || null,
+      sessionVersion: user.sessionVersion,
     };
 
     await createSession(sessionUser);
 
-    // 5. Determinar ruta de aterrizaje según el rol de negocio
     let redirectTo = "/admin";
     if (user.role === "cashier") {
       redirectTo = "/admin/ventas";
@@ -78,17 +100,23 @@ export async function loginAction(email: string, password: string): Promise<Logi
     };
   } catch (error) {
     console.error("Error en loginAction:", error instanceof Error ? error.constructor.name : "Unknown error");
-    if (isDemoLoginEnabled()) {
+    if (process.env.NODE_ENV === "development") {
       if (error instanceof SessionConfigurationError) {
-        return { success: false, error: "Configura SESSION_SECRET con una clave aleatoria de al menos 32 bytes en el entorno de pruebas." };
+        return {
+          success: false,
+          error: error.message || "Configura SESSION_SECRET con una clave aleatoria de al menos 32 bytes.",
+        };
       }
       if (error instanceof DrizzleQueryError) {
-        return { success: false, error: "No se pudo consultar la base de pruebas. Revisa DATABASE_URL y que la base tenga el esquema instalado." };
+        return {
+          success: false,
+          error: "No se pudo consultar la base de datos. Revisa DATABASE_URL y que el esquema esté aplicado.",
+        };
       }
     }
     return {
       success: false,
-      error: "Ocurrió un error inesperado al iniciar sesión.",
+      error: "No se pudo iniciar sesión. Intenta nuevamente.",
     };
   }
 }

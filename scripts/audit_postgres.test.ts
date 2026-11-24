@@ -9,6 +9,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
 import { cancelSaleQuery, createSaleQuery, refundSaleQuery } from "@/db/operations/sales";
+import { productDbInsertSchema, productOptionConfigSchema } from "@/lib/validations/product";
 import { saleFormSchema } from "@/lib/validations/sale";
 import { purchaseFormSchema, purchaseReturnSchema, type PurchaseReturnInput } from "@/lib/validations/purchase";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
@@ -18,7 +19,7 @@ async function createDatabase(context: TestContext) {
   const db = new PGlite();
   context.after(() => db.close());
 
-  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql", "0005_product_attributes_jsonb.sql"]) {
+  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql", "0005_product_attributes_jsonb.sql", "0006_hardening_refunds_sessions.sql"]) {
     await db.exec(await readFile(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
   }
   await db.exec(`
@@ -251,11 +252,15 @@ test("devuelve al proveedor al costo vigente sin duplicar salidas ni superar la 
   `)).rows, [{ quantity: -3, previous_stock: 15, new_stock: 12, unit_cost: "22.00", reference_id: receipt.id }]);
 
   assert.equal((await execute(cancelPurchaseQuery(other.id, 1, "Prueba"))).rows.length, 1);
+  assert.deepEqual(
+    (await db.query("SELECT status, notes FROM purchases WHERE id = $1", [other.id])).rows,
+    [{ status: "cancelled", notes: "Anulada: Prueba" }]
+  );
   assert.equal((await submit({ ...input([{ purchaseItemId: 3, quantity: 1 }]), purchaseId: other.id })).rows.length, 0);
   await db.exec("UPDATE products SET stock = 4 WHERE id = 1");
   assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 5 }]))).rows.length, 0);
   assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 4 }]))).rows.length, 1);
-  assert.deepEqual((await db.query("SELECT stock, cost_price FROM products WHERE id = 1")).rows, [{ stock: 0, cost_price: "22.00" }]);
+  assert.deepEqual((await db.query("SELECT stock, cost_price FROM products WHERE id = 1")).rows, [{ stock: 0, cost_price: "19.14" }]);
 });
 
 test("el mismo intento de cobro guarda una sola venta, una salida y un abono de caja", async (t) => {
@@ -303,4 +308,111 @@ test("la plantilla Excel crea SKU, variantes y aperturas con un solo alta por fi
   assert.deepEqual(rows.map(row => [row.variant, row.stock]), [[null, 8], ["S / Verde", 4], ["M / Negro", 2]]);
   assert.equal(rows[2].sku, "REM-M-NEG");
   assert.equal((await db.query("SELECT * FROM inventory_movements WHERE reference_type = 'product_creation'")).rows.length, 3);
+});
+
+test("refundSaleQuery registra sale_refunds, es idempotente por requestId y ajusta ventas no-efectivo en turno", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  await db.exec(`
+    INSERT INTO cash_registers (name, code) VALUES ('Caja', 'C01');
+    INSERT INTO cash_shifts (shift_number, cash_register_id, user_id) VALUES ('TURNO', 1, 1);
+    INSERT INTO products (name, slug, price, cost_price, stock) VALUES ('Teclado', 'teclado', 50, 20, 5);
+  `);
+
+  const sale = saleFormSchema.parse({
+    checkoutRequestId: randomUUID(),
+    paymentMethod: "card",
+    items: [{ productId: 1, quantity: 2, unitPrice: 50 }],
+  });
+  const saleStmt = dialect.sqlToQuery(createSaleQuery({
+    sale,
+    operatorId: 1,
+    shiftId: 1,
+    prefix: "VTA-",
+    subtotal: 100,
+    total: 100,
+    discount: 0,
+    cashGiven: 100,
+    changeGiven: 0,
+    notes: null,
+    checkoutFingerprint: "fixture-card",
+  }));
+  const createdSale = await db.query<{ saleId: number; itemId: number }>(saleStmt.sql, saleStmt.params);
+  const { saleId, itemId: saleItemId } = createdSale.rows[0];
+
+  const refundReqId = randomUUID();
+  const refundStmt = dialect.sqlToQuery(refundSaleQuery({
+    saleId,
+    operatorId: 1,
+    supervisorId: 2,
+    cashShiftId: 1,
+    amount: 50,
+    note: "Cambio de modelo",
+    refundMethod: "card",
+    requestId: refundReqId,
+    reason: "Cambio de modelo",
+    items: [{ id: saleItemId, returnedQuantity: 0, quantity: 1 }],
+  }));
+
+  assert.equal((await db.query(refundStmt.sql, refundStmt.params)).rows.length, 1);
+  // Segundo intento con el mismo requestId no debe duplicar devolución ni stock
+  assert.equal((await db.query(refundStmt.sql, refundStmt.params)).rows.length, 0);
+
+  assert.deepEqual(
+    (await db.query("SELECT sale_id, request_id, refund_method, amount FROM sale_refunds")).rows,
+    [{ sale_id: saleId, request_id: refundReqId, refund_method: "card", amount: "50.00" }]
+  );
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 4 }]);
+  assert.deepEqual((await db.query("SELECT card_sales, expected_cash FROM cash_shifts WHERE id = 1")).rows, [
+    { card_sales: "50.00", expected_cash: "0.00" },
+  ]);
+});
+
+test("product_models.options y products.attributes persisten en JSONB sin pérdida de estructura", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  const options = [
+    productOptionConfigSchema.parse({
+      id: "talla",
+      name: "Talla",
+      type: "text",
+      values: [{ name: "M" }, { name: "L" }],
+    }),
+    productOptionConfigSchema.parse({
+      id: "color",
+      name: "Color",
+      type: "color",
+      values: [{ name: "Azul", hex: "#1d4ed8" }],
+    }),
+  ];
+  const attributes = { Talla: "M", Color: "Azul" };
+  const base = productDbInsertSchema.parse({
+    name: "Chaqueta Técnica",
+    price: 350,
+    costPrice: 180,
+    initialStock: 6,
+    modelCode: "CHAQ-TECH",
+    variant: "M / Azul",
+    variantSelector: "Talla y color",
+    variantColor: "#1d4ed8",
+    attributes,
+  });
+
+  const stmt = dialect.sqlToQuery(
+    createCatalogProductsQuery(
+      [{ ...base, variantSelector: "Talla y color", options, attributes }],
+      1
+    )
+  );
+  await db.query(stmt.sql, stmt.params);
+
+  const modelRows = await db.query<{ code: string; options: typeof options }>(
+    "SELECT code, options FROM product_models WHERE code = 'CHAQ-TECH'"
+  );
+  assert.deepEqual(modelRows.rows, [{ code: "CHAQ-TECH", options }]);
+
+  const prodRows = await db.query<{ attributes: typeof attributes }>(
+    "SELECT attributes FROM products WHERE model_code = 'CHAQ-TECH'"
+  );
+  assert.deepEqual(prodRows.rows, [{ attributes }]);
 });
