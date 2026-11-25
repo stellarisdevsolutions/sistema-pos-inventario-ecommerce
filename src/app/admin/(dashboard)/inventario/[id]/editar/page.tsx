@@ -74,7 +74,7 @@ function EditarProductoContent() {
 
   return (
     <div className="space-y-5">
-    <ProductForm key={`${product.id}-${product.isActive}`}
+    <ProductForm key={`${product.id}-${product.isActive}-${product.isArchived}`}
       isEdit={true}
       initialData={{
         id: product.id,
@@ -87,8 +87,13 @@ function EditarProductoContent() {
         variantColor: product.variantColor,
         attributes: product.attributes ?? null,
         description: product.description,
-        mainImage: product.imageUrl,
-        additionalImages: product.images || [],
+        mainImage: product.model ? (product.model.imageUrl ?? null) : product.imageUrl,
+        variantImage: product.modelCode ? (product.imageUrl ?? null) : null,
+        additionalImages: product.model
+          ? product.model.images?.length
+            ? product.model.images
+            : product.images || []
+          : product.images || [],
         price: product.price,
         costPrice: product.costPrice,
         categoryId: product.categoryId,
@@ -97,6 +102,7 @@ function EditarProductoContent() {
         stock: product.stock,
         minStock: product.minStock,
         isActive: product.isActive,
+        isArchived: product.isArchived,
         isVisibleWeb: product.isVisibleWeb,
         isFeatured: product.isFeatured,
       }}

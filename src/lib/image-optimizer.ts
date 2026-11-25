@@ -8,10 +8,34 @@ export interface CompressionResult {
   savingsPercent: number;
 }
 
+async function compressToWebPBlob(
+  file: File,
+  compressionOptions: {
+    maxSizeMB: number;
+    maxWidthOrHeight: number;
+    useWebWorker: boolean;
+    fileType: string;
+    initialQuality: number;
+  }
+): Promise<File> {
+  const compressedBlob = await imageCompression(file, compressionOptions);
+  if (compressedBlob.type && compressedBlob.type !== "image/webp") {
+    throw new Error("El navegador no generó formato WebP.");
+  }
+
+  const baseName = (file.name.replace(/\.[^/.]+$/, "") || "imagen").trim();
+  const webpName = `${baseName}.webp`;
+
+  return new File([compressedBlob], webpName, {
+    type: "image/webp",
+    lastModified: Date.now(),
+  });
+}
+
 /**
  * Optimiza una imagen física directamente en el navegador del usuario utilizando
  * los recursos del dispositivo (Canvas / Web Worker).
- * La comprime y convierte a formato .webp moderno y ultraligero sin perder resolución.
+ * La comprime y convierte a formato .webp ligero para subir al servidor / CDN.
  */
 export async function optimizeImageToWebP(
   file: File,
@@ -23,50 +47,36 @@ export async function optimizeImageToWebP(
 ): Promise<CompressionResult> {
   const originalSizeKB = Math.round(file.size / 1024);
 
-  const compressionOptions = {
-    maxSizeMB: options?.maxSizeMB ?? 0.8, // Máximo ~800 KB
-    maxWidthOrHeight: options?.maxWidthOrHeight ?? 1400, // Resolución HD nítida
-    useWebWorker: true,
+  const baseOptions = {
+    maxSizeMB: options?.maxSizeMB ?? 0.55,
+    maxWidthOrHeight: options?.maxWidthOrHeight ?? 1400,
     fileType: "image/webp",
     initialQuality: options?.quality ?? 0.85,
   };
 
+  let compressedFile: File;
   try {
-    const compressedBlob = await imageCompression(file, compressionOptions);
-    
-    // Asignar extensión .webp al nombre
-    const baseName = file.name.replace(/\.[^/.]+$/, "");
-    const webpName = `${baseName}.webp`;
-
-    const compressedFile = new File([compressedBlob], webpName, {
-      type: "image/webp",
-      lastModified: Date.now(),
-    });
-
-    const compressedSizeKB = Math.round(compressedFile.size / 1024);
-    const savingsPercent =
-      originalSizeKB > 0
-        ? Math.round(((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100)
-        : 0;
-
-    const previewUrl = URL.createObjectURL(compressedFile);
-
-    return {
-      file: compressedFile,
-      previewUrl,
-      originalSizeKB,
-      compressedSizeKB,
-      savingsPercent: Math.max(0, savingsPercent),
-    };
-  } catch (error) {
-    console.error("Error optimizando imagen a WebP en el navegador:", error);
-    // Fallback seguro si el navegador no soporta el worker
-    return {
-      file,
-      previewUrl: URL.createObjectURL(file),
-      originalSizeKB,
-      compressedSizeKB: originalSizeKB,
-      savingsPercent: 0,
-    };
+    compressedFile = await compressToWebPBlob(file, { ...baseOptions, useWebWorker: true });
+  } catch {
+    try {
+      compressedFile = await compressToWebPBlob(file, { ...baseOptions, useWebWorker: false });
+    } catch (error) {
+      console.error("Error optimizando imagen a WebP en el navegador:", error);
+      throw new Error("No se pudo optimizar la imagen en este navegador. Prueba con otra foto JPG, PNG o WebP.");
+    }
   }
+
+  const compressedSizeKB = Math.max(1, Math.round(compressedFile.size / 1024));
+  const savingsPercent =
+    originalSizeKB > 0
+      ? Math.round(((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100)
+      : 0;
+
+  return {
+    file: compressedFile,
+    previewUrl: "",
+    originalSizeKB,
+    compressedSizeKB,
+    savingsPercent: Math.max(0, savingsPercent),
+  };
 }

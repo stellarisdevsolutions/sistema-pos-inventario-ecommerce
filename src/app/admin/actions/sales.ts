@@ -60,6 +60,7 @@ export type PosProductItem = {
   stock: number;
   minStock: number;
   image: string;
+  modelImage: string | null;
   status: "in_stock" | "low_stock" | "out_of_stock";
 };
 
@@ -133,7 +134,7 @@ export async function getPosCatalogAction(): Promise<{
   try {
     const operator = await requireRole(POS_ROLES);
     const prods = await db.query.products.findMany({
-      where: eq(schema.products.isActive, true),
+      where: and(eq(schema.products.isActive, true), eq(schema.products.isArchived, false)),
       with: {
         category: true,
         model: true,
@@ -153,6 +154,15 @@ export async function getPosCatalogAction(): Promise<{
       const status: "in_stock" | "low_stock" | "out_of_stock" =
         stock <= 0 ? "out_of_stock" : stock <= minStock ? "low_stock" : "in_stock";
 
+      const modelImage = p.model?.imageUrl || null;
+      const modelGallery = p.model?.images ?? [];
+      const effectiveImage =
+        p.imageUrl ||
+        modelImage ||
+        modelGallery[0] ||
+        p.images?.[0] ||
+        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&auto=format&fit=crop&q=80";
+
       return {
         id: p.id,
         name: productName(p),
@@ -165,9 +175,8 @@ export async function getPosCatalogAction(): Promise<{
         costPrice: operator.role === "cashier" ? 0 : parseFloat(p.costPrice) || 0,
         stock,
         minStock,
-        image:
-          p.imageUrl ||
-          "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&auto=format&fit=crop&q=80",
+        image: effectiveImage,
+        modelImage,
         status,
       };
     });
@@ -338,7 +347,7 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
 
     for (const item of parsed.items) {
       const prod = productsMap.get(item.productId);
-      if (!prod?.isActive) {
+      if (!prod?.isActive || prod.isArchived) {
         return await rejectSale(`El producto ID #${item.productId} no fue encontrado en la base de datos.`);
       }
       if (Math.round(item.unitPrice * 100) !== Math.round(Number(prod.price) * 100)) {

@@ -20,7 +20,7 @@ async function createDatabase(context: TestContext) {
   const db = new PGlite();
   context.after(() => db.close());
 
-  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql", "0005_product_attributes_jsonb.sql", "0006_hardening_refunds_sessions.sql"]) {
+  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql", "0005_product_attributes_jsonb.sql", "0006_hardening_refunds_sessions.sql", "0007_product_model_images.sql", "0008_product_archived.sql"]) {
     await db.exec(await readFile(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
   }
   await db.exec(`
@@ -474,4 +474,150 @@ test("una venta, compra, baja u otro movimiento impide borrar y conserva la aper
   }
   assert.equal((await db.query("SELECT id FROM products")).rows.length, 4);
   assert.equal((await db.query("SELECT id FROM inventory_movements")).rows.length, 5);
+});
+
+test("modelo base conserva portada y galería separadas de la foto por variante", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  const baseCover = "/uploads/products/base-cover.webp";
+  const baseGallery = ["/uploads/products/gal-1.webp", "/uploads/products/gal-2.webp"];
+  const redVariantPhoto = "/uploads/products/variant-rojo.webp";
+
+  const options = [
+    productOptionConfigSchema.parse({
+      id: "color",
+      name: "Color",
+      type: "color",
+      values: [
+        { name: "Rojo", hex: "#EF4444" },
+        { name: "Azul", hex: "#3B82F6" },
+      ],
+    }),
+  ];
+
+  const redEntry = {
+    ...productDbInsertSchema.parse({
+      name: "Gorra Deportiva",
+      price: 90,
+      costPrice: 45,
+      initialStock: 4,
+      modelCode: "GORRA-01",
+      variant: "Rojo",
+      variantSelector: "Color",
+      variantColor: "#EF4444",
+      mainImage: redVariantPhoto,
+      additionalImages: baseGallery,
+      attributes: { Color: "Rojo" },
+    }),
+    variantSelector: "Color",
+    options,
+    attributes: { Color: "Rojo" },
+    modelImageUrl: baseCover,
+    modelImages: baseGallery,
+  };
+
+  const blueEntry = {
+    ...productDbInsertSchema.parse({
+      name: "Gorra Deportiva",
+      price: 90,
+      costPrice: 45,
+      initialStock: 6,
+      modelCode: "GORRA-01",
+      variant: "Azul",
+      variantSelector: "Color",
+      variantColor: "#3B82F6",
+      mainImage: null,
+      additionalImages: baseGallery,
+      attributes: { Color: "Azul" },
+    }),
+    variantSelector: "Color",
+    options,
+    attributes: { Color: "Azul" },
+    modelImageUrl: baseCover,
+    modelImages: baseGallery,
+  };
+
+  const insertStmt = dialect.sqlToQuery(createCatalogProductsQuery([redEntry, blueEntry], 1));
+  await db.query(insertStmt.sql, insertStmt.params);
+
+  const modelRows = await db.query<{ image_url: string | null; images: string[] }>(
+    "SELECT image_url, images FROM product_models WHERE code = 'GORRA-01'"
+  );
+  assert.deepEqual(modelRows.rows, [{ image_url: baseCover, images: baseGallery }]);
+
+  const variantRows = await db.query<{ variant: string; image_url: string | null }>(
+    "SELECT variant, image_url FROM products WHERE model_code = 'GORRA-01' ORDER BY id"
+  );
+  assert.deepEqual(variantRows.rows, [
+    { variant: "Rojo", image_url: redVariantPhoto },
+    { variant: "Azul", image_url: null },
+  ]);
+
+  const extendedOptions = extendModelOptions({ options, variantSelector: "Color" }, [
+    { variant: "Verde", attributes: { Color: "Verde" }, price: 90, variantColor: "#10B981" },
+  ]);
+  const greenEntry = {
+    ...productDbInsertSchema.parse({
+      name: "Gorra Deportiva",
+      price: 90,
+      costPrice: 45,
+      initialStock: 2,
+      modelCode: "GORRA-01",
+      variant: "Verde",
+      variantSelector: "Color",
+      variantColor: "#10B981",
+      mainImage: null,
+      additionalImages: baseGallery,
+      attributes: { Color: "Verde" },
+    }),
+    variantSelector: "Color",
+    options: extendedOptions,
+    attributes: { Color: "Verde" },
+    modelImageUrl: baseCover,
+    modelImages: baseGallery,
+  };
+  const appendStmt = dialect.sqlToQuery(
+    createCatalogProductsQuery([greenEntry], 1, { code: "GORRA-01", options })
+  );
+  await db.query(appendStmt.sql, appendStmt.params);
+
+  const afterModelRows = await db.query<{ image_url: string | null; images: string[] }>(
+    "SELECT image_url, images FROM product_models WHERE code = 'GORRA-01'"
+  );
+  assert.deepEqual(afterModelRows.rows, [{ image_url: baseCover, images: baseGallery }]);
+});
+
+test("archivar exige desactivar canales pero conserva historial y permite registrar baja de saldo", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  await db.exec(
+    "INSERT INTO products (name, slug, stock, cost_price, price, is_active, is_visible_web, is_featured, is_archived) VALUES ('Temporada', 'temporada', 4, 25, 50, true, true, false, false)"
+  );
+
+  await assert.rejects(
+    db.exec("UPDATE products SET is_archived = true WHERE id = 1"),
+    /products_archived_inactive/
+  );
+
+  await db.exec(
+    "UPDATE products SET is_archived = true, is_active = false, is_visible_web = false, is_featured = false WHERE id = 1"
+  );
+  assert.deepEqual(
+    (await db.query("SELECT is_archived, is_active, stock FROM products WHERE id = 1")).rows,
+    [{ is_archived: true, is_active: false, stock: 4 }]
+  );
+
+  const adjStmt = dialect.sqlToQuery(
+    inventoryAdjustmentQuery({
+      productId: 1,
+      quantity: 4,
+      reason: "damaged",
+      notes: "Cierre de saldo tras archivo",
+      userId: 1,
+      authorizedByUserId: 1,
+      prefix: "BAJA-2026-",
+    })
+  );
+  const adjRes = await db.query<{ newStock: number }>(adjStmt.sql, adjStmt.params);
+  assert.equal(adjRes.rows[0]?.newStock, 0);
 });

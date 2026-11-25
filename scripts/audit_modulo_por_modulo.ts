@@ -18,7 +18,7 @@ import { csvCell, escapeHtml } from "@/lib/sanitize";
 import { refundSaleSchema, saleFormSchema } from "@/lib/validations/sale";
 import { userUpdateSchema } from "@/lib/validations/user";
 import { closeShiftAction, openShiftAction, submitCashCountAction } from "@/app/admin/actions/cash-shifts";
-import { createCategoryAction, deleteCategoryAction, updateCategoryAction } from "@/app/admin/actions/products";
+import { archiveProductAction, createCategoryAction, deleteCategoryAction, updateCategoryAction } from "@/app/admin/actions/products";
 import { createSaleAction, getPosCatalogAction, getPosContextAction, getSalesHistoryAction } from "@/app/admin/actions/sales";
 import { uploadCategoryPhotoAction, uploadProductImageAction } from "@/app/admin/actions/upload";
 
@@ -180,6 +180,7 @@ test("las Server Actions rechazan la llamada sin sesión antes de leer o escribi
   const actions = [
     getPosCatalogAction(), getPosContextAction(), getSalesHistoryAction(), createSaleAction(sale),
     createCategoryAction("Categoría"), updateCategoryAction(1, "Categoría"), deleteCategoryAction(1),
+    archiveProductAction(1, true),
     openShiftAction({ cashRegisterId: 1, userId: 1, initialCash: 0 }),
     closeShiftAction({ shiftId: 1 }), submitCashCountAction({ shiftId: 1, actualCash: 0 }),
     returnPurchaseAction({ purchaseId: 1, requestId: "ad877895-785d-43b8-aab1-85ed429c414c", reason: "Prueba", items: [{ purchaseItemId: 1, quantity: 1 }] }),

@@ -1,6 +1,8 @@
 # Arquitectura y Funcionamiento del Sistema de Variantes (Estilo SaaS / Shopify)
 
-Este documento detalla la arquitectura completa de variantes del sistema: modelos de datos en PostgreSQL con Drizzle ORM, almacenamiento dinámico en columnas `JSONB`, generador de matriz de combinaciones, e integración con el Punto de Venta (POS), Kárdex y la tienda online.
+Este documento detalla la arquitectura técnica de variantes del sistema: modelos de datos en PostgreSQL con Drizzle ORM, almacenamiento dinámico en columnas `JSONB`, el constructor de variantes de 3 modos, ciclo de vida e integración con el Punto de Venta (POS), Kárdex y la tienda online.
+
+> Para manuales operativos paso a paso (eliminar vs. archivar, migración de solo Color a Color + Talla, POS y cajas), consulta el índice en [docs/README.md](./README.md).
 
 ---
 
@@ -116,34 +118,33 @@ erDiagram
 
 ## 3. Flujo en el Formulario de Administración
 
-El componente `ProductVariantFields` ([src/components/admin/product-variant-fields.tsx](file:///c:/Users/neida.DESKTOP-801C70S/Desktop/sistemas%20next/sistema%20pos%20inventario%20ecommerce/src/components/admin/product-variant-fields.tsx)) replica la experiencia moderna de Shopify:
+El componente `ProductVariantFields` ([src/components/admin/product-variant-fields.tsx](../src/components/admin/product-variant-fields.tsx)) organiza la carga de variantes de forma guiada con integridad estricta de estructura:
 
-### Paso 1: Configurar Opciones Maestras
-1. Se define hasta 3 atributos maestros (ej. *Talla*, *Color*, *Capacidad*).
-2. Si el tipo es **Texto**: Se escribe el valor y se presiona `Enter` (ej: `S`, `M`, `L`).
-3. Si el tipo es **Color**:
-   * Paleta rápida de 12 colores frecuentes con 1 clic.
-   * Selector interactivo de color personalizado (selector Hex + nombre del color).
+### Paso 1: Elegir el Tipo de Variante (3 Modos)
+1. **Color:** Selector visual compacto (`ColorDropdown`) con paleta de 12 colores frecuentes o botón **"Otro color"** con selector hexadecimal + nombre personalizado.
+2. **Texto:** Un atributo de texto configurable (por defecto `Talla`, o `Capacidad`, `Medida`, etc.) compartido por todas las variantes de la lista.
+3. **Combinado:** Combina **Color** + un atributo de texto (ej. `Color: Verde` + `Talla: M` → `"Verde / M"`).
 
-### Paso 2: Generar Matriz Automática (Producto Cartesiano)
-* Al hacer clic en **"Generar matriz de combinaciones"**, el sistema realiza el producto cartesiano:
-  $$\text{Tallas } (S, M, L) \times \text{Colores } (\text{Negro}, \text{Rojo}) = 6 \text{ variantes físicas}$$
-* Si alguna variante ya existía y tenía precio o stock configurado, el algoritmo **preserva sus valores intactos**.
+> **Regla de bloqueo:** Una vez añadida la primera variante (o cuando se está añadiendo a un modelo existente), el tipo queda bloqueado para evitar mezclar variantes incompatibles dentro del mismo `product_models`. Además, las variantes ya creadas se deshabilitan en vivo para evitar duplicados.
 
-### Paso 3: Tarjetas de Variantes Físicas
-Cada variante generada cuenta con:
-* **Cabecera:** Muestra directamente las etiquetas de los atributos (`Talla: M` | `Color: Negro` con su círculo cromático) sin requerir escribir un "nombre identificador" manual.
-* **Fila 1 (Económica & Stock):**
-  * Precio Venta (Bs.) `[Obligatorio]`
-  * Costo Inicial (Bs.) `[Opcional, default: 0]`
+### Paso 2: Añadir Variantes y Aplicar Valores en Bloque (Opcional)
+* Con cada combinación seleccionada se pulsa **"Añadir variante"** (o `Enter`), evitando duplicados por nombre o atributos normalizados.
+* Si varias variantes comparten precio de venta, costo inicial o stock inicial, se pueden rellenar en la barra **"Aplicar a todas"**.
+
+### Paso 3: Tarjetas de Variantes Físicas y Hermanas del Modelo
+Cada variante añadida cuenta con:
+* **Cabecera:** Muestra directamente la identidad cromática (cuadro redondeado) y la etiqueta autoderivada (`Verde / M`).
+* **Fila Económica & Stock Inicial:**
+  * Precio de Venta (Bs) `[Obligatorio]`
+  * Costo Inicial (Bs) `[Opcional, default: 0]`
   * Stock Inicial (u.) `[Opcional, default: 0]`
-* **Fila 2 (Visible permanentemente sin botones ocultos):**
-  * **SKU:** Campo con botón para edición manual o autogeneración (`PROD-XXXX`).
-  * **Código de barras:** Campo listo para lectura con escáner físico.
-  * **Foto específica (Opcional):**
-    * Carga directa de archivo local con **optimización automática a formato WebP**.
-    * Opcionalmente permite ingresar URL remota.
-    * Botón de 1 clic **"+ Añadir a galería general"** para que la foto de la variante también aparezca en el carrusel de la tienda online.
+* **Fila Operativa:**
+  * **SKU:** Edición manual o autogeneración (`PROD-XXXX`).
+  * **Código de barras:** Campo listo para escáner físico POS.
+  * **Foto específica (Opcional):** Carga de archivo local con conversión automática a `.webp` o URL `https://`, más botón para añadir a la galería general.
+
+Al editar una variante en `/admin/inventario/[id]/editar`:
+* El módulo [`ModelSiblings`](../src/components/admin/model-siblings.tsx) lista todas las variantes hermanas del modelo, permite activar/archivar o eliminar (cuando `canHardDelete = true` mediante [`ProductLifecycle`](../src/components/admin/product-lifecycle.tsx)) y permite **añadir nuevas variantes al modelo** conservando exactamente las mismas dimensiones (`extendModelOptions`).
 
 ---
 
@@ -151,40 +152,43 @@ Cada variante generada cuenta con:
 
 ```mermaid
 flowchart TD
-    Form["Formulario Admin (Opciones + Matriz)"] --> Action["createProductAction (Server Action)"]
+    Form["Formulario Admin (Color / Texto / Combinado)"] --> Action["createProductAction (Server Action)"]
     Action --> DB[("PostgreSQL (Neon)")]
 
     DB --> PM["product_models (options jsonb)"]
     DB --> PR["products (attributes jsonb + variant)"]
-    DB --> KM["inventory_movements (Kárdex Apertura)"]
+    DB --> KM["inventory_movements (ALTA-#ID Apertura Inicial)"]
 
     PR --> POS["Punto de Venta (POS)"]
     PR --> TICKET["Impresora Térmica (Ticket Bs)"]
     PR --> STORE["Tienda Online (Detalle de Producto)"]
 
-    POS -->|"Escaneo por Barcode o SKU"| Sale["Venta rápida en caja"]
-    TICKET -->|"Usa variant autoderivado"| Print["'Polera — M / Negro'"]
-    STORE -->|"Selectores y Swatches"| Customer["Cliente elige Talla y Color"]
+    POS -->|"Escaneo por Barcode o SKU"| SaleExact["Agrega variante exacta en 1 paso"]
+    POS -->|"Tarjeta agrupada por modelCode"| Modal["Modal selector de variante"]
+    TICKET -->|"Usa variant autoderivado"| Print["'Polera — Verde / M'"]
+    STORE -->|"Selectores y Swatches"| Customer["Cliente elige Color y Talla"]
 ```
 
 1. **Punto de Venta (Caja):**
-   * El cajero puede escanear con la pistola el código de barras o SKU de la variante exacta (*ej. Talla M / Negro*).
-   * La búsqueda es directa sobre la tabla `products` en tiempo constante ($O(1)$) mediante el índice único de código de barras.
+   * **Pistola lectora / SKU:** Al presionar `Enter` con código de barras o SKU exacto, agrega la variante física directamente al carrito.
+   * **Cuadrícula táctil agrupada:** Los modelos con más de 1 variante activa se muestran como una sola tarjeta agrupada (`N variantes`, rango de precios, stock total) que abre un modal selector con foto, cuadro de color, SKU, stock disponible y cantidad actual en el carrito.
 2. **Tickets de Impresión Térmica:**
-   * La impresora no necesita parsear el JSON; lee directamente el campo `variant` precalculado (`"M / Negro"`).
-3. **Kárdex y Contabilidad:**
-   * Cada variante registra su propio historial de entradas y salidas en `inventory_movements`.
-   * El Costo Promedio Ponderado (CPP) se calcula independientemente para cada talla/color.
+   * La impresora no necesita parsear el JSON; lee directamente el campo `variant` precalculado (`"Verde / M"`).
+3. **Kárdex y Ciclo de Vida:**
+   * Cada variante registra su propio historial independiente en `inventory_movements` y su propio Costo Promedio Ponderado (CPP).
+   * Solo puede eliminarse físicamente (`deleteUnusedProductQuery`) si no tiene filas en `sale_items`, `purchase_items`, `inventory_adjustment_items` ni movimientos distintos a `product_creation`; de lo contrario se archiva (`isActive = false`, ocultando automáticamente de POS, compras y tienda online sin alterar reportes ni cajas).
 4. **Tienda Online (Ecommerce):**
-   * El cliente visualiza el selector de variantes con swatches de color interactivos y disponibilidad de stock en tiempo real.
+   * El cliente visualiza únicamente productos activos y visibles (`isActive = true` e `isVisibleWeb = true`), con selectores de variantes, swatches de color y disponibilidad de stock en tiempo real.
 
 ---
 
 ## 5. Archivos del Módulo en el Repositorio
 
-* **Esquema de Base de Datos:** [src/db/schema.ts](file:///c:/Users/neida.DESKTOP-801C70S/Desktop/sistemas%20next/sistema%20pos%20inventario%20ecommerce/src/db/schema.ts)
-* **Migración SQL:** [drizzle/0005_product_attributes_jsonb.sql](file:///c:/Users/neida.DESKTOP-801C70S/Desktop/sistemas%20next/sistema%20pos%20inventario%20ecommerce/drizzle/0005_product_attributes_jsonb.sql)
-* **Componente de Variantes:** [src/components/admin/product-variant-fields.tsx](file:///c:/Users/neida.DESKTOP-801C70S/Desktop/sistemas%20next/sistema%20pos%20inventario%20ecommerce/src/components/admin/product-variant-fields.tsx)
-* **Formulario de Producto:** [src/components/admin/product-form.tsx](file:///c:/Users/neida.DESKTOP-801C70S/Desktop/sistemas%20next/sistema%20pos%20inventario%20ecommerce/src/components/admin/product-form.tsx)
-* **Validaciones Zod:** [src/lib/validations/product.ts](file:///c:/Users/neida.DESKTOP-801C70S/Desktop/sistemas%20next/sistema%20pos%20inventario%20ecommerce/src/lib/validations/product.ts)
-* **Operaciones SQL Transaccionales:** [src/db/operations/catalog.ts](file:///c:/Users/neida.DESKTOP-801C70S/Desktop/sistemas%20next/sistema%20pos%20inventario%20ecommerce/src/db/operations/catalog.ts)
+* **Esquema de Base de Datos:** [src/db/schema.ts](../src/db/schema.ts)
+* **Migración SQL:** [drizzle/0005_product_attributes_jsonb.sql](../drizzle/0005_product_attributes_jsonb.sql)
+* **Constructor de Variantes:** [src/components/admin/product-variant-fields.tsx](../src/components/admin/product-variant-fields.tsx)
+* **Formulario de Producto:** [src/components/admin/product-form.tsx](../src/components/admin/product-form.tsx)
+* **Hermanas y Ciclo de Vida:** [src/components/admin/model-siblings.tsx](../src/components/admin/model-siblings.tsx) y [src/components/admin/product-lifecycle.tsx](../src/components/admin/product-lifecycle.tsx)
+* **Validaciones y Reglas de Modelo:** [src/lib/validations/product.ts](../src/lib/validations/product.ts) y [src/lib/model-variants.ts](../src/lib/model-variants.ts)
+* **Operaciones SQL Transaccionales:** [src/db/operations/catalog.ts](../src/db/operations/catalog.ts)
+* **Guías Operativas Relacionadas:** [docs/README.md](./README.md), [01-productos-eliminar-vs-archivar.md](./01-productos-eliminar-vs-archivar.md) y [02-variantes-y-migracion.md](./02-variantes-y-migracion.md)

@@ -50,6 +50,20 @@
       "when": 1795450000000,
       "tag": "0006_hardening_refunds_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795570000000,
+      "tag": "0007_product_model_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795572000000,
+      "tag": "0008_product_archived",
+      "breakpoints": true
     }
   ]
 }

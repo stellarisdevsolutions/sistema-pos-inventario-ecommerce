@@ -46,41 +46,41 @@
 
 @layer components {
   .admin-frame {
-    --admin-frame-gap: 12px;
     display: flex;
-    gap: var(--admin-frame-gap);
-    padding: var(--admin-frame-gap);
+    gap: 0;
+    padding: 0;
     min-height: 100dvh;
     background: var(--admin-workspace-bg);
     color: var(--admin-text);
   }
 
-  .admin-workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--admin-frame-gap); }
+  .admin-workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .admin-main {
     flex: 1;
     min-width: 0;
-    padding: clamp(16px, 2vw, 30px);
-    background: var(--admin-card-bg);
-    border: 1px solid var(--admin-card-border);
-    border-radius: 16px;
+    padding: clamp(16px, 2vw, 28px);
+    background: var(--admin-workspace-bg);
+    border: 0;
+    border-radius: 0;
   }
   .admin-rail-desktop { flex: none; }
   .admin-rail {
     position: sticky;
-    top: var(--admin-frame-gap, 0px);
+    top: 0;
     display: flex;
     flex-direction: column;
     width: clamp(208px, 17vw, 242px);
-    height: calc(100dvh - 2 * var(--admin-frame-gap, 0px));
+    height: 100dvh;
     min-height: 0;
     overflow-y: auto;
-    padding: 16px 11px 11px;
-    border-radius: 16px;
+    padding: 0 11px 11px;
+    border-radius: 0;
+    border-right: 1px solid var(--admin-card-border);
     background: var(--admin-sidebar-bg);
     color: var(--admin-sidebar-text);
   }
   .admin-rail[data-collapsed="true"] { width: 64px; }
-  .admin-rail-brand { display: flex; min-height: 52px; align-items: center; gap: 10px; padding: 0 3px 14px; margin-bottom: 13px; border-bottom: 1px solid var(--admin-sidebar-border); color: var(--admin-on-solid); }
+  .admin-rail-brand { display: flex; min-height: 64px; align-items: center; gap: 10px; padding: 0 3px; margin-bottom: 12px; border-bottom: 1px solid var(--admin-sidebar-border); color: var(--admin-on-solid); }
   .admin-rail-mark { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 10px; background: var(--admin-brand); color: var(--admin-on-solid); }
   .admin-rail-group { display: grid; gap: 3px; margin-bottom: 14px; }
   .admin-rail-label { margin: 0 9px 4px; color: var(--admin-sidebar-muted); font-size: 11px; font-weight: 600; }
@@ -89,7 +89,21 @@
   .admin-rail-link[aria-current="page"] { background: var(--admin-brand); color: var(--admin-on-solid); font-weight: 600; }
   .admin-rail[data-collapsed="true"] .admin-rail-link, .admin-rail[data-collapsed="true"] .admin-rail-brand { justify-content: center; }
   .admin-rail-store { padding-top: 9px; margin-top: auto; border-top: 1px solid var(--admin-sidebar-border); }
-  .admin-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 57px; padding: 8px 13px; border: 1px solid var(--admin-card-border); border-radius: 14px; background: var(--admin-card-bg); }
+  .admin-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 64px;
+    padding: 8px clamp(14px, 2vw, 28px);
+    border: 0;
+    border-bottom: 1px solid var(--admin-card-border);
+    border-radius: 0;
+    background: var(--admin-card-bg);
+  }
   .admin-header-button { display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 8px; min-height: 35px; min-width: 35px; padding: 0 8px; border: 1px solid var(--admin-card-border); border-radius: 8px; cursor: pointer; }
   .admin-header-button:hover { background: var(--admin-raised); }
   .admin-frame :focus-visible, .admin-drawer :focus-visible { outline: 2px solid var(--admin-brand-text); outline-offset: 2px; }
@@ -97,7 +111,7 @@
   .admin-page-title { color: var(--admin-text); font-size: clamp(1.4rem, 2vw, 1.9rem); font-weight: 650; letter-spacing: -.038em; line-height: 1.16; }
   .admin-page-description { color: var(--admin-muted); margin-top: 5px; font-size: .875rem; line-height: 1.45; }
 
-  .admin-drawer .admin-rail { width: 100%; height: 100%; border-radius: 0; padding-top: 18px; }
+  .admin-drawer .admin-rail { width: 100%; height: 100%; border-radius: 0; border-right: 0; padding-top: 0; }
   .admin-drawer [data-slot="sheet-close"] { color: var(--admin-on-solid); }
   .admin-drawer [data-slot="sheet-close"]:hover { background: var(--admin-sidebar-hover); }
   .admin-main :where(th) { font-weight: 600; }
@@ -106,9 +120,8 @@
     .admin-rail-desktop { display: none; }
   }
   @media (max-width: 639px) {
-    .admin-frame { --admin-frame-gap: 6px; }
-    .admin-header { min-height: 51px; padding: 6px 8px; gap: 6px; }
-    .admin-main { padding: 13px 10px; border-radius: 12px; }
+    .admin-header { min-height: 52px; padding: 6px 12px; gap: 6px; }
+    .admin-main { padding: 12px; border-radius: 0; }
   }
 }
 
@@ -166,13 +179,14 @@
 .admin-main {
   background: var(--admin-workspace-bg);
   border: 0;
-  padding: clamp(12px, 1.6vw, 28px);
+  border-radius: 0;
+  padding: clamp(16px, 2vw, 28px);
 }
 .admin-page-header { border-bottom: 0; padding-block: 4px 0; }
 .admin-page-title { font-size: clamp(1.85rem, 2.65vw, 3rem); letter-spacing: -.055em; line-height: 1.08; }
-.admin-header { min-height: 64px; border-radius: var(--admin-panel-radius); }
+.admin-header { min-height: 64px; border-radius: 0; }
 .admin-header-button[aria-label="Buscar módulos"] { border-radius: 99px; background: var(--admin-raised); }
-.admin-rail { border-radius: 20px; }
+.admin-rail { border-radius: 0; }
 .admin-rail-label { letter-spacing: .085em; text-transform: uppercase; font-size: .66rem; }
 .admin-rail-link { min-height: 42px; border-radius: 12px; }
 .admin-rail-link[aria-current="page"], .admin-rail-mark { background: var(--admin-gradient); }
@@ -245,8 +259,8 @@
 }
 .admin-main tbody tr:hover { background-color: var(--admin-brand-subtle); }
 @media (max-width: 639px) {
-  .admin-main { padding: 10px 4px; }
-  .admin-header { min-height: 52px; }
+  .admin-main { padding: 12px; }
+  .admin-header { min-height: 52px; padding: 6px 12px; }
   .admin-page-title { font-size: 1.7rem; }
   .admin-metric { padding: 12px; }
 }
@@ -298,10 +312,25 @@
 .ticket-detail small,.ticket-totals dt,.ticket-actions { font-size: .75rem; }
 .ticket-parties { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 15px; align-items: start; overflow-wrap: anywhere; }
 .ticket-parties h3 { font-size: clamp(1rem,1.45vw,1.65rem); letter-spacing: -.035em; font-weight: 600; }
-.ticket-products { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,125px),1fr)); gap: 8px; max-height: 240px; overflow: auto; }
-.ticket-products li { display: grid; align-content: center; gap: 3px; padding: 14px; background: var(--admin-sidebar-hover); border-radius: 13px; font-size: .83rem; overflow-wrap: anywhere; }
-.ticket-products strong,.ticket-totals dd { font-size: 1.12rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-.ticket-totals { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; padding-top: 14px; border-top: 1px solid var(--admin-sidebar-border); }
+.ticket-products { display: grid; grid-template-columns: 1fr; gap: 8px; max-height: 264px; overflow-y: auto; scrollbar-width: thin; padding-right: 4px; }
+.ticket-products li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px;
+  background: color-mix(in srgb, var(--admin-sidebar-bg) 56%, transparent);
+  border: 1px solid color-mix(in srgb, var(--admin-on-solid) 15%, transparent);
+  border-radius: 12px; font-size: .83rem;
+}
+.ticket-product-qty {
+  display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px;
+  border-radius: 8px; background: color-mix(in srgb, var(--admin-on-solid) 12%, transparent);
+  font-size: .74rem; font-weight: 650; font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.ticket-product-main { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.ticket-product-name { font-weight: 600; color: var(--admin-on-solid); overflow-wrap: anywhere; line-height: 1.3; }
+.ticket-product-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .74rem; color: var(--admin-sidebar-text); }
+.ticket-product-tag { background: color-mix(in srgb, var(--admin-brand) 30%, transparent); color: var(--admin-on-solid); padding: 1px 6px; border-radius: 99px; font-size: .68rem; font-weight: 600; }
+.ticket-product-subtotal { font-size: .98rem; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
+.ticket-totals dd { font-size: 1.12rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ticket-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; padding-top: 14px; border-top: 1px solid var(--admin-sidebar-border); }
 .ticket-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .ticket-actions span { margin-right: auto; }
 .ticket-actions button { background: var(--admin-on-solid); color: var(--admin-ink); }

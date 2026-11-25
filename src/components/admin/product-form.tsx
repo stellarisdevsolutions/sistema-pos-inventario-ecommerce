@@ -24,7 +24,6 @@ import {
   Truck,
   Lock,
   Layers,
-  Link2,
   Star,
   Barcode,
   Award,
@@ -44,10 +43,12 @@ import type { ProductFormInput, ProductOptionConfig } from "@/lib/validations/pr
 import { CURRENCY_SYMBOL, formatCurrency } from "@/lib/currency";
 import {
   deriveOptionConfigsFromDrafts,
+  EditColorAttributeField,
   ProductSkuField,
   ProductVariantFields,
   toProductOption,
   VariantColorField,
+  VariantImageField,
   type ProductOptionDraft,
 } from "./product-variant-fields";
 
@@ -64,6 +65,7 @@ interface ProductFormProps {
     attributes?: Record<string, string> | null;
     description?: string | null;
     mainImage?: string | null;
+    variantImage?: string | null;
     additionalImages?: string[];
     price?: string | number;
     costPrice?: string | number;
@@ -73,6 +75,7 @@ interface ProductFormProps {
     stock?: number;
     minStock?: number;
     isActive?: boolean;
+    isArchived?: boolean;
     isVisibleWeb?: boolean;
     isFeatured?: boolean;
   };
@@ -85,6 +88,7 @@ interface ProductFormProps {
     name: string;
     variantSelector: string | null;
     options?: ProductOptionConfig[] | null;
+    existingVariants?: string[];
   }[];
 }
 
@@ -106,10 +110,23 @@ export function ProductForm({
   const [variant, setVariant] = useState(initialData?.variant || "");
   const [variantSelector, setVariantSelector] = useState(initialData?.variantSelector || "");
   const [variantColor, setVariantColor] = useState(initialData?.variantColor || "");
-  const [attributes, setAttributes] = useState<Record<string, string> | null>(
-    initialData?.attributes && Object.keys(initialData.attributes).length > 0
-      ? initialData.attributes
-      : null
+  const [originalAttrKeys] = useState<string[]>(() =>
+    initialData?.attributes ? Object.keys(initialData.attributes) : []
+  );
+  const initialColorKey =
+    originalAttrKeys.find((k) => k.trim().toLowerCase() === "color") ?? null;
+  const initialTextKey =
+    originalAttrKeys.find((k) => k.trim().toLowerCase() !== "color") ?? null;
+  const [editColorName, setEditColorName] = useState(
+    initialColorKey && initialData?.attributes
+      ? initialData.attributes[initialColorKey] ?? ""
+      : ""
+  );
+  const [editAttrName, setEditAttrName] = useState(initialTextKey ?? "");
+  const [editAttrValue, setEditAttrValue] = useState(
+    initialTextKey && initialData?.attributes
+      ? initialData.attributes[initialTextKey] ?? ""
+      : ""
   );
   const [usesVariants, setUsesVariants] = useState(Boolean(initialData?.variant));
   const [options, setOptions] = useState<ProductOptionDraft[]>([]);
@@ -124,15 +141,23 @@ export function ProductForm({
 
   // 2. Imágenes
   const [mainImage, setMainImage] = useState<string | null>(initialData?.mainImage || null);
-  const [imageLink, setImageLink] = useState(
-    initialData?.mainImage?.startsWith("https://") ? initialData.mainImage : ""
-  );
-  const [showUrlInput, setShowUrlInput] = useState(
-    Boolean(initialData?.mainImage?.startsWith("https://"))
-  );
+  const [variantImage, setVariantImage] = useState(initialData?.variantImage || "");
   const [additionalImages, setAdditionalImages] = useState<string[]>(
     initialData?.additionalImages || []
   );
+
+  const handleAddVariantImageToGallery = (url: string): boolean => {
+    if (additionalImages.includes(url)) {
+      toast.info("Esta foto ya está en la galería");
+      return false;
+    }
+    if (additionalImages.length >= 6) {
+      toast.warning("Límite de 6 fotos en la galería alcanzado");
+      return false;
+    }
+    setAdditionalImages((prev) => [...prev, url]);
+    return true;
+  };
   const [isDraggingMain, setIsDraggingMain] = useState(false);
   const [isDraggingGallery, setIsDraggingGallery] = useState(false);
 
@@ -165,6 +190,7 @@ export function ProductForm({
   );
 
   // 6. Estados Operativos y Visibilidad
+  const isArchived = Boolean(isEdit && initialData?.isArchived);
   const [isActive, setIsActive] = useState(initialData?.isActive ?? true);
   const [isVisibleWeb, setIsVisibleWeb] = useState(initialData?.isVisibleWeb ?? true);
   const [isFeatured, setIsFeatured] = useState(initialData?.isFeatured ?? false);
@@ -186,8 +212,7 @@ export function ProductForm({
   const marginNum = priceNum > 0 ? (profitPerUnit / priceNum) * 100 : 0;
   const marginPercentage = marginNum.toFixed(1);
 
-  const trimmedLink = imageLink.trim();
-  const previewSrc = (trimmedLink.startsWith("https://") ? trimmedLink : "") || mainImage;
+  const previewSrc = mainImage;
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -208,6 +233,32 @@ export function ProductForm({
         return;
       }
     } else {
+      if (isEdit && usesVariants) {
+        if (originalAttrKeys.length > 0) {
+          if (initialColorKey && !editColorName.trim()) {
+            toast.error("Selecciona o escribe el color de la variante.");
+            return;
+          }
+          if (initialTextKey) {
+            const cleanAttrName = editAttrName.trim();
+            if (!cleanAttrName) {
+              toast.error("Escribe el nombre del atributo (ej. Talla).");
+              return;
+            }
+            if (initialColorKey && cleanAttrName.toLowerCase() === "color") {
+              toast.error("El color ya está incluido; usa otro nombre como Talla o Capacidad.");
+              return;
+            }
+            if (!editAttrValue.trim()) {
+              toast.error(`Escribe el valor de ${cleanAttrName}.`);
+              return;
+            }
+          }
+        } else if (!variant.trim()) {
+          toast.error("Escribe el valor de esta variante.");
+          return;
+        }
+      }
       if (priceNum <= 0) {
         toast.error(`El precio debe ser mayor a 0 ${CURRENCY_SYMBOL}`);
         return;
@@ -219,13 +270,6 @@ export function ProductForm({
     }
 
     isSubmittingRef.current = true;
-    const imageUrl = imageLink.trim();
-    if (imageUrl && (!URL.canParse(imageUrl) || new URL(imageUrl).protocol !== "https:")) {
-      isSubmittingRef.current = false;
-      toast.error("Ingresa una URL pública HTTPS válida para la imagen.");
-      return;
-    }
-
     setIsSubmitting(true);
     const toastId = toast.loading(isEdit ? "Guardando cambios..." : "Creando producto...");
 
@@ -238,8 +282,29 @@ export function ProductForm({
         firstAttrs && Object.keys(firstAttrs).length > 0
           ? Object.keys(firstAttrs)
           : (activeOptionConfigs ?? []).map((c) => c.name.trim()).filter(Boolean);
+
+      const resolvedEditAttributes =
+        isEdit && usesVariants && originalAttrKeys.length > 0
+          ? Object.fromEntries(
+              originalAttrKeys.map((k) => {
+                if (k === initialColorKey) return [k, editColorName.trim()];
+                if (k === initialTextKey) {
+                  return [editAttrName.trim() || k, editAttrValue.trim()];
+                }
+                return [k, (initialData?.attributes?.[k] ?? "").trim()];
+              })
+            )
+          : null;
+
+      const resolvedEditVariant =
+        resolvedEditAttributes
+          ? Object.values(resolvedEditAttributes).join(" / ")
+          : variant;
+
       const derivedVariantSelector = usesVariants
-        ? variantSelector || (derivedAttrKeys.length > 0 ? derivedAttrKeys.join(" y ") : "Variante")
+        ? resolvedEditAttributes
+          ? Object.keys(resolvedEditAttributes).join(" y ")
+          : variantSelector || (derivedAttrKeys.length > 0 ? derivedAttrKeys.join(" y ") : "Variante")
         : null;
 
       const payload: ProductFormInput = {
@@ -247,12 +312,13 @@ export function ProductForm({
         sku,
         barcode,
         modelCode: usesVariants ? modelCode : null,
-        variant: usesVariants && isEdit ? variant : null,
+        variant: usesVariants && isEdit ? resolvedEditVariant : null,
         variantSelector: derivedVariantSelector,
         variantColor: usesVariants && isEdit ? variantColor : null,
-        ...(isEdit && attributes ? { attributes } : {}),
+        ...(isEdit && resolvedEditAttributes ? { attributes: resolvedEditAttributes } : {}),
         description: description.trim(),
-        mainImage: imageUrl || mainImage || null,
+        mainImage: mainImage || null,
+        ...(isEdit && usesVariants ? { variantImage: variantImage || null } : {}),
         additionalImages,
         price: priceNum,
         costPrice: costNum,
@@ -291,8 +357,6 @@ export function ProductForm({
           setOptions([]);
           setDescription("");
           setMainImage(null);
-          setImageLink("");
-          setShowUrlInput(false);
           setAdditionalImages([]);
           setPrice("");
           setCost("");
@@ -331,8 +395,9 @@ export function ProductForm({
     const toastId = toast.loading("Optimizando imagen...");
 
     try {
-      const { file: webpFile } = await optimizeImageToWebP(file, {
+      const { file: webpFile, compressedSizeKB, savingsPercent } = await optimizeImageToWebP(file, {
         maxWidthOrHeight: 1400,
+        maxSizeMB: 0.55,
         quality: 0.85,
       });
       const formData = new FormData();
@@ -340,9 +405,11 @@ export function ProductForm({
       const res = await uploadProductImageAction(formData);
 
       if (res.success && res.url) {
-        setImageLink("");
         setMainImage(res.url);
-        toast.success("Foto optimizada", { id: toastId });
+        toast.success(
+          `Foto optimizada (${compressedSizeKB} KB${savingsPercent > 0 ? ` · -${savingsPercent}%` : ""})`,
+          { id: toastId }
+        );
       } else {
         toast.error("Error al subir", { id: toastId, description: res.error });
       }
@@ -376,11 +443,14 @@ export function ProductForm({
 
     try {
       const uploadedUrls: string[] = [];
+      let totalKB = 0;
       for (const file of filesToProcess) {
-        const { file: webpFile } = await optimizeImageToWebP(file, {
+        const { file: webpFile, compressedSizeKB } = await optimizeImageToWebP(file, {
           maxWidthOrHeight: 1200,
+          maxSizeMB: 0.45,
           quality: 0.82,
         });
+        totalKB += compressedSizeKB;
         const formData = new FormData();
         formData.append("file", webpFile);
         const res = await uploadProductImageAction(formData);
@@ -388,7 +458,10 @@ export function ProductForm({
       }
       if (uploadedUrls.length > 0) {
         setAdditionalImages((prev) => [...prev, ...uploadedUrls]);
-        toast.success("Fotos agregadas a la galería", { id: toastId });
+        toast.success(
+          `${uploadedUrls.length === 1 ? "Foto agregada" : `${uploadedUrls.length} fotos agregadas`} (${totalKB} KB WebP)`,
+          { id: toastId }
+        );
       } else {
         toast.error("No se pudieron subir las fotos", { id: toastId });
       }
@@ -425,12 +498,6 @@ export function ProductForm({
         : restGallery;
 
     setMainImage(targetUrl);
-    if (targetUrl.startsWith("https://")) {
-      setImageLink(targetUrl);
-      setShowUrlInput(true);
-    } else {
-      setImageLink("");
-    }
     setAdditionalImages(nextGallery);
     toast.success("Imagen establecida como portada principal");
   };
@@ -550,17 +617,17 @@ export function ProductForm({
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-admin-secondary flex items-center gap-1.5">
                   <Camera className="h-3.5 w-3.5 text-admin-brand-text" />
-                  Imagen Principal
+                  {isEdit && usesVariants ? "Imagen Principal (base)" : "Imagen Principal"}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setShowUrlInput((prev) => !prev)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-admin-brand-text hover:underline cursor-pointer"
-                >
-                  <Link2 className="h-3 w-3" />
-                  <span>{showUrlInput ? "Ocultar enlace" : "Usar enlace HTTPS"}</span>
-                </button>
+                <span className="text-[10px] font-medium text-admin-muted">
+                  WebP automático
+                </span>
               </div>
+              {isEdit && usesVariants && (
+                <p className="text-[11px] text-admin-muted">
+                  Portada general compartida por el producto.
+                </p>
+              )}
 
               {previewSrc ? (
                 <div
@@ -597,10 +664,7 @@ export function ProductForm({
                     <button
                       type="button"
                       disabled={isUploadingMain}
-                      onClick={() => {
-                        setMainImage(null);
-                        setImageLink("");
-                      }}
+                      onClick={() => setMainImage(null)}
                       className="h-8 px-2.5 rounded-lg bg-rose-600/95 hover:bg-rose-600 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -653,40 +717,14 @@ export function ProductForm({
                         <UploadCloud className="h-5 w-5" />
                       </div>
                       <span className="text-xs font-semibold text-admin-text block">
-                        Subir Imagen
+                        Subir o tomar foto
                       </span>
                       <span className="text-[11px] text-admin-muted mt-0.5">
-                        Arrastra aquí o haz clic (WebP)
+                        Desde tu equipo o celular (WebP ligero)
                       </span>
                     </>
                   )}
                 </button>
-              )}
-
-              {showUrlInput && (
-                <div className="space-y-1 pt-1">
-                  <label
-                    htmlFor="product-image-url"
-                    className="text-[11px] font-medium text-admin-muted block"
-                  >
-                    URL pública HTTPS (opcional)
-                  </label>
-                  <Input
-                    id="product-image-url"
-                    type="url"
-                    placeholder="https://cdn.ejemplo.com/producto.webp"
-                    value={imageLink}
-                    maxLength={1500}
-                    onChange={(event) => {
-                      const next = event.target.value;
-                      setImageLink(next);
-                      if (!next.trim() && mainImage?.startsWith("https://")) {
-                        setMainImage(null);
-                      }
-                    }}
-                    className="h-9 rounded-xl text-xs bg-admin-card-bg border-admin-card-border"
-                  />
-                </div>
               )}
             </div>
 
@@ -695,7 +733,7 @@ export function ProductForm({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-admin-secondary flex items-center gap-1.5">
                   <ImageIcon className="h-3.5 w-3.5 text-admin-muted" />
-                  Galería adicional
+                  {isEdit && usesVariants ? "Galería adicional (base)" : "Galería adicional"}
                 </span>
                 <span className="text-[11px] font-mono tabular-nums text-admin-muted">
                   {additionalImages.length} / 6
@@ -919,12 +957,12 @@ export function ProductForm({
             <div>
               <h2 className="text-base font-semibold text-admin-text tracking-tight flex items-center gap-2">
                 <span>Variantes del Producto</span>
-                {usesVariants && (
+                {createWithVariants && (
                   <Badge
                     variant="outline"
                     className="text-[11px] font-semibold border-admin-brand/40 bg-admin-brand-subtle text-admin-brand-text"
                   >
-                    {createWithVariants ? `${options.length} variantes` : "Variante activa"}
+                    {options.length} {options.length === 1 ? "variante" : "variantes"}
                   </Badge>
                 )}
               </h2>
@@ -941,7 +979,6 @@ export function ProductForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               type="button"
-              disabled={isEdit && Boolean(initialData?.modelCode)}
               aria-pressed={!usesVariants}
               onClick={() => setUsesVariants(false)}
               className={cn(
@@ -1007,126 +1044,161 @@ export function ProductForm({
         {usesVariants ? (
           <div className="space-y-5">
             {createWithVariants && (
-              <>
-                {models.length > 0 && (
-                  <div className="bg-admin-raised p-4 rounded-xl border border-admin-card-border space-y-1.5">
-                    <label
-                      htmlFor="product-model-select"
-                      className="text-xs font-semibold text-admin-secondary block"
-                    >
-                      Modelo base existente (opcional)
-                    </label>
-                    <select
-                      id="product-model-select"
-                      className="w-full h-10 rounded-xl border border-admin-card-border bg-admin-card-bg text-admin-text text-xs px-3 font-medium outline-none focus:border-admin-brand cursor-pointer"
-                      value={modelCode}
-                      onChange={(event) => {
-                        const selected = models.find(
-                          (model) => model.code === event.target.value
-                        );
-                        setModelCode(selected?.code ?? "");
-                        setOptions([]);
-                        if (selected) {
-                          setName(selected.name);
-                          setVariantSelector(selected.variantSelector ?? "");
-                        }
-                      }}
-                    >
-                      <option value="">Crear nuevo modelo base automáticamente</option>
-                      {models.map((model) => (
-                        <option key={model.code} value={model.code}>
-                          {model.name} ({model.code})
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[11px] text-admin-muted">
-                      Agrupa variantes bajo un mismo modelo de catálogo si ya existe.
-                    </p>
-                  </div>
-                )}
-
-                <ProductVariantFields
-                  key={modelCode || "new"}
-                  options={options}
-                  onChange={setOptions}
-                  onAddToGallery={(url) =>
-                    setAdditionalImages((prev) => (prev.includes(url) ? prev : [...prev, url]))
-                  }
-                  basePrice={price}
-                  baseCostPrice={cost}
-                  locked={Boolean(existingModel)}
-                  modelOptionsHint={existingModel ? modelDimensions({ options: existingModel.options ?? null, variantSelector: existingModel.variantSelector }) : null}
-                />
-              </>
+              <ProductVariantFields
+                key={modelCode || "new"}
+                options={options}
+                onChange={setOptions}
+                onAddToGallery={handleAddVariantImageToGallery}
+                basePrice={price}
+                baseCostPrice={cost}
+                locked={Boolean(existingModel)}
+                existingVariants={existingModel?.existingVariants ?? []}
+                modelOptionsHint={existingModel ? modelDimensions({ options: existingModel.options ?? null, variantSelector: existingModel.variantSelector }) : null}
+              />
             )}
 
-            {isEdit && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-admin-raised p-4 rounded-xl border border-admin-card-border">
-                {modelCode && (
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-admin-muted block">
-                      Código del modelo
-                    </span>
-                    <p className="font-mono text-xs font-semibold text-admin-brand-text">
-                      {modelCode}
-                    </p>
-                  </div>
-                )}
-                {variantSelector && (
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-admin-muted block">
-                      Selector de atributo
-                    </span>
-                    <p className="text-xs font-medium text-admin-text">{variantSelector}</p>
-                  </div>
-                )}
+            {isEdit && (() => {
+              const hasStructuredAttrs = originalAttrKeys.length > 0;
+              const allowsLegacyColor =
+                !initialColorKey &&
+                (Boolean(variantColor) || /color/i.test(variantSelector));
 
-                {attributes && Object.keys(attributes).length > 0 ? (
-                  <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {Object.entries(attributes).map(([attrKey, attrVal]) => (
-                      <div key={attrKey} className="space-y-1">
-                        <label className="text-xs font-semibold text-admin-secondary">
-                          {attrKey} <span className="text-rose-500">*</span>
+              return (
+                <div className="rounded-2xl border border-admin-card-border bg-admin-raised p-4 space-y-3.5">
+                  {hasStructuredAttrs ? (
+                    <>
+                      {initialTextKey && (
+                        <div className="space-y-1.5">
+                          <label
+                            htmlFor="edit-variant-attr-name"
+                            className="text-xs font-semibold text-admin-secondary block"
+                          >
+                            Nombre del atributo (para todas las variantes)
+                          </label>
+                          <Input
+                            id="edit-variant-attr-name"
+                            placeholder="Ej. Talla, Capacidad, Material"
+                            value={editAttrName}
+                            maxLength={60}
+                            onChange={(e) => setEditAttrName(e.target.value)}
+                            className="h-10 rounded-xl text-xs font-medium bg-admin-card-bg border-admin-card-border max-w-sm"
+                          />
+                          {editAttrName.trim() !== initialTextKey && (
+                            <p className="text-[11px] text-admin-brand-text font-medium">
+                              Al guardar, &ldquo;{initialTextKey}&rdquo; se actualizará a &ldquo;{editAttrName.trim() || "..."}&rdquo; en todas las variantes de este producto.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {initialColorKey && initialTextKey ? (
+                        <div className="border-t border-admin-card-border/60 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                          <div className="space-y-1.5">
+                            <span className="text-xs font-semibold text-admin-secondary block">
+                              Colores
+                            </span>
+                            <EditColorAttributeField
+                              value={editColorName}
+                              colorHex={variantColor}
+                              onChange={(nextName, nextHex) => {
+                                setEditColorName(nextName);
+                                setVariantColor(nextHex);
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label
+                              htmlFor="edit-variant-attr-value"
+                              className="text-xs font-semibold text-admin-secondary block"
+                            >
+                              Valor de {editAttrName.trim() || "la variante"}
+                            </label>
+                            <Input
+                              id="edit-variant-attr-value"
+                              placeholder="Ej. S, M, L, 42, 128GB"
+                              value={editAttrValue}
+                              required
+                              maxLength={100}
+                              onChange={(e) => setEditAttrValue(e.target.value)}
+                              className="h-10 rounded-xl text-xs font-medium bg-admin-card-bg border-admin-card-border"
+                            />
+                          </div>
+                        </div>
+                      ) : initialColorKey ? (
+                        <div className="space-y-1.5">
+                          <span className="text-xs font-semibold text-admin-secondary block">
+                            Colores
+                          </span>
+                          <EditColorAttributeField
+                            value={editColorName}
+                            colorHex={variantColor}
+                            onChange={(nextName, nextHex) => {
+                              setEditColorName(nextName);
+                              setVariantColor(nextHex);
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="border-t border-admin-card-border/60 pt-3 space-y-1.5">
+                          <label
+                            htmlFor="edit-variant-attr-value"
+                            className="text-xs font-semibold text-admin-secondary block"
+                          >
+                            Valor de {editAttrName.trim() || "la variante"}
+                          </label>
+                          <Input
+                            id="edit-variant-attr-value"
+                            placeholder="Ej. S, M, L, 42, 128GB"
+                            value={editAttrValue}
+                            required
+                            maxLength={100}
+                            onChange={(e) => setEditAttrValue(e.target.value)}
+                            className="h-10 rounded-xl text-xs font-medium bg-admin-card-bg border-admin-card-border max-w-sm"
+                          />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <label
+                          htmlFor="edit-variant-legacy"
+                          className="text-xs font-semibold text-admin-secondary block"
+                        >
+                          Valor de esta variante <span className="text-rose-500">*</span>
                         </label>
                         <Input
-                          value={attrVal}
+                          id="edit-variant-legacy"
+                          placeholder="Ej. S, 41, Verde, Verde / M"
+                          value={variant}
                           required
                           maxLength={100}
-                          onChange={(e) => {
-                            const nextAttrs = { ...attributes, [attrKey]: e.target.value };
-                            setAttributes(nextAttrs);
-                            const joined = Object.values(nextAttrs)
-                              .map((v) => v.trim())
-                              .filter(Boolean)
-                              .join(" / ");
-                            if (joined) setVariant(joined);
-                          }}
+                          onChange={(e) => setVariant(e.target.value)}
                           className="h-10 rounded-xl text-xs font-medium bg-admin-card-bg border-admin-card-border"
                         />
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-xs font-semibold text-admin-secondary">
-                      Valor de esta variante <span className="text-rose-500">*</span>
-                    </label>
-                    <Input
-                      placeholder="Ej. S, 41, Verde, S / Verde"
-                      value={variant}
-                      required
-                      maxLength={100}
-                      onChange={(e) => setVariant(e.target.value)}
-                      className="h-10 rounded-xl text-xs font-medium bg-admin-card-bg border-admin-card-border"
+
+                      {allowsLegacyColor && (
+                        <div className="pt-1">
+                          <VariantColorField value={variantColor} onChange={setVariantColor} />
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <div className="border-t border-admin-card-border/60 pt-3.5">
+                    <VariantImageField
+                      value={variantImage}
+                      onChange={setVariantImage}
+                      label="Imagen de esta variante (opcional)"
+                      helperText="Si no subes una foto aquí, esta variante usará la Imagen Principal de arriba."
+                      size="comfortable"
+                      onAddToGallery={handleAddVariantImageToGallery}
                     />
                   </div>
-                )}
-
-                <div className="sm:col-span-2">
-                  <VariantColorField value={variantColor} onChange={setVariantColor} />
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         ) : isEdit ? (
           <p className="text-xs text-admin-muted">
@@ -1389,18 +1461,29 @@ export function ProductForm({
           </div>
 
           <div className="space-y-2.5 text-xs">
+            {isArchived && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
+                Este producto está archivado. Su historial y valor en inventario se conservan intactos;
+                para volver a habilitarlo en POS o web, pulsa <strong>Restaurar</strong> al final de
+                la ficha.
+              </div>
+            )}
+
             <button
               type="button"
               role="switch"
-              aria-checked={isActive}
+              aria-checked={isActive && !isArchived}
+              disabled={isArchived}
               onClick={() => {
-                if (isEdit && isActive && !window.confirm(`Al guardar se archivará el producto. Quedan ${initialData?.stock ?? 0} unidades. Se conserva el historial de caja, reportes y Kárdex.`)) return;
                 setIsActive(!isActive);
-                if (isActive) { setIsVisibleWeb(false); setIsFeatured(false); }
+                if (isActive) {
+                  setIsVisibleWeb(false);
+                  setIsFeatured(false);
+                }
               }}
               className={cn(
-                "w-full flex items-center justify-between gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer",
-                isActive
+                "w-full flex items-center justify-between gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed",
+                isActive && !isArchived
                   ? "bg-admin-raised border-admin-card-border"
                   : "bg-admin-card-bg border-admin-card-border"
               )}
@@ -1409,7 +1492,7 @@ export function ProductForm({
                 <div
                   className={cn(
                     "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                    isActive
+                    isActive && !isArchived
                       ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                       : "bg-admin-raised text-admin-muted"
                   )}
@@ -1421,34 +1504,53 @@ export function ProductForm({
                     Habilitado en POS
                   </span>
                   <span className="text-[11px] text-admin-muted block">
-                    {isActive ? "Disponible para venta" : "Pausado temporalmente"}
+                    {isArchived
+                      ? "Archivado (fuera del catálogo operativo)"
+                      : isActive
+                      ? "Disponible para venta"
+                      : "Inactivo (pausado temporalmente)"}
                   </span>
                 </div>
               </div>
               <span
                 className={cn(
                   "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 p-0.5",
-                  isActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
+                  isActive && !isArchived ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
                 )}
               >
                 <span
                   className={cn(
                     "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
-                    isActive ? "translate-x-4" : "translate-x-0"
+                    isActive && !isArchived ? "translate-x-4" : "translate-x-0"
                   )}
                 />
               </span>
             </button>
 
+            {isEdit && !isArchived && !isActive && (initialData?.isActive ?? true) && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200 space-y-1">
+                <p>
+                  Al guardar cambios, este producto quedará <strong>Inactivo</strong> (oculto
+                  temporalmente en POS y web) pero seguirá visible en Inventario. Para retirarlo a
+                  largo plazo usa <strong>Archivar</strong>.
+                </p>
+                {(initialData?.stock ?? 0) > 0 && (
+                  <p className="font-semibold">
+                    Saldo actual: {initialData?.stock} unidades en inventario.
+                  </p>
+                )}
+              </div>
+            )}
+
             <button
               type="button"
               role="switch"
-              aria-checked={isVisibleWeb && isActive}
-              disabled={!isActive}
+              aria-checked={isVisibleWeb && isActive && !isArchived}
+              disabled={!isActive || isArchived}
               onClick={() => setIsVisibleWeb(!isVisibleWeb)}
               className={cn(
                 "w-full flex items-center justify-between gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed",
-                isVisibleWeb && isActive
+                isVisibleWeb && isActive && !isArchived
                   ? "bg-admin-raised border-admin-card-border"
                   : "bg-admin-card-bg border-admin-card-border"
               )}
@@ -1457,7 +1559,7 @@ export function ProductForm({
                 <div
                   className={cn(
                     "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                    isVisibleWeb && isActive
+                    isVisibleWeb && isActive && !isArchived
                       ? "bg-admin-brand-subtle text-admin-brand-text"
                       : "bg-admin-raised text-admin-muted"
                   )}
@@ -1476,13 +1578,13 @@ export function ProductForm({
               <span
                 className={cn(
                   "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 p-0.5",
-                  isVisibleWeb && isActive ? "bg-admin-brand" : "bg-slate-300 dark:bg-slate-700"
+                  isVisibleWeb && isActive && !isArchived ? "bg-admin-brand" : "bg-slate-300 dark:bg-slate-700"
                 )}
               >
                 <span
                   className={cn(
                     "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
-                    isVisibleWeb && isActive ? "translate-x-4" : "translate-x-0"
+                    isVisibleWeb && isActive && !isArchived ? "translate-x-4" : "translate-x-0"
                   )}
                 />
               </span>
@@ -1491,8 +1593,8 @@ export function ProductForm({
             <button
               type="button"
               role="switch"
-              aria-checked={isFeatured && isActive && isVisibleWeb}
-              disabled={!isActive || !isVisibleWeb}
+              aria-checked={isFeatured && isActive && isVisibleWeb && !isArchived}
+              disabled={!isActive || !isVisibleWeb || isArchived}
               onClick={() => setIsFeatured(!isFeatured)}
               className={cn(
                 "w-full flex items-center justify-between gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed",

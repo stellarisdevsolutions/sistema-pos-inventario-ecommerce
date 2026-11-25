@@ -41,6 +41,7 @@ import {
   ShieldCheck,
   RotateCcw,
   KeyRound,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -881,25 +882,105 @@ export default function VentasPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {catalogGroups.map(group => {
+                {catalogGroups.map((group) => {
                   const first = group[0];
                   const grouped = group.length > 1;
                   const stock = group.reduce((sum, p) => sum + p.stock, 0);
-                  const prices = group.map(p => p.price);
+                  const isOutOfStock = stock <= 0;
+                  const prices = group.map((p) => p.price);
                   const min = Math.min(...prices);
                   const max = Math.max(...prices);
                   const name = grouped ? first.baseName : first.name;
-                  const ids = new Set(group.map(p => p.id));
-                  const inCart = cart.reduce((sum, line) => sum + (ids.has(line.id) ? line.quantity : 0), 0);
+                  const ids = new Set(group.map((p) => p.id));
+                  const inCart = cart.reduce(
+                    (sum, line) => sum + (ids.has(line.id) ? line.quantity : 0),
+                    0
+                  );
+
                   return (
-                    <button key={first.id} type="button" disabled={stock <= 0 || pendingCheckout !== null}
-                      onClick={() => grouped ? setSelectedModel(first.modelCode) : addToCart(first)}
-                      className="text-left rounded-xl border border-admin-card-border bg-admin-card-bg p-3 hover:border-admin-brand disabled:opacity-55">
-                      <ProductThumbnail src={first.image} alt={name} className="aspect-square w-full rounded-lg object-cover mb-2" />
-                      <strong className="block text-sm text-admin-text">{name}</strong>
-                      <span className="block text-xs text-admin-muted">{grouped ? `${group.length} variantes` : first.sku} · {stock ? `${stock} disp.` : "Agotado"}</span>
-                      <span className="block text-sm text-admin-text">{formatCurrency(min)}{min !== max && ` – ${formatCurrency(max)}`}</span>
-                      {inCart > 0 && <span className="text-xs text-admin-brand-text">{inCart} en ticket</span>}
+                    <button
+                      key={first.id}
+                      type="button"
+                      disabled={isOutOfStock || pendingCheckout !== null}
+                      onClick={() => (grouped ? setSelectedModel(first.modelCode) : addToCart(first))}
+                      className={cn(
+                        "group rounded-xl bg-admin-card-bg border p-3 transition-all flex flex-col justify-between text-left",
+                        isOutOfStock
+                          ? "opacity-55 border-admin-card-border cursor-not-allowed bg-admin-raised"
+                          : "border-admin-card-border hover:border-admin-brand hover:shadow-md cursor-pointer"
+                      )}
+                    >
+                      <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-admin-raised border border-admin-card-border/60 mb-2">
+                        <ProductThumbnail
+                          src={grouped ? (first.modelImage || first.image) : first.image}
+                          alt={name}
+                          className={cn(
+                            "w-full h-full object-cover transition-transform",
+                            !isOutOfStock && "group-hover:scale-105"
+                          )}
+                        />
+
+                        {grouped && (
+                          <div className="absolute top-2 left-2">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-admin-card-bg/90 text-admin-brand-text border border-admin-card-border backdrop-blur-xs">
+                              <Layers className="h-2.5 w-2.5" />
+                              {group.length} variantes
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="absolute top-2 right-2">
+                          {isOutOfStock ? (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-rose-600 text-white">
+                              Agotado
+                            </span>
+                          ) : !grouped && first.status === "low_stock" ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500 text-white">
+                              {stock} disp.
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-xs">
+                              {stock} disp.
+                            </span>
+                          )}
+                        </div>
+
+                        {inCart > 0 && (
+                          <div className="absolute bottom-2 left-2 bg-admin-brand text-admin-on-solid text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <ShoppingCart className="h-2.5 w-2.5" />
+                            <span>{inCart} en ticket</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="w-full min-w-0">
+                        <span className="text-[10px] font-bold text-admin-muted uppercase tracking-wider block truncate">
+                          {first.category}
+                        </span>
+                        <h3 className="text-xs font-bold text-admin-text line-clamp-1 group-hover:text-admin-brand-text transition-colors">
+                          {name}
+                        </h3>
+                        <p className="text-[10px] font-mono text-admin-muted mt-0.5 truncate">
+                          {grouped ? "Elegir variante" : first.sku}
+                        </p>
+                      </div>
+
+                      <div className="w-full flex items-center justify-between pt-2 mt-2 border-t border-admin-card-border">
+                        <span className="text-sm font-semibold text-admin-text tabular-nums">
+                          {formatCurrency(min)}
+                          {min !== max && ` – ${formatCurrency(max)}`}
+                        </span>
+                        <span
+                          className={cn(
+                            "h-7 w-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                            isOutOfStock
+                              ? "bg-slate-300 dark:bg-slate-700 text-white"
+                              : "bg-admin-brand group-hover:bg-admin-brand-hover text-admin-on-solid"
+                          )}
+                        >
+                          {grouped ? <Layers className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                        </span>
+                      </div>
                     </button>
                   );
                 })}
@@ -1467,21 +1548,79 @@ export default function VentasPage() {
       {/* =========================================================================
           4. MODAL DE COMPROBANTE TÉRMICO / TICKET DE VENTA (80MM READY)
           ========================================================================= */}
-      <Dialog open={selectedVariants.length > 0} onOpenChange={open => { if (!open) setSelectedModel(null); }}>
+      <Dialog
+        open={selectedVariants.length > 0}
+        onOpenChange={(open) => {
+          if (!open) setSelectedModel(null);
+        }}
+      >
         <DialogContent className="admin-panel max-h-[85dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedVariants[0]?.baseName}</DialogTitle>
             <DialogDescription>Elige la variante para añadirla al ticket.</DialogDescription>
           </DialogHeader>
-          {selectedVariants.map(p => (
-            <button key={p.id} type="button" disabled={p.stock <= 0 || pendingCheckout !== null}
-              onClick={() => { addToCart(p); setSelectedModel(null); }}
-              className="flex items-center gap-3 rounded-xl border border-admin-card-border bg-admin-card-bg p-3 text-left disabled:opacity-50">
-              {p.variantColor && <span className="size-5 rounded-[5px] border border-admin-card-border" style={{ backgroundColor: p.variantColor }} />}
-              <span className="flex-1">{p.variant}<small className="block text-admin-muted">{p.sku}</small></span>
-              <span>{formatCurrency(p.price)}<small className="block text-admin-muted">{p.stock > 0 ? `${p.stock} disp.` : "Agotado"}</small></span>
-            </button>
-          ))}
+          <div className="space-y-2.5">
+            {selectedVariants.map((p) => {
+              const qtyInCart = cart.find((line) => line.id === p.id)?.quantity ?? 0;
+              const outOfStock = p.stock <= 0;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={outOfStock || pendingCheckout !== null}
+                  onClick={() => {
+                    addToCart(p);
+                    setSelectedModel(null);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-3 rounded-xl border border-admin-card-border bg-admin-card-bg p-3 text-left transition-colors",
+                    outOfStock
+                      ? "opacity-50 cursor-not-allowed bg-admin-raised"
+                      : "hover:border-admin-brand hover:bg-admin-brand-subtle cursor-pointer"
+                  )}
+                >
+                  <ProductThumbnail
+                    src={p.image}
+                    alt={p.name}
+                    className="size-11 rounded-lg object-cover border border-admin-card-border shrink-0"
+                  />
+                  {p.variantColor && (
+                    <span
+                      className="size-4 rounded-[5px] border border-black/15 shrink-0"
+                      style={{ backgroundColor: p.variantColor }}
+                    />
+                  )}
+                  <span className="flex-1 min-w-0">
+                    <span className="text-xs font-semibold text-admin-text flex items-center gap-2 flex-wrap">
+                      <span className="truncate">{p.variant}</span>
+                      {qtyInCart > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-admin-brand-subtle text-admin-brand-text px-1.5 py-0.5 text-[10px] font-semibold">
+                          <ShoppingCart className="size-2.5" />
+                          {qtyInCart} en ticket
+                        </span>
+                      )}
+                    </span>
+                    <small className="block font-mono text-[11px] text-admin-muted mt-0.5">
+                      {p.sku}
+                    </small>
+                  </span>
+                  <span className="text-right shrink-0">
+                    <span className="block text-sm font-semibold text-admin-text tabular-nums">
+                      {formatCurrency(p.price)}
+                    </span>
+                    <small
+                      className={cn(
+                        "block text-[11px] font-medium tabular-nums",
+                        outOfStock ? "text-rose-600 dark:text-rose-400" : "text-admin-muted"
+                      )}
+                    >
+                      {outOfStock ? "Agotado" : `${p.stock} disp.`}
+                    </small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>

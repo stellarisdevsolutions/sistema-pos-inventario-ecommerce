@@ -14,6 +14,7 @@ import {
   AlertCircle,
   ChevronDown,
   Check,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,6 @@ import { uploadProductImageAction } from "@/app/admin/actions/upload";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  safeImageUrlSchema,
   type ProductOptionConfig,
   type ProductOptionInput,
 } from "@/lib/validations/product";
@@ -213,7 +213,7 @@ function initialBuilderFromHint(modelOptionsHint?: OptionConfig[] | null): {
 /**
  * Selector visual de colores compacto con cuadros redondeados y altura controlada
  */
-function ColorDropdown({
+export function ColorDropdown({
   id,
   value,
   onSelect,
@@ -422,16 +422,97 @@ export function ProductSkuField({
 }
 
 /**
- * Uploader de foto por variante con compresión WebP y carga directa
+ * Editor de atributo Color en edición de variante (paleta rápida o color personalizado + hex sincronizado)
  */
-function VariantImageField({
+export function EditColorAttributeField({
+  value,
+  colorHex,
+  onChange,
+}: {
+  value: string;
+  colorHex: string;
+  onChange: (nextName: string, nextHex: string) => void;
+}) {
+  const isPreset = PALETTE_COLORS.some(
+    (c) => c.name.toLowerCase() === value.trim().toLowerCase()
+  );
+  const [isCustom, setIsCustom] = useState(Boolean(value.trim() && !isPreset));
+  const selectedPreset = PALETTE_COLORS.find(
+    (c) => c.name.toLowerCase() === value.trim().toLowerCase()
+  );
+
+  return (
+    <div className="flex items-center gap-2">
+      {!isCustom ? (
+        <>
+          <ColorDropdown
+            value={selectedPreset?.name ?? ""}
+            onSelect={(colName) => {
+              const col = PALETTE_COLORS.find((c) => c.name === colName);
+              onChange(col?.name ?? colName, col?.hex ?? "#7528e8");
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setIsCustom(true);
+              if (!colorHex) onChange(value, "#7528e8");
+            }}
+            className="h-10 px-3.5 rounded-xl text-xs font-semibold shrink-0 border-admin-card-border bg-admin-card-bg text-admin-text hover:bg-admin-raised cursor-pointer"
+          >
+            Otro color
+          </Button>
+        </>
+      ) : (
+        <>
+          <input
+            type="color"
+            aria-label="Selector de color personalizado"
+            value={colorHex || "#7528e8"}
+            onChange={(e) => onChange(value, e.target.value)}
+            className="size-10 rounded-xl cursor-pointer border border-admin-card-border bg-admin-card-bg p-1 shrink-0"
+          />
+          <Input
+            placeholder="Nombre del color (ej. Vino tinto)"
+            value={value}
+            required
+            maxLength={100}
+            onChange={(e) => onChange(e.target.value, colorHex || "#7528e8")}
+            className="h-10 rounded-xl text-xs flex-1 min-w-0 bg-admin-card-bg border-admin-card-border"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsCustom(false)}
+            title="Volver a la lista de colores"
+            className="h-10 px-3 rounded-xl text-xs font-semibold shrink-0 border-admin-card-border bg-admin-card-bg text-admin-secondary hover:bg-admin-raised cursor-pointer"
+          >
+            Lista
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Uploader de foto por variante con compresión WebP y carga directa desde equipo o celular
+ */
+export function VariantImageField({
   value,
   onChange,
   onAddToGallery,
+  label = "Foto de variante (opcional)",
+  helperText,
+  size = "compact",
 }: {
   value: string;
   onChange: (url: string) => void;
-  onAddToGallery?: (url: string) => void;
+  onAddToGallery?: (url: string) => boolean | void;
+  label?: string;
+  helperText?: string;
+  size?: "compact" | "comfortable";
 }) {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -440,11 +521,17 @@ function VariantImageField({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!file.type.startsWith("image/")) {
+      toast.error("Formato no válido", { description: "Selecciona una foto o imagen válida." });
+      return;
+    }
+
     setIsUploading(true);
     const toastId = toast.loading("Optimizando foto de variante...");
     try {
-      const { file: webpFile } = await optimizeImageToWebP(file, {
+      const { file: webpFile, compressedSizeKB, savingsPercent } = await optimizeImageToWebP(file, {
         maxWidthOrHeight: 1200,
+        maxSizeMB: 0.45,
         quality: 0.85,
       });
       const formData = new FormData();
@@ -453,7 +540,9 @@ function VariantImageField({
 
       if (res.success && res.url) {
         onChange(res.url);
-        toast.success("Foto de variante guardada", { id: toastId });
+        toast.success(`Foto optimizada (${compressedSizeKB} KB${savingsPercent > 0 ? ` · -${savingsPercent}%` : ""})`, {
+          id: toastId,
+        });
       } else {
         toast.error("Error al subir", { id: toastId, description: res.error });
       }
@@ -466,21 +555,21 @@ function VariantImageField({
     }
   };
 
-  const isUrlInvalid = Boolean(value && !safeImageUrlSchema.safeParse(value).success);
-
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <label className="text-xs font-semibold text-admin-secondary flex items-center gap-1">
           <ImageIcon className="size-3 text-admin-muted" />
-          <span>Foto de variante (opcional)</span>
+          <span>{label}</span>
         </label>
-        {value && !isUrlInvalid && onAddToGallery && (
+        {value && onAddToGallery && (
           <button
             type="button"
             onClick={() => {
-              onAddToGallery(value);
-              toast.success("Foto añadida a la galería general");
+              const added = onAddToGallery(value);
+              if (added !== false) {
+                toast.success("Foto añadida a la galería general");
+              }
             }}
             className="text-[10px] font-semibold text-admin-brand-text hover:underline cursor-pointer"
           >
@@ -499,60 +588,105 @@ function VariantImageField({
         />
 
         {value ? (
-          <div className="flex items-center gap-2 w-full bg-admin-raised p-1 rounded-xl border border-admin-card-border h-9">
-            <ProductThumbnail
-              src={value}
-              alt="Variante"
-              className="size-7 rounded-lg object-cover border border-admin-card-border shrink-0"
-            />
-            <Input
-              type="text"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder="https://..."
-              className={cn(
-                "h-7 text-xs font-mono flex-1 bg-admin-card-bg border-admin-card-border rounded-lg",
-                isUrlInvalid ? "border-rose-500 text-rose-600" : ""
-              )}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onChange("")}
-              className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 cursor-pointer"
-              title="Quitar foto"
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </div>
+          size === "comfortable" ? (
+            <div className="flex items-center gap-3 w-full bg-admin-card-bg px-3 py-2 rounded-xl border border-admin-card-border">
+              <ProductThumbnail
+                src={value}
+                alt="Variante"
+                className="size-12 rounded-lg object-cover border border-admin-card-border shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-semibold text-admin-text block truncate">
+                  Foto de esta variante
+                </span>
+                <span className="text-[11px] text-admin-muted block">
+                  WebP optimizado
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="h-8 px-2.5 text-xs font-semibold border-admin-card-border text-admin-text hover:bg-admin-raised cursor-pointer"
+              >
+                {isUploading ? "..." : "Cambiar"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isUploading}
+                onClick={() => onChange("")}
+                className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 cursor-pointer"
+                title="Quitar foto"
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 w-full bg-admin-raised px-2 py-1 rounded-xl border border-admin-card-border h-9">
+              <ProductThumbnail
+                src={value}
+                alt="Variante"
+                className="size-7 rounded-lg object-cover border border-admin-card-border shrink-0"
+              />
+              <span className="text-[11px] font-medium text-admin-text truncate flex-1">
+                Foto lista (WebP)
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="h-7 px-2 text-[11px] font-semibold text-admin-secondary hover:text-admin-text cursor-pointer"
+              >
+                {isUploading ? "..." : "Cambiar"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isUploading}
+                onClick={() => onChange("")}
+                className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 cursor-pointer"
+                title="Quitar foto"
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
+          )
         ) : (
-          <div className="flex items-center gap-2 w-full">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isUploading}
-              onClick={() => fileInputRef.current?.click()}
-              className="h-9 px-3 rounded-xl text-xs font-semibold border-dashed border-admin-card-border hover:border-admin-brand hover:bg-admin-brand-subtle flex items-center gap-1.5 cursor-pointer shrink-0"
-            >
-              <Upload className="size-3.5" />
-              <span>{isUploading ? "Subiendo..." : "Subir"}</span>
-            </Button>
-            <Input
-              type="text"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder="O pega URL HTTPS"
-              className="h-9 rounded-xl text-xs bg-admin-card-bg border-admin-card-border flex-1"
-            />
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isUploading}
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              "w-full px-3 rounded-xl text-xs font-semibold border-dashed border-admin-card-border hover:border-admin-brand hover:bg-admin-brand-subtle flex items-center justify-center gap-1.5 cursor-pointer",
+              size === "comfortable" ? "h-12 bg-admin-card-bg" : "h-9"
+            )}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin text-admin-brand-text" />
+                <span>Optimizando...</span>
+              </>
+            ) : (
+              <>
+                <Upload className="size-3.5" />
+                <span>{size === "comfortable" ? "Subir o tomar foto de esta variante" : "Subir o tomar foto"}</span>
+              </>
+            )}
+          </Button>
         )}
       </div>
-      {isUrlInvalid && (
-        <p className="text-[10px] font-medium text-rose-600">
-          Ingresa una URL HTTPS pública válida o sube una foto local.
-        </p>
+
+      {helperText && (
+        <p className="text-[11px] text-admin-muted">{helperText}</p>
       )}
     </div>
   );
@@ -630,10 +764,32 @@ export function ProductVariantFields({
   const colorConflictInCombined =
     mode === "combined" && trimmedAttrName.toLowerCase() === "color";
 
+  const normalizedExisting = new Set(
+    existingVariants.map((v) => v.trim().toLowerCase()).filter(Boolean)
+  );
+
+  const computeVariantIdentity = (rawAttrs: Record<string, string>) => {
+    const attrs =
+      locked && modelOptionsHint?.length
+        ? Object.fromEntries(
+            modelOptionsHint.map((d) => [
+              d.name,
+              rawAttrs[d.type === "color" ? "Color" : d.name] ?? Object.values(rawAttrs)[0] ?? "",
+            ])
+          )
+        : rawAttrs;
+    const variant = Object.values(attrs).join(" / ");
+    return { attrs, variant };
+  };
+
   const disabledColors = new Set<string>();
   if (mode === "color") {
     for (const col of PALETTE_COLORS) {
-      if (isDuplicateDraft(options, col.name, { Color: col.name })) {
+      const { attrs, variant } = computeVariantIdentity({ Color: col.name });
+      if (
+        isDuplicateDraft(options, col.name, attrs) ||
+        normalizedExisting.has(variant.trim().toLowerCase())
+      ) {
         disabledColors.add(col.name.toLowerCase());
       }
     }
@@ -644,11 +800,13 @@ export function ProductVariantFields({
     !colorConflictInCombined
   ) {
     for (const col of PALETTE_COLORS) {
+      const { attrs, variant } = computeVariantIdentity({
+        Color: col.name,
+        [trimmedAttrName]: trimmedAttrValue,
+      });
       if (
-        isDuplicateDraft(options, `${col.name} / ${trimmedAttrValue}`, {
-          Color: col.name,
-          [trimmedAttrName]: trimmedAttrValue,
-        })
+        isDuplicateDraft(options, `${col.name} / ${trimmedAttrValue}`, attrs) ||
+        normalizedExisting.has(variant.trim().toLowerCase())
       ) {
         disabledColors.add(col.name.toLowerCase());
       }
@@ -727,9 +885,15 @@ export function ProductVariantFields({
     };
   })();
 
+  const currentIdentity = currentCandidate
+    ? computeVariantIdentity(currentCandidate.attributes)
+    : null;
+
   const isCurrentDuplicate = Boolean(
     currentCandidate &&
-      isDuplicateDraft(options, currentCandidate.variantName, currentCandidate.attributes)
+      currentIdentity &&
+      (isDuplicateDraft(options, currentCandidate.variantName, currentIdentity.attrs) ||
+        normalizedExisting.has(currentIdentity.variant.trim().toLowerCase()))
   );
 
   const handleAddVariant = () => {
@@ -757,17 +921,14 @@ export function ProductVariantFields({
       }
     }
 
-    if (!currentCandidate) return;
-    const attrs = locked && modelOptionsHint?.length
-      ? Object.fromEntries(modelOptionsHint.map(d => [d.name, currentCandidate.attributes[d.type === "color" ? "Color" : d.name]]))
-      : currentCandidate.attributes;
-    const variant = Object.values(attrs).join(" / ");
-    if (existingVariants.some(v => v.toLowerCase() === variant.toLowerCase())) {
+    if (!currentCandidate || !currentIdentity) return;
+    const { attrs, variant } = currentIdentity;
+    if (normalizedExisting.has(variant.trim().toLowerCase())) {
       toast.error("Esta variante ya existe en el modelo.");
       return;
     }
 
-    if (isDuplicateDraft(options, currentCandidate.variantName, currentCandidate.attributes)) {
+    if (isDuplicateDraft(options, currentCandidate.variantName, attrs)) {
       toast.error(`La variante "${currentCandidate.variantName}" ya está en la lista.`);
       return;
     }

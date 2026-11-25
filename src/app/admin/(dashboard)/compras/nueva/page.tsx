@@ -570,7 +570,7 @@ export default function NuevaCompraPage() {
                 =================================================================== */}
             <div className="lg:col-span-4 space-y-4">
               {/* Tarjeta de Resumen Financiero */}
-              <div className="admin-panel p-5 space-y-4 sticky top-6">
+              <div className="admin-panel p-5 space-y-4 lg:sticky lg:top-20">
                 <div className="flex items-center gap-2 pb-3 border-b border-admin-card-border">
                   <Receipt className="h-4 w-4 text-admin-brand-text" />
                   <h3 className="text-sm font-bold text-admin-text">

@@ -7,28 +7,19 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   TrendingUp,
-  Package,
   AlertCircle,
-  Calendar,
   Clock,
-  ArrowUpRight,
-  ArrowDownRight,
   Plus,
   Search,
-  CheckCircle2,
   DollarSign,
   ShieldAlert,
-  Boxes,
   Truck,
   Receipt,
-  User,
   Wallet,
   Printer,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { CURRENCY_SYMBOL } from "@/lib/currency";
 import { escapeHtml } from "@/lib/sanitize";
 import { STORE_NAME } from "@/lib/store-config";
@@ -127,8 +118,10 @@ export default function AdminDashboardPage() {
     kpis,
     recentSales,
     criticalStockProducts,
+    criticalStockCount,
     totalInventoryValue,
     recentAdjustments,
+    monthAdjustmentsCount,
     monthLossesTotal,
   } = data;
 
@@ -158,10 +151,11 @@ export default function AdminDashboardPage() {
     printWindow.opener = null;
 
     const itemsHtml = sale.items
+      .filter((it) => it.quantity > 0 || sale.status === "Anulado")
       .map(
         (it) => `
         <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px;">
-          <span>${escapeHtml(it.quantity)}x ${escapeHtml(it.name)}</span>
+          <span>${escapeHtml(it.quantity > 0 ? it.quantity : it.originalQuantity)}x ${escapeHtml(it.name)}</span>
           <span style="font-weight:bold;">${escapeHtml(CURRENCY_SYMBOL)} ${it.subtotal.toFixed(2)}</span>
         </div>
       `
@@ -310,7 +304,15 @@ export default function AdminDashboardPage() {
         <MetricCard
           label="Efectivo en cajas"
           value={formatMetric(kpis.cashInDrawers)}
-          detail={<>{kpis.activeDrawersCount} de {kpis.totalDrawersCount} terminales activas<br />Efectivo {formatMetric(kpis.cashAmount)} · QR {formatMetric(kpis.qrAmount)}</>}
+          detail={
+            <>
+              {kpis.activeDrawersCount} de {kpis.totalDrawersCount} terminales activas
+              <br />
+              Efectivo {formatMetric(kpis.cashAmount)} · QR {formatMetric(kpis.qrAmount)}
+              {kpis.cardAmount > 0 && ` · Tarjeta ${formatMetric(kpis.cardAmount)}`}
+              {kpis.otherAmount > 0 && ` · Otros ${formatMetric(kpis.otherAmount)}`}
+            </>
+          }
           icon={Wallet}
         />
       </section>
@@ -347,23 +349,65 @@ export default function AdminDashboardPage() {
                 <div><small>Atendido por</small><strong>{selectedSale.cashier}</strong><small>{selectedSale.channelLabel}</small></div>
               </header>
               <ul className="ticket-products" aria-label="Productos del comprobante">
-                {selectedSale.items.map((item, index) => (
-                  <li key={index}>
-                    <small>{item.quantity} × {formatMetric(item.unitPrice)}</small>
-                    <strong>{formatMetric(item.subtotal)}</strong>
-                    <span>{item.name}</span>
-                    <small>Costo unitario {formatMetric(item.unitCost)}</small>
-                  </li>
-                ))}
+                {selectedSale.items.map((item, index) => {
+                  const displayQty = item.quantity > 0 ? item.quantity : item.originalQuantity;
+                  return (
+                    <li key={index}>
+                      <span className="ticket-product-qty">{displayQty}×</span>
+                      <div className="ticket-product-main">
+                        <span className="ticket-product-name">{item.name}</span>
+                        <div className="ticket-product-meta">
+                          <span>
+                            {formatMetric(item.unitPrice)} c/u · Costo {formatMetric(item.unitCost)}
+                          </span>
+                          {item.returnedQuantity > 0 && (
+                            <span className="ticket-product-tag">
+                              Devueltas: {item.returnedQuantity}
+                            </span>
+                          )}
+                          {selectedSale.status === "Anulado" && (
+                            <span className="ticket-product-tag">Anulado</span>
+                          )}
+                        </div>
+                      </div>
+                      <strong className="ticket-product-subtotal">
+                        {formatMetric(item.subtotal)}
+                      </strong>
+                    </li>
+                  );
+                })}
               </ul>
               <dl className="ticket-totals">
-                <div><dt>Subtotal</dt><dd>{formatMetric(selectedSale.subtotal)}</dd></div>
-                <div><dt>Costo total</dt><dd>{formatMetric(selectedSale.costTotal)}</dd></div>
-                <div><dt>Utilidad</dt><dd>{formatMetric(selectedSale.grossProfit)}</dd></div>
-                <div><dt>Total del ticket</dt><dd>{formatMetric(selectedSale.total)}</dd></div>
+                <div>
+                  <dt>{selectedSale.refundedAmount > 0 ? "Total neto" : "Total cobrado"}</dt>
+                  <dd>{formatMetric(selectedSale.total)}</dd>
+                </div>
+                {selectedSale.discountAmount > 0 && (
+                  <div>
+                    <dt>Descuento</dt>
+                    <dd>-{formatMetric(selectedSale.discountAmount)}</dd>
+                  </div>
+                )}
+                {selectedSale.refundedAmount > 0 && (
+                  <div>
+                    <dt>Devuelto</dt>
+                    <dd>-{formatMetric(selectedSale.refundedAmount)}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt>Costo de adquisición</dt>
+                  <dd>{formatMetric(selectedSale.costTotal)}</dd>
+                </div>
+                <div>
+                  <dt>Utilidad</dt>
+                  <dd>{formatMetric(selectedSale.grossProfit)}</dd>
+                </div>
               </dl>
               <footer className="ticket-actions">
-                <span>{selectedSale.status} · {selectedSale.paymentMethod}{selectedSale.changeGiven > 0 && ` · Cambio ${formatMetric(selectedSale.changeGiven)}`}</span>
+                <span>
+                  {selectedSale.status} · {selectedSale.paymentMethod}
+                  {selectedSale.changeGiven > 0 && ` · Cambio ${formatMetric(selectedSale.changeGiven)}`}
+                </span>
                 <Link href="/admin/inventario">Kárdex</Link>
                 <button onClick={() => handlePrintTicket(selectedSale)}><Printer size={15} /> Imprimir ticket</button>
               </footer>
@@ -382,123 +426,155 @@ export default function AdminDashboardPage() {
           ========================================================================= */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Bento A: Stock Crítico */}
-        <div className="admin-panel p-6 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center">
-                  <AlertCircle className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm text-admin-text">
-                    Stock Crítico
-                  </h3>
-                  <p className="text-[11px] text-admin-muted">En el stock mínimo o por debajo</p>
-                </div>
+        <div className="admin-panel overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="px-5 py-4 border-b border-admin-card-border flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-sm text-admin-text">Stock Crítico</h3>
+                <p className="text-[11px] text-admin-muted mt-0.5">
+                  Productos activos en el mínimo o por debajo
+                </p>
               </div>
-              <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+              <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 shrink-0">
                 <span className="h-2 w-2 rounded-full bg-amber-500" />
-                <span>{criticalStockProducts.length} en alerta</span>
+                <span>{criticalStockCount} en alerta</span>
               </div>
             </div>
 
             {criticalStockProducts.length === 0 ? (
-              <div className="text-center py-6 text-admin-muted text-xs">
-                ✓ Todo el inventario se encuentra en nivel óptimo.
+              <div className="px-5 py-10 text-center text-admin-muted text-xs">
+                Todo el inventario activo se encuentra en nivel óptimo.
               </div>
             ) : (
-              <div className="space-y-2.5">
-                {criticalStockProducts.map((p) => (
-                  <div
-                    key={p.id}
-                    className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <p className="font-bold text-admin-text">{p.name}</p>
-                      <p className="text-[10px] text-admin-muted font-mono mt-0.5">
-                        SKU: {p.sku} • {p.supplier}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-semibold text-amber-600 text-sm">
-                        {p.stock} uds restantes
-                      </span>
-                      <span className="block text-[10px] text-admin-muted">mín. {p.minStock}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ul className="divide-y divide-admin-card-border/70">
+                {criticalStockProducts.map((p) => {
+                  const fillPercent = p.minStock > 0 ? Math.min(100, Math.round((p.stock / p.minStock) * 100)) : 0;
+                  const isOut = p.stock === 0;
+                  return (
+                    <li
+                      key={p.id}
+                      className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-admin-raised/50 transition-colors"
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span
+                          className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${
+                            isOut ? "bg-rose-500" : "bg-amber-500"
+                          }`}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-admin-text truncate">{p.name}</p>
+                          <p className="text-[11px] text-admin-muted font-mono truncate mt-0.5">
+                            {p.sku} · {p.supplier}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex flex-col items-end gap-1.5">
+                        <span
+                          className={`text-xs font-semibold font-mono tabular-nums ${
+                            isOut
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-amber-700 dark:text-amber-400"
+                          }`}
+                        >
+                          {p.stock} / {p.minStock} uds
+                        </span>
+                        <div className="w-16 h-1.5 rounded-full bg-admin-raised overflow-hidden">
+                          <div
+                            style={{ width: `${fillPercent}%` }}
+                            className={`h-full rounded-full ${
+                              isOut ? "bg-rose-500" : "bg-amber-500"
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
 
-          <div className="pt-4 border-t border-admin-card-border flex items-center justify-between">
+          <div className="px-5 py-3.5 border-t border-admin-card-border bg-admin-raised/40 flex items-center justify-between gap-3">
             <span className="text-xs text-admin-muted font-medium">
-              Valor almacén: {CURRENCY_SYMBOL} {totalInventoryValue.toLocaleString("es-BO", { minimumFractionDigits: 2 })}
+              Valor en bodega:{" "}
+              <strong className="text-admin-text font-mono tabular-nums">
+                {formatMetric(totalInventoryValue)}
+              </strong>
             </span>
             <Link href="/admin/compras">
-              <Button size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5 border-admin-brand/30 text-admin-brand-text">
-                <Truck className="h-3.5 w-3.5" />
-                <span>Orden de Compra</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 border-admin-card-border bg-admin-card-bg hover:bg-admin-raised cursor-pointer"
+              >
+                <Truck className="h-3.5 w-3.5 text-admin-brand-text" />
+                <span>Orden de compra</span>
               </Button>
             </Link>
           </div>
         </div>
 
         {/* Bento B: Mermas & Bajas */}
-        <div className="admin-panel p-6 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center">
-                  <ShieldAlert className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm text-admin-text">
-                    Mermas & Bajas
-                  </h3>
-                  <p className="text-[11px] text-admin-muted">Pérdidas registradas por merma o daño</p>
-                </div>
+        <div className="admin-panel overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="px-5 py-4 border-b border-admin-card-border flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-sm text-admin-text">Mermas &amp; Bajas</h3>
+                <p className="text-[11px] text-admin-muted mt-0.5">
+                  Pérdidas registradas por merma o daño
+                </p>
               </div>
-              <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
+              <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 shrink-0 tabular-nums">
                 <span className="h-2 w-2 rounded-full bg-rose-500" />
-                <span>{CURRENCY_SYMBOL} {monthLossesTotal.toFixed(2)} este mes</span>
+                <span>{formatMetric(monthLossesTotal)} este mes</span>
               </div>
             </div>
 
             {recentAdjustments.length === 0 ? (
-              <div className="text-center py-6 text-admin-muted text-xs">
-                ✓ No hay actas de baja este mes.
+              <div className="px-5 py-10 text-center text-admin-muted text-xs">
+                No hay actas de baja registradas este mes.
               </div>
             ) : (
-              <div className="space-y-3 text-xs">
+              <ul className="divide-y divide-admin-card-border/70">
                 {recentAdjustments.map((a) => (
-                  <div
+                  <li
                     key={a.id}
-                    className="p-3.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-900/40 flex items-center justify-between"
+                    className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-admin-raised/50 transition-colors"
                   >
-                    <div>
-                      <span className="font-bold text-rose-800 dark:text-rose-300 block">
-                        Acta #{a.adjustmentNumber}
-                      </span>
-                      <p className="text-[11px] text-admin-muted mt-0.5">
-                        {a.quantity}x {a.productName} • {a.reasonLabel}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs font-semibold text-admin-text truncate">
+                          {a.productName}
+                        </span>
+                        <span className="text-[11px] font-mono text-admin-muted shrink-0">
+                          ×{a.quantity}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-admin-muted truncate mt-0.5">
+                        {a.adjustmentNumber} · {a.reasonLabel} · {a.date}
                       </p>
                     </div>
-                    <span className="font-semibold text-rose-600 text-sm">
-                      -{CURRENCY_SYMBOL} {a.totalCost.toFixed(2)}
+                    <span className="text-xs font-semibold font-mono tabular-nums text-rose-600 dark:text-rose-400 shrink-0">
+                      -{formatMetric(a.totalCost)}
                     </span>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
 
-          <div className="pt-4 border-t border-admin-card-border flex items-center justify-between">
-            <span className="text-xs text-admin-muted font-medium">Control de pérdidas</span>
+          <div className="px-5 py-3.5 border-t border-admin-card-border bg-admin-raised/40 flex items-center justify-between gap-3">
+            <span className="text-xs text-admin-muted font-medium">
+              {monthAdjustmentsCount} {monthAdjustmentsCount === 1 ? "acta" : "actas"} este mes
+            </span>
             <Link href="/admin/inventario">
-              <Button size="sm" variant="outline" className="rounded-xl text-xs font-bold gap-1.5 border-rose-200 text-rose-600 dark:border-rose-800">
-                <ShieldAlert className="h-3.5 w-3.5" />
-                <span>Ver Actas</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 border-admin-card-border bg-admin-card-bg hover:bg-admin-raised cursor-pointer"
+              >
+                <ShieldAlert className="h-3.5 w-3.5 text-rose-500" />
+                <span>Ver en Inventario</span>
               </Button>
             </Link>
           </div>

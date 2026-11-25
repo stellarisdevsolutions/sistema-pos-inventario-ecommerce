@@ -182,6 +182,8 @@ export const productModels = pgTable("product_models", {
   name: text("name").notNull(),
   variantSelector: text("variant_selector"),
   options: jsonb("options").$type<ProductOptionConfig[]>(),
+  imageUrl: text("image_url"),
+  images: text("images").array().default(sql`'{}'::text[]`).notNull(),
 });
 
 export const products = pgTable("products", {
@@ -206,6 +208,7 @@ export const products = pgTable("products", {
   brandId: integer("brand_id").references(() => brands.id),                        // Marca comercial
   supplierId: integer("supplier_id").references(() => suppliers.id),                // Proveedor habitual / por defecto
   isActive: boolean("is_active").default(true).notNull(),                          // Estado operativo maestro (Habilitado en POS)
+  isArchived: boolean("is_archived").default(false).notNull(),                     // Retirado a largo plazo del catálogo operativo
   isVisibleWeb: boolean("is_visible_web").default(true).notNull(),                  // Visible en el catálogo de la tienda online
   isFeatured: boolean("is_featured").default(false).notNull(),                      // Destacado en la portada de la tienda web
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -214,6 +217,7 @@ export const products = pgTable("products", {
   uniqueIndex("products_model_variant_unique").on(t.modelCode, sql`lower(${t.variant})`),
   check("products_model_variant_pair", sql`(${t.modelCode} IS NULL) = (${t.variant} IS NULL)`),
   check("products_variant_color_valid", sql`${t.variantColor} IS NULL OR (${t.variant} IS NOT NULL AND ${t.variantColor} ~ '^#[0-9A-Fa-f]{6}$')`),
+  check("products_archived_inactive", sql`NOT ${t.isArchived} OR (NOT ${t.isActive} AND NOT ${t.isVisibleWeb} AND NOT ${t.isFeatured})`),
   check("products_stock_non_negative", sql`${t.stock} >= 0`),
   check("products_price_non_negative", sql`${t.price} >= 0`),
   check("products_cost_non_negative", sql`${t.costPrice} >= 0`),

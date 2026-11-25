@@ -7,6 +7,8 @@ export type CatalogEntry = ProductDbInsert & {
   importKey?: string;
   options?: ProductOptionConfig[] | null;
   attributes?: Record<string, string> | null;
+  modelImageUrl?: string | null;
+  modelImages?: string[] | null;
 };
 
 export function automaticSku() {
@@ -24,6 +26,8 @@ export function createCatalogProductsQuery(entries: CatalogEntry[], userId: numb
     sku: entry.sku || automaticSku(),
     attributes: entry.attributes ?? null,
     options: entry.options ?? null,
+    modelImageUrl: entry.modelImageUrl !== undefined ? (entry.modelImageUrl ?? null) : (entry.imageUrl ?? null),
+    modelImages: entry.modelImages !== undefined ? (entry.modelImages ?? []) : (entry.images ?? []),
   }));
 
   return sql`
@@ -33,7 +37,7 @@ export function createCatalogProductsQuery(entries: CatalogEntry[], userId: numb
         stock integer, "minStock" integer, "imageUrl" text, images text[], "categoryId" integer,
         "brandId" integer, "supplierId" integer, "isActive" boolean, "isVisibleWeb" boolean, "isFeatured" boolean,
         "modelCode" text, variant text, "variantColor" text, "variantSelector" text, "importKey" text,
-        attributes jsonb, options jsonb)
+        attributes jsonb, options jsonb, "modelImageUrl" text, "modelImages" text[])
     ), models AS (${existingModel ? sql`
       UPDATE product_models SET options = (SELECT options FROM input LIMIT 1)
       WHERE code = ${existingModel.code} AND options IS NOT DISTINCT FROM ${existingModel.options ? JSON.stringify(existingModel.options) : null}::jsonb
@@ -44,13 +48,18 @@ export function createCatalogProductsQuery(entries: CatalogEntry[], userId: numb
             lower(p.variant) = lower(i.variant) OR lower(p.attributes::text) = lower(i.attributes::text)
           ))
       ) RETURNING code` : sql`
-      INSERT INTO product_models (code, name, variant_selector, options)
-      SELECT DISTINCT ON ("modelCode") "modelCode", name, "variantSelector", options
+      INSERT INTO product_models (code, name, variant_selector, options, image_url, images)
+      SELECT DISTINCT ON ("modelCode") "modelCode", name, "variantSelector", options, "modelImageUrl", COALESCE("modelImages", '{}'::text[])
       FROM input WHERE "modelCode" IS NOT NULL
       ORDER BY "modelCode"
       ON CONFLICT (code) DO UPDATE SET
         options = COALESCE(EXCLUDED.options, product_models.options),
-        variant_selector = COALESCE(EXCLUDED.variant_selector, product_models.variant_selector)
+        variant_selector = COALESCE(EXCLUDED.variant_selector, product_models.variant_selector),
+        image_url = COALESCE(product_models.image_url, EXCLUDED.image_url),
+        images = CASE
+          WHEN COALESCE(array_length(product_models.images, 1), 0) = 0 THEN EXCLUDED.images
+          ELSE product_models.images
+        END
       RETURNING code`}
     ), created AS (
       INSERT INTO products (name, slug, sku, barcode, description, price, cost_price, stock, min_stock, image_url,

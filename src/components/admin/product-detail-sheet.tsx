@@ -1,6 +1,5 @@
 "use client";
 
-import { ProductLifecycle } from "./product-lifecycle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -43,6 +42,7 @@ export interface InventoryProductDetail {
   images?: string[];
   canHardDelete?: boolean;
   isActive?: boolean;
+  isArchived?: boolean;
   isVisibleWeb?: boolean;
   isFeatured?: boolean;
   description?: string | null;
@@ -55,7 +55,6 @@ export interface InventoryProductDetail {
 }
 
 interface ProductDetailSheetProps {
-  onChanged: () => void;
   product: InventoryProductDetail | null;
   onClose: () => void;
   onOpenKardex: (product: InventoryProductDetail) => void;
@@ -68,12 +67,10 @@ function isValidHex(color?: string | null): color is string {
 
 function ProductDetailSheetBody({
   product,
-  onChanged,
   onOpenKardex,
   onOpenAdjustment,
 }: {
   product: InventoryProductDetail;
-  onChanged: () => void;
   onOpenKardex: (product: InventoryProductDetail) => void;
   onOpenAdjustment: (product: InventoryProductDetail) => void;
 }) {
@@ -113,7 +110,8 @@ function ProductDetailSheetBody({
   };
 
   const activeImage = selectedImage || galleryImages[0] || product.image;
-  const isOperational = product.isActive ?? true;
+  const isArchived = Boolean(product.isArchived);
+  const isOperational = !isArchived && (product.isActive ?? true);
   const unitProfit = product.price - product.costPrice;
   const marginPercent = product.price > 0 ? (unitProfit / product.price) * 100 : 0;
   const stockGaugeMax = Math.max(product.minStock * 2, product.stock, 1);
@@ -192,6 +190,11 @@ function ProductDetailSheetBody({
             <span className={cn("h-1.5 w-1.5 rounded-full", stockTone.dot)} />
             {stockTone.label}
           </span>
+          {isArchived && (
+            <span className="rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 text-[10px] font-semibold shrink-0">
+              Archivado
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -437,10 +440,18 @@ function ProductDetailSheetBody({
                 <span
                   className={cn(
                     "h-1.5 w-1.5 rounded-full",
-                    isOperational ? "bg-emerald-500" : "bg-slate-400"
+                    isArchived
+                      ? "bg-amber-500"
+                      : isOperational
+                      ? "bg-emerald-500"
+                      : "bg-slate-400"
                   )}
                 />
-                {isOperational ? "Habilitado para POS" : "Pausado"}
+                {isArchived
+                  ? "Archivado (fuera de catálogo)"
+                  : isOperational
+                  ? "Habilitado para POS"
+                  : "Inactivo (pausado)"}
               </dd>
             </div>
 
@@ -448,7 +459,11 @@ function ProductDetailSheetBody({
               <dt className="text-admin-muted">Tienda online</dt>
               <dd className="flex items-center gap-1.5">
                 <span className="font-medium text-admin-text">
-                  {product.isVisibleWeb ?? true ? "Visible en web" : "Solo POS interno"}
+                  {isArchived
+                    ? "Oculto (Archivado)"
+                    : product.isVisibleWeb ?? true
+                    ? "Visible en web"
+                    : "Solo POS interno"}
                 </span>
                 {product.isFeatured && (
                   <span className="rounded-md bg-admin-brand-light text-admin-brand-text px-1.5 py-0.5 text-[10px] font-semibold">
@@ -482,13 +497,6 @@ function ProductDetailSheetBody({
                 )}
               </dd>
             </div>
-
-            {product.modelCode && (
-              <div className="py-2.5 flex items-center justify-between gap-3">
-                <dt className="text-admin-muted">Modelo</dt>
-                <dd className="font-mono font-medium text-admin-text">{product.modelCode}</dd>
-              </div>
-            )}
 
             {product.brand && (
               <div className="py-2.5 flex items-center justify-between gap-3">
@@ -526,41 +534,42 @@ function ProductDetailSheetBody({
       </div>
 
       {/* Footer fijo de acciones */}
-      <div className="px-5 py-3.5 border-t border-admin-card-border bg-admin-card-bg flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenAdjustment(product)}
-            className="h-9 rounded-xl text-xs font-semibold gap-1.5 border-admin-card-border text-admin-secondary hover:text-admin-text cursor-pointer"
-          >
-            <TrendingDown className="h-3.5 w-3.5" />
-            <span>Baja</span>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenKardex(product)}
-            className="h-9 rounded-xl text-xs font-semibold gap-1.5 border-admin-card-border text-admin-brand-text cursor-pointer"
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-            <span>Kárdex</span>
-          </Button>
-        </div>
+      <div className="px-5 py-3.5 border-t border-admin-card-border bg-admin-card-bg space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenAdjustment(product)}
+              className="h-9 rounded-xl text-xs font-semibold gap-1.5 border-admin-card-border text-admin-secondary hover:text-admin-text cursor-pointer"
+            >
+              <TrendingDown className="h-3.5 w-3.5" />
+              <span>Baja</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenKardex(product)}
+              className="h-9 rounded-xl text-xs font-semibold gap-1.5 border-admin-card-border text-admin-brand-text cursor-pointer"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>Kárdex</span>
+            </Button>
+          </div>
 
-        <ProductLifecycle product={product} name={product.name} onChange={onChanged} />
-        <Link
-          href={`/admin/inventario/${product.id}/editar`}
-          className={cn(
-            buttonVariants({ size: "sm" }),
-            "h-9 px-4 rounded-xl text-xs font-semibold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5"
-          )}
-        >
-          <Edit className="h-3.5 w-3.5" />
-          <span>Editar producto</span>
-        </Link>
+          <Link
+            href={`/admin/inventario/${product.id}/editar`}
+            className={cn(
+              buttonVariants({ size: "sm" }),
+              "h-9 px-4 rounded-xl text-xs font-semibold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 shrink-0"
+            )}
+          >
+            <Edit className="h-3.5 w-3.5" />
+            <span>Editar producto</span>
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -569,7 +578,6 @@ function ProductDetailSheetBody({
 export function ProductDetailSheet({
   product,
   onClose,
-  onChanged,
   onOpenKardex,
   onOpenAdjustment,
 }: ProductDetailSheetProps) {
@@ -594,7 +602,6 @@ export function ProductDetailSheet({
       >
         {product && (
           <ProductDetailSheetBody
-            onChanged={onChanged}
             key={product.id}
             product={product}
             onOpenKardex={onOpenKardex}

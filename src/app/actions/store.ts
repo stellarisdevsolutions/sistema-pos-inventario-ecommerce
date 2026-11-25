@@ -58,9 +58,11 @@ type ProductRow = typeof products.$inferSelect & {
   brand: typeof brands.$inferSelect | null;
 };
 
-function toStoreProduct(p: ProductRow, modelImage?: string | null): StoreProduct {
-  const images = p.images ?? [];
-  const imageUrl = p.imageUrl || images[0] || modelImage || DEFAULT_PRODUCT_IMAGE;
+function toStoreProduct(p: ProductRow, fallbackImage?: string | null): StoreProduct {
+  const baseImage = p.model?.imageUrl || null;
+  const galleryImages = p.model?.images?.length ? p.model.images : (p.images ?? []);
+  const imageUrl =
+    p.imageUrl || baseImage || galleryImages[0] || fallbackImage || DEFAULT_PRODUCT_IMAGE;
   return {
     id: p.id, name: p.model?.name ?? p.name, slug: p.slug, sku: p.sku, barcode: p.barcode,
     modelCode: p.modelCode, variant: p.variant, variantColor: p.variantColor,
@@ -68,7 +70,9 @@ function toStoreProduct(p: ProductRow, modelImage?: string | null): StoreProduct
     attributes: p.attributes ?? null,
     modelOptions: p.model?.options ?? null,
     description: p.description, price: Number(p.price), stock: p.stock, minStock: p.minStock,
-    imageUrl, images: [...new Set([imageUrl, ...images])], category: p.category,
+    imageUrl,
+    images: [...new Set([imageUrl, baseImage, ...galleryImages].filter((img): img is string => Boolean(img && img.trim())))],
+    category: p.category,
     brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
     isActive: p.isActive, isVisibleWeb: p.isVisibleWeb, isFeatured: p.isFeatured,
   };
@@ -77,7 +81,7 @@ function toStoreProduct(p: ProductRow, modelImage?: string | null): StoreProduct
 export async function getStoreProducts(): Promise<StoreProduct[]> {
   try {
     const rows = await db.query.products.findMany({
-      where: and(eq(products.isActive, true), eq(products.isVisibleWeb, true)),
+      where: and(eq(products.isActive, true), eq(products.isArchived, false), eq(products.isVisibleWeb, true)),
       with: { category: true, model: true, brand: true },
       orderBy: [desc(products.id)],
     });
@@ -90,8 +94,20 @@ export async function getStoreProducts(): Promise<StoreProduct[]> {
     }
     return [...groups.values()].map(group => {
       const representative = group.find(row => row.stock > 0) ?? group[0];
+      const baseModelImage = representative.model?.imageUrl || null;
       const modelImage = group.find(row => row.imageUrl || row.images[0]);
-      const product = toStoreProduct(representative, modelImage?.imageUrl || modelImage?.images[0]);
+      const fallbackCover = modelImage?.imageUrl || modelImage?.images[0] || null;
+      const repProduct = toStoreProduct(representative, fallbackCover);
+      const baseGallery = representative.model?.images?.length
+        ? representative.model.images
+        : (representative.images ?? []);
+      const product = baseModelImage
+        ? {
+            ...repProduct,
+            imageUrl: baseModelImage,
+            images: [...new Set([baseModelImage, repProduct.imageUrl, ...baseGallery].filter((img): img is string => Boolean(img && img.trim())))],
+          }
+        : repProduct;
       const prices = group.map(row => Number(row.price));
       const totalStock = group.reduce((sum, row) => sum + Math.max(0, row.stock), 0);
 
@@ -142,7 +158,7 @@ export async function getStoreCategories(): Promise<StoreCategory[]> {
         orderBy: (c, { asc }) => [asc(c.name)],
       }),
       db.query.products.findMany({
-        where: (p, { and, eq }) => and(eq(p.isActive, true), eq(p.isVisibleWeb, true)),
+        where: (p, { and, eq }) => and(eq(p.isActive, true), eq(p.isArchived, false), eq(p.isVisibleWeb, true)),
         columns: {
           categoryId: true,
           modelCode: true,
@@ -187,7 +203,7 @@ export async function getStoreProductBySlug(slug: string): Promise<StoreProduct 
       ),
       with: { category: true, model: true, brand: true },
     });
-    return p?.isActive && p.isVisibleWeb ? toStoreProduct(p) : null;
+    return p?.isActive && !p.isArchived && p.isVisibleWeb ? toStoreProduct(p) : null;
   } catch (error) {
     console.error("Error al buscar producto por slug:", error);
     return null;
@@ -197,7 +213,7 @@ export async function getStoreProductBySlug(slug: string): Promise<StoreProduct 
 export async function getStoreVariants(modelCode: string): Promise<StoreProduct[]> {
   try {
     const rows = await db.query.products.findMany({
-      where: and(eq(products.modelCode, modelCode), eq(products.isActive, true), eq(products.isVisibleWeb, true)),
+      where: and(eq(products.modelCode, modelCode), eq(products.isActive, true), eq(products.isArchived, false), eq(products.isVisibleWeb, true)),
       with: { category: true, model: true, brand: true },
       orderBy: (p, { asc }) => [asc(p.variant), asc(p.id)],
     });

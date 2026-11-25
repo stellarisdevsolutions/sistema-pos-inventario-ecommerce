@@ -58,6 +58,10 @@ export const categoryInputSchema = z.object({
   imageUrl: safeImageUrlSchema.optional().nullable(),
 });
 
+export const brandInputSchema = z.object({
+  name: z.string().trim().min(1, "El nombre de la marca no puede estar vacío.").max(100, "El nombre es demasiado largo."),
+});
+
 /**
  * Esquema de validación para los datos ingresados en el formulario de Crear/Editar Producto
  */
@@ -68,6 +72,9 @@ const productFieldsSchema = z.object({
     .max(180, "El nombre no puede superar los 180 caracteres."),
   description: z.string().max(5000, "La descripción no puede superar los 5000 caracteres.").optional().default(""),
   mainImage: safeImageUrlSchema
+    .optional()
+    .nullable(),
+  variantImage: safeImageUrlSchema
     .optional()
     .nullable(),
   additionalImages: z

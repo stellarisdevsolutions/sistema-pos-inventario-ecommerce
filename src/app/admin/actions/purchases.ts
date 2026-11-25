@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
 import { businessDate, businessMonthStart, formatBusinessDate } from "@/lib/business-date";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { purchaseFormSchema, purchaseReturnSchema, type PurchaseFormInput, type PurchaseReturnInput } from "@/lib/validations/purchase";
 import { requireRole } from "@/lib/auth/session";
 
@@ -104,7 +104,11 @@ export async function getPurchasesAction(): Promise<{
         user: true,
         items: {
           with: {
-            product: true,
+            product: {
+              with: {
+                model: true,
+              },
+            },
           },
         },
       },
@@ -154,7 +158,7 @@ export async function getPurchasesAction(): Promise<{
         productId: it.productId,
         productName: it.product ? productName(it.product) : "Producto no especificado",
         productSku: it.product?.sku || null,
-        productImage: it.product?.imageUrl || null,
+        productImage: it.product?.imageUrl || it.product?.model?.imageUrl || null,
         quantity: it.quantity,
         returnedQuantity: returnedByLine.get(it.id) ?? 0,
         availableStock: it.product?.stock ?? 0,
@@ -232,10 +236,11 @@ export async function getProductsForPurchaseAction() {
     await requireRole(["admin", "manager", "warehouse"]);
 
     const prods = await db.query.products.findMany({
-      where: eq(schema.products.isActive, true),
+      where: and(eq(schema.products.isActive, true), eq(schema.products.isArchived, false)),
       columns: {
         id: true,
         name: true,
+        modelCode: true,
         variant: true,
         sku: true,
         barcode: true,
@@ -244,6 +249,13 @@ export async function getProductsForPurchaseAction() {
         price: true,
         imageUrl: true,
         supplierId: true,
+      },
+      with: {
+        model: {
+          columns: {
+            imageUrl: true,
+          },
+        },
       },
       orderBy: (p, { asc }) => [asc(p.name)],
     });
@@ -258,7 +270,7 @@ export async function getProductsForPurchaseAction() {
         stock: p.stock || 0,
         costPrice: parseFloat(p.costPrice) || 0,
         price: parseFloat(p.price) || 0,
-        imageUrl: p.imageUrl || null,
+        imageUrl: p.imageUrl || p.model?.imageUrl || null,
         supplierId: p.supplierId || null,
       })),
     };
