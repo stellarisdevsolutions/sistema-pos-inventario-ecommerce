@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME, decodeSessionToken, type UserRole } from "@/lib/au
 
 const ROUTE_PERMISSIONS: { pattern: RegExp; allowedRoles: UserRole[] }[] = [
   { pattern: /^\/admin\/usuarios(\/.*)?$/, allowedRoles: ["admin"] },
+  { pattern: /^\/admin\/ajustes(\/.*)?$/, allowedRoles: ["admin", "manager"] },
   { pattern: /^\/admin\/reportes(\/.*)?$/, allowedRoles: ["admin", "manager"] },
   { pattern: /^\/admin\/analitica(\/.*)?$/, allowedRoles: ["admin", "manager"] },
   { pattern: /^\/admin\/compras(\/.*)?$/, allowedRoles: ["admin", "manager", "warehouse"] },

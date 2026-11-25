@@ -6,7 +6,13 @@ import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { approveCashCountQuery, openShiftQuery, submitCashCountQuery } from "@/db/operations/cash-shifts";
+import {
+  approveCashCountQuery,
+  archiveCashRegisterQuery,
+  deleteUnusedCashRegisterQuery,
+  openShiftQuery,
+  submitCashCountQuery,
+} from "@/db/operations/cash-shifts";
 import {
   addBusinessDays,
   businessDate,
@@ -14,17 +20,23 @@ import {
   formatBusinessShortDateTime,
   formatBusinessTime,
 } from "@/lib/business-date";
-import { eq, and, count, or, ne, isNotNull, gte, lt, inArray } from "drizzle-orm";
+import { eq, and, count, or, ne, isNotNull, gte, lt, inArray, sql } from "drizzle-orm";
 import { requireRole } from "@/lib/auth/session";
 import {
   openShiftSchema,
   closeShiftSchema,
   submitCashCountSchema,
-  type SubmitCashCountInput,
   createCashRegisterSchema,
+  updateCashRegisterSchema,
+  toggleCashRegisterArchiveSchema,
+  deleteCashRegisterSchema,
+  type SubmitCashCountInput,
   type OpenShiftInput,
   type CloseShiftInput,
   type CreateCashRegisterInput,
+  type UpdateCashRegisterInput,
+  type ToggleCashRegisterArchiveInput,
+  type DeleteCashRegisterInput,
 } from "@/lib/validations/cash-shift";
 
 function safeRevalidatePath(path: string) {
@@ -33,6 +45,20 @@ function safeRevalidatePath(path: string) {
   } catch {
     // Si se ejecuta fuera de contexto Next.js (tests/scripts), no bloquea
   }
+}
+
+function revalidateCashRegisterPaths() {
+  for (const path of ["/admin/ajustes", "/admin/cajas", "/admin/ventas", "/admin", "/admin/reportes"]) {
+    safeRevalidatePath(path);
+  }
+}
+
+function pgErrorCode(error: unknown): string | undefined {
+  const cause = error instanceof Error && error.cause ? error.cause : error;
+  if (typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string") {
+    return cause.code;
+  }
+  return undefined;
 }
 
 export type ActiveShiftDetail = {
@@ -86,6 +112,8 @@ export type CashKpisSummary = {
   todayCashSales: number;
   todayCardTransferSales: number;
   auditPrecisionPercent: number;
+  closedShiftsCount: number;
+  balancedShiftsCount: number;
   activeShiftsCount: number;
   totalRegistersCount: number;
 };
@@ -126,18 +154,21 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
           },
         }),
         db.query.users.findMany({
-          where: eq(schema.users.isActive, true),
+          where: and(eq(schema.users.isActive, true), ne(schema.users.role, "warehouse")),
           columns: { id: true, name: true, role: true },
           orderBy: (u, { asc }) => [asc(u.name)],
         }),
-        db
-          .select({ count: count() })
-          .from(schema.cashShifts)
-          .where(eq(schema.cashShifts.status, "closed")),
+        canReview
+          ? db
+              .select({ count: count() })
+              .from(schema.cashShifts)
+              .where(eq(schema.cashShifts.status, "closed"))
+          : Promise.resolve([{ count: 0 }]),
         db.query.sales.findMany({
           where: and(
             gte(schema.sales.createdAt, todayStart),
             lt(schema.sales.createdAt, tomorrowStart),
+            isNotNull(schema.sales.cashShiftId),
             inArray(schema.sales.status, ["completed", "refunded"])
           ),
           columns: {
@@ -156,7 +187,8 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
         db.query.saleRefunds.findMany({
           where: and(
             gte(schema.saleRefunds.createdAt, todayStart),
-            lt(schema.saleRefunds.createdAt, tomorrowStart)
+            lt(schema.saleRefunds.createdAt, tomorrowStart),
+            isNotNull(schema.saleRefunds.cashShiftId)
           ),
           columns: {
             amount: true,
@@ -177,7 +209,9 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
 
     let activeInitialCash = 0;
 
-    const formattedRegisters: CashRegisterItem[] = registersList.map((r) => {
+    const visibleRegisters = registersList.filter((r) => r.isActive || activeShiftsMap.has(r.id));
+
+    const formattedRegisters: CashRegisterItem[] = visibleRegisters.map((r) => {
       const active = activeShiftsMap.get(r.id);
       if (!active) {
         return {
@@ -260,37 +294,40 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
           todayCardTransferSales -= amount;
         }
       }
-      todayCashSales = Math.max(0, todayCashSales);
-      todayCardTransferSales = Math.max(0, todayCardTransferSales);
+      todayCashSales = Number(todayCashSales.toFixed(2));
+      todayCardTransferSales = Number(todayCardTransferSales.toFixed(2));
     }
 
-    const totalClosed = closedCountResult[0]?.count || 0;
+    const closedShiftsCount = canReview ? closedCountResult[0]?.count || 0 : 0;
+    let balancedShiftsCount = 0;
     let auditPrecisionPercent = 100;
 
-    if (totalClosed > 0) {
+    if (canReview && closedShiftsCount > 0) {
       const balancedCountResult = await db
         .select({ count: count() })
         .from(schema.cashShifts)
         .where(
           and(
             eq(schema.cashShifts.status, "closed"),
-            eq(schema.cashShifts.difference, "0.00")
+            sql`abs(coalesce(${schema.cashShifts.difference}, 0)) < 0.01`
           )
         );
-      const balancedCount = balancedCountResult[0]?.count || 0;
-      auditPrecisionPercent = Math.round((balancedCount / totalClosed) * 100);
+      balancedShiftsCount = balancedCountResult[0]?.count || 0;
+      auditPrecisionPercent = Math.round((balancedShiftsCount / closedShiftsCount) * 100);
     }
 
     return {
       success: true,
       registers: formattedRegisters,
       kpis: {
-        activeInitialCash,
+        activeInitialCash: Number(activeInitialCash.toFixed(2)),
         todayCashSales,
         todayCardTransferSales,
         auditPrecisionPercent,
+        closedShiftsCount,
+        balancedShiftsCount,
         activeShiftsCount: activeShiftsList.length,
-        totalRegistersCount: registersList.length,
+        totalRegistersCount: registersList.filter((r) => r.isActive).length,
       },
       users: usersList,
     };
@@ -303,6 +340,8 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
         todayCashSales: 0,
         todayCardTransferSales: 0,
         auditPrecisionPercent: 100,
+        closedShiftsCount: 0,
+        balancedShiftsCount: 0,
         activeShiftsCount: 0,
         totalRegistersCount: 0,
       },
@@ -496,9 +535,111 @@ export async function closeShiftAction(input: CloseShiftInput) {
   }
 }
 
+export type CashRegisterManagementItem = {
+  id: number;
+  name: string;
+  code: string;
+  location: string | null;
+  isActive: boolean;
+  createdAt: string;
+  shiftsCount: number;
+  hasOpenShift: boolean;
+  openShiftNumber: string | null;
+  openShiftCashier: string | null;
+  canDelete: boolean;
+  canArchive: boolean;
+};
+
 /**
- * 5. Crear una nueva terminal / caja física
+ * 5. Administración completa de Cajas Físicas (módulo Ajustes)
  */
+export async function getCashRegistersManagementAction(): Promise<{
+  success: boolean;
+  registers: CashRegisterManagementItem[];
+  summary: {
+    totalCount: number;
+    activeCount: number;
+    archivedCount: number;
+    openShiftsCount: number;
+  };
+  error?: string;
+}> {
+  try {
+    await requireRole(["admin", "manager"]);
+
+    const [registersList, shiftCounts, openShifts] = await Promise.all([
+      db.query.cashRegisters.findMany({
+        orderBy: (r, { desc, asc }) => [desc(r.isActive), asc(r.id)],
+      }),
+      db
+        .select({
+          cashRegisterId: schema.cashShifts.cashRegisterId,
+          shiftsCount: count(),
+        })
+        .from(schema.cashShifts)
+        .groupBy(schema.cashShifts.cashRegisterId),
+      db.query.cashShifts.findMany({
+        where: eq(schema.cashShifts.status, "open"),
+        columns: {
+          cashRegisterId: true,
+          shiftNumber: true,
+        },
+        with: {
+          user: {
+            columns: { name: true },
+          },
+        },
+      }),
+    ]);
+
+    const countByRegister = new Map<number, number>(
+      shiftCounts.map((row) => [row.cashRegisterId, row.shiftsCount])
+    );
+    const openShiftByRegister = new Map(
+      openShifts.map((shift) => [shift.cashRegisterId, shift])
+    );
+
+    const formatted: CashRegisterManagementItem[] = registersList.map((reg) => {
+      const shiftsCount = countByRegister.get(reg.id) ?? 0;
+      const openShift = openShiftByRegister.get(reg.id) ?? null;
+      const hasOpenShift = openShift !== null;
+      return {
+        id: reg.id,
+        name: reg.name,
+        code: reg.code,
+        location: reg.location,
+        isActive: reg.isActive,
+        createdAt: formatBusinessShortDateTime(reg.createdAt),
+        shiftsCount,
+        hasOpenShift,
+        openShiftNumber: openShift?.shiftNumber ?? null,
+        openShiftCashier: openShift?.user?.name ?? null,
+        canDelete: shiftsCount === 0,
+        canArchive: reg.isActive && !hasOpenShift,
+      };
+    });
+
+    const activeCount = formatted.filter((reg) => reg.isActive).length;
+    return {
+      success: true,
+      registers: formatted,
+      summary: {
+        totalCount: formatted.length,
+        activeCount,
+        archivedCount: formatted.length - activeCount,
+        openShiftsCount: openShifts.length,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      registers: [],
+      summary: { totalCount: 0, activeCount: 0, archivedCount: 0, openShiftsCount: 0 },
+      error: adminActionError(error, "Error al cargar la administración de cajas."),
+    };
+  }
+}
+
 export async function createCashRegisterAction(
   input: CreateCashRegisterInput
 ): Promise<{
@@ -508,11 +649,10 @@ export async function createCashRegisterAction(
 }> {
   try {
     await requireRole(["admin", "manager"]);
-
     const parsed = createCashRegisterSchema.parse(input);
 
     const existingCode = await db.query.cashRegisters.findFirst({
-      where: eq(schema.cashRegisters.code, parsed.code),
+      where: sql`upper(${schema.cashRegisters.code}) = ${parsed.code}`,
     });
 
     if (existingCode) {
@@ -532,14 +672,157 @@ export async function createCashRegisterAction(
       })
       .returning();
 
-    safeRevalidatePath("/admin/cajas");
-    safeRevalidatePath("/admin/ventas");
+    revalidateCashRegisterPaths();
 
     return { success: true, data: newReg };
   } catch (error) {
+    if (pgErrorCode(error) === "23505") {
+      return {
+        success: false,
+        error: "Ya existe otra caja con ese código identificador.",
+      };
+    }
     return {
       success: false,
       error: adminActionError(error, "Error al registrar la nueva caja física."),
+    };
+  }
+}
+
+export async function updateCashRegisterAction(
+  input: UpdateCashRegisterInput
+): Promise<{
+  success: boolean;
+  data?: typeof schema.cashRegisters.$inferSelect;
+  error?: string;
+}> {
+  try {
+    await requireRole(["admin", "manager"]);
+    const parsed = updateCashRegisterSchema.parse(input);
+
+    const [existing, duplicateCode] = await Promise.all([
+      db.query.cashRegisters.findFirst({
+        where: eq(schema.cashRegisters.id, parsed.id),
+      }),
+      db.query.cashRegisters.findFirst({
+        where: and(
+          ne(schema.cashRegisters.id, parsed.id),
+          sql`upper(${schema.cashRegisters.code}) = ${parsed.code}`
+        ),
+      }),
+    ]);
+
+    if (!existing) {
+      return { success: false, error: "Caja no encontrada." };
+    }
+    if (duplicateCode) {
+      return {
+        success: false,
+        error: `Ya existe otra caja con el código "${parsed.code}".`,
+      };
+    }
+
+    const [updated] = await db
+      .update(schema.cashRegisters)
+      .set({
+        name: parsed.name,
+        code: parsed.code,
+        location: parsed.location || null,
+      })
+      .where(eq(schema.cashRegisters.id, parsed.id))
+      .returning();
+
+    revalidateCashRegisterPaths();
+
+    return { success: true, data: updated };
+  } catch (error) {
+    if (pgErrorCode(error) === "23505") {
+      return { success: false, error: "Ya existe otra caja con ese código identificador." };
+    }
+    return {
+      success: false,
+      error: adminActionError(error, "Error al actualizar la caja física."),
+    };
+  }
+}
+
+export async function toggleCashRegisterArchiveAction(
+  input: ToggleCashRegisterArchiveInput
+): Promise<{ success: boolean; isActive?: boolean; error?: string }> {
+  try {
+    await requireRole(["admin", "manager"]);
+    const parsed = toggleCashRegisterArchiveSchema.parse(input);
+
+    const { rows } = await db.execute<{ id: number; isActive: boolean }>(
+      archiveCashRegisterQuery(parsed.id, parsed.archive)
+    );
+    const updated = rows[0];
+
+    if (!updated) {
+      const existing = await db.query.cashRegisters.findFirst({
+        where: eq(schema.cashRegisters.id, parsed.id),
+        columns: { id: true },
+      });
+      if (!existing) {
+        return { success: false, error: "Caja no encontrada." };
+      }
+      if (parsed.archive) {
+        return {
+          success: false,
+          error: "No puedes archivar una caja con un turno abierto. Cierra el turno primero.",
+        };
+      }
+      return { success: false, error: "No se pudo actualizar el estado de la caja." };
+    }
+
+    revalidateCashRegisterPaths();
+
+    return { success: true, isActive: updated.isActive };
+  } catch (error) {
+    return {
+      success: false,
+      error: adminActionError(error, "Error al cambiar el estado de archivo de la caja."),
+    };
+  }
+}
+
+export async function deleteCashRegisterAction(
+  input: DeleteCashRegisterInput
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireRole(["admin", "manager"]);
+    const parsed = deleteCashRegisterSchema.parse(input);
+
+    const { rows } = await db.execute<{ id: number }>(deleteUnusedCashRegisterQuery(parsed.id));
+    if (!rows.length) {
+      const existing = await db.query.cashRegisters.findFirst({
+        where: eq(schema.cashRegisters.id, parsed.id),
+        columns: { id: true },
+      });
+      if (!existing) {
+        return { success: false, error: "Caja no encontrada." };
+      }
+      return {
+        success: false,
+        error:
+          "Esta caja ya tiene turnos registrados y no se puede eliminar. Archívala para deshabilitarla sin perder el historial contable.",
+      };
+    }
+
+    revalidateCashRegisterPaths();
+
+    return { success: true };
+  } catch (error) {
+    if (pgErrorCode(error) === "23503") {
+      return {
+        success: false,
+        error:
+          "Esta caja ya tiene turnos registrados y no se puede eliminar. Archívala para deshabilitarla sin perder el historial contable.",
+      };
+    }
+    return {
+      success: false,
+      error: adminActionError(error, "Error al eliminar la caja física."),
     };
   }
 }
@@ -549,6 +832,7 @@ export type ShiftSaleTicketItem = {
   productId: number;
   productName: string;
   quantity: number;
+  returnedQuantity: number;
   unitPrice: number;
   subtotal: number;
 };
@@ -570,12 +854,27 @@ export type ShiftSaleDetail = {
   items: ShiftSaleTicketItem[];
 };
 
+export type ShiftRefundDetail = {
+  id: number;
+  saleId: number;
+  saleNumber: string;
+  customerName: string;
+  refundMethod: "cash" | "card" | "transfer" | "other";
+  amount: number;
+  reason: string;
+  createdAt: string;
+  operatorName: string;
+  authorizedByName: string;
+  isCrossShift: boolean;
+};
+
 /**
- * 6. Obtiene la lista completa de ventas y productos cobrados exclusivamente en un turno
+ * 6. Obtiene la lista completa de ventas y devoluciones registradas exclusivamente en un turno
  */
 export async function getShiftSalesAction(shiftId: number): Promise<{
   success: boolean;
   sales: ShiftSaleDetail[];
+  refunds: ShiftRefundDetail[];
   totalRevenue: number;
   cashSalesTotal: number;
   electronicSalesTotal: number;
@@ -607,6 +906,7 @@ export async function getShiftSalesAction(shiftId: number): Promise<{
       return {
         success: false,
         sales: [],
+        refunds: [],
         totalRevenue: 0,
         cashSalesTotal: 0,
         electronicSalesTotal: 0,
@@ -615,25 +915,41 @@ export async function getShiftSalesAction(shiftId: number): Promise<{
       };
     }
 
-    const list = await db.query.sales.findMany({
-      where: eq(schema.sales.cashShiftId, shiftId),
-      with: {
-        user: true,
-        items: {
-          with: {
-            product: true,
+    const [list, shiftRefunds] = await Promise.all([
+      db.query.sales.findMany({
+        where: eq(schema.sales.cashShiftId, shiftId),
+        with: {
+          user: true,
+          items: {
+            with: {
+              product: true,
+            },
           },
         },
-      },
-      orderBy: (s, { desc }) => [desc(s.id)],
-    });
+        orderBy: (s, { desc }) => [desc(s.id)],
+      }),
+      db.query.saleRefunds.findMany({
+        where: eq(schema.saleRefunds.cashShiftId, shiftId),
+        with: {
+          sale: {
+            columns: { id: true, saleNumber: true, cashShiftId: true, customerName: true },
+          },
+          user: { columns: { name: true } },
+          authorizedByUser: { columns: { name: true } },
+        },
+        orderBy: (r, { desc }) => [desc(r.id)],
+      }),
+    ]);
 
-    const cashSalesTotal = parseFloat(shift.cashSales) || 0;
-    const electronicSalesTotal =
-      (parseFloat(shift.cardSales) || 0) +
-      (parseFloat(shift.transferSales) || 0) +
-      (parseFloat(shift.otherSales) || 0);
-    const totalRevenue = cashSalesTotal + electronicSalesTotal;
+    const cashSalesTotal = Number((parseFloat(shift.cashSales) || 0).toFixed(2));
+    const electronicSalesTotal = Number(
+      (
+        (parseFloat(shift.cardSales) || 0) +
+        (parseFloat(shift.transferSales) || 0) +
+        (parseFloat(shift.otherSales) || 0)
+      ).toFixed(2)
+    );
+    const totalRevenue = Number((cashSalesTotal + electronicSalesTotal).toFixed(2));
     let ticketsCount = 0;
 
     const formatted: ShiftSaleDetail[] = list.map((s) => {
@@ -655,6 +971,7 @@ export async function getShiftSalesAction(shiftId: number): Promise<{
         productId: it.productId,
         productName: it.product ? productName(it.product) : "Producto",
         quantity: it.quantity,
+        returnedQuantity: it.returnedQuantity,
         unitPrice: parseFloat(it.unitPrice) || 0,
         subtotal: parseFloat(it.subtotal) || 0,
       }));
@@ -679,9 +996,24 @@ export async function getShiftSalesAction(shiftId: number): Promise<{
       };
     });
 
+    const formattedRefunds: ShiftRefundDetail[] = shiftRefunds.map((r) => ({
+      id: r.id,
+      saleId: r.saleId,
+      saleNumber: r.sale?.saleNumber || `VTA-${r.saleId}`,
+      customerName: r.sale?.customerName || "Público General",
+      refundMethod: r.refundMethod,
+      amount: Number((parseFloat(r.amount) || 0).toFixed(2)),
+      reason: r.reason,
+      createdAt: formatBusinessShortDateTime(r.createdAt),
+      operatorName: r.user?.name || "Operador",
+      authorizedByName: r.authorizedByUser?.name || "Supervisor",
+      isCrossShift: r.sale?.cashShiftId !== shiftId,
+    }));
+
     return {
       success: true,
       sales: formatted,
+      refunds: formattedRefunds,
       totalRevenue,
       cashSalesTotal,
       electronicSalesTotal,
@@ -691,6 +1023,7 @@ export async function getShiftSalesAction(shiftId: number): Promise<{
     return {
       success: false,
       sales: [],
+      refunds: [],
       totalRevenue: 0,
       cashSalesTotal: 0,
       electronicSalesTotal: 0,

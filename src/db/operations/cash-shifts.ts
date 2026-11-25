@@ -80,3 +80,36 @@ export function approveCashCountQuery(shiftId: number, supervisorId: number, not
     RETURNING id
   `;
 }
+
+export function archiveCashRegisterQuery(registerId: number, archive: boolean) {
+  if (archive) {
+    return sql`
+      UPDATE cash_registers
+      SET is_active = false
+      WHERE id = ${registerId}
+        AND NOT EXISTS (
+          SELECT 1 FROM cash_shifts s
+          WHERE s.cash_register_id = ${registerId} AND s.status = 'open'
+        )
+      RETURNING id, name, code, location, is_active AS "isActive"
+    `;
+  }
+  return sql`
+    UPDATE cash_registers
+    SET is_active = true
+    WHERE id = ${registerId}
+    RETURNING id, name, code, location, is_active AS "isActive"
+  `;
+}
+
+export function deleteUnusedCashRegisterQuery(registerId: number) {
+  return sql`
+    DELETE FROM cash_registers
+    WHERE id = ${registerId}
+      AND NOT EXISTS (
+        SELECT 1 FROM cash_shifts s
+        WHERE s.cash_register_id = ${registerId}
+      )
+    RETURNING id, name, code
+  `;
+}

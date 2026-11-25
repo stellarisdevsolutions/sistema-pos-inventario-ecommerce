@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { MetricCard } from "@/components/admin/metric-card";
+import CajasLoading from "./loading";
 
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -19,30 +20,21 @@ import {
 import {
   Banknote,
   CreditCard,
-  QrCode,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  User,
   ShieldCheck,
   Plus,
-  ArrowUpRight,
   TrendingUp,
   Receipt,
   Store,
-  Calendar,
+  Clock,
   RefreshCw,
   Search,
-  Filter,
   Eye,
   Check,
-  Building2,
-  DollarSign,
-  Wallet,
-  Sparkles,
+  Settings,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
+import { CURRENCY_SYMBOL, formatCurrency } from "@/lib/currency";
 import { useAuth } from "@/context/auth-context";
 import {
   getCashRegistersAndShiftsAction,
@@ -50,7 +42,6 @@ import {
   openShiftAction,
   closeShiftAction,
   submitCashCountAction,
-  createCashRegisterAction,
   getShiftSalesAction,
   type CashRegisterItem,
   type ClosedShiftItem,
@@ -58,10 +49,11 @@ import {
   type UserOption,
   type ActiveShiftDetail,
   type ShiftSaleDetail,
+  type ShiftRefundDetail,
 } from "@/app/admin/actions/cash-shifts";
 
 export default function CajasPage() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<"registers" | "history">("registers");
 
   // Estado de cajas y turnos activos
@@ -71,11 +63,14 @@ export default function CajasPage() {
     todayCashSales: 0,
     todayCardTransferSales: 0,
     auditPrecisionPercent: 100,
+    closedShiftsCount: 0,
+    balancedShiftsCount: 0,
     activeShiftsCount: 0,
     totalRegistersCount: 0,
   });
   const [users, setUsers] = useState<UserOption[]>([]);
   const [isLoadingRegisters, setIsLoadingRegisters] = useState(true);
+  const [hasLoadedRegisters, setHasLoadedRegisters] = useState(false);
 
   // Estado de historial de arqueos cerrados
   const [closedShifts, setClosedShifts] = useState<ClosedShiftItem[]>([]);
@@ -98,13 +93,6 @@ export default function CajasPage() {
   const [openNotes, setOpenNotes] = useState("");
   const [isOpeningShift, setIsOpeningShift] = useState(false);
 
-  // Modal: Nueva Caja Física
-  const [createRegisterModalOpen, setCreateRegisterModalOpen] = useState(false);
-  const [newRegisterName, setNewRegisterName] = useState("");
-  const [newRegisterCode, setNewRegisterCode] = useState("");
-  const [newRegisterLocation, setNewRegisterLocation] = useState("");
-  const [isCreatingRegister, setIsCreatingRegister] = useState(false);
-
   // Modal: Ver Detalle de Arqueo Histórico
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedClosedShift, setSelectedClosedShift] = useState<ClosedShiftItem | null>(null);
@@ -115,6 +103,7 @@ export default function CajasPage() {
     shiftNumber: string;
     registerName: string;
     sales: ShiftSaleDetail[];
+    refunds: ShiftRefundDetail[];
     totalRevenue: number;
     cashSalesTotal: number;
     electronicSalesTotal: number;
@@ -133,6 +122,7 @@ export default function CajasPage() {
       shiftNumber,
       registerName,
       sales: [],
+      refunds: [],
       totalRevenue: 0,
       cashSalesTotal: 0,
       electronicSalesTotal: 0,
@@ -146,6 +136,7 @@ export default function CajasPage() {
           shiftNumber,
           registerName,
           sales: res.sales,
+          refunds: res.refunds,
           totalRevenue: res.totalRevenue,
           cashSalesTotal: res.cashSalesTotal,
           electronicSalesTotal: res.electronicSalesTotal,
@@ -178,6 +169,7 @@ export default function CajasPage() {
     } catch {
       toast.error("Error al conectar con la base de datos de cajas.");
     } finally {
+      setHasLoadedRegisters(true);
       setIsLoadingRegisters(false);
     }
   };
@@ -218,6 +210,7 @@ export default function CajasPage() {
         }
       } finally {
         if (!cancelled) {
+          setHasLoadedRegisters(true);
           setIsLoadingRegisters(false);
         }
       }
@@ -230,7 +223,15 @@ export default function CajasPage() {
   // Manejar apertura de turno
   const handleOpenShift = async () => {
     if (!selectedRegisterToOpen) return;
-    const initialCashNum = parseFloat(initialCashInput) || 0;
+    const initialCashNum = Number(initialCashInput);
+    if (!Number.isFinite(initialCashNum) || initialCashNum < 0) {
+      toast.error("Ingresa un fondo inicial válido mayor o igual a cero.");
+      return;
+    }
+    if (user?.role !== "cashier" && !selectedCashierId) {
+      toast.error("Selecciona un cajero disponible para abrir el turno.");
+      return;
+    }
 
     setIsOpeningShift(true);
     try {
@@ -262,8 +263,14 @@ export default function CajasPage() {
     if (!shiftToClose) return;
 
     const review = shiftToClose.review;
-    if (review ? review.difference !== 0 && !supervisorNote.trim() : !actualCashCounted.trim()) {
-      toast.error(review ? "Explica la diferencia para aprobar el cierre." : "Ingresa el efectivo contado.");
+    const countedNum = Number(actualCashCounted);
+    if (review) {
+      if (review.difference !== 0 && !supervisorNote.trim()) {
+        toast.error("Explica la diferencia para aprobar el cierre.");
+        return;
+      }
+    } else if (!actualCashCounted.trim() || !Number.isFinite(countedNum) || countedNum < 0) {
+      toast.error("Ingresa un efectivo contado válido mayor o igual a cero.");
       return;
     }
 
@@ -271,7 +278,7 @@ export default function CajasPage() {
     try {
       const res = review
         ? await closeShiftAction({ shiftId: shiftToClose.id, notes: supervisorNote.trim() })
-        : await submitCashCountAction({ shiftId: shiftToClose.id, actualCash: Number(actualCashCounted) });
+        : await submitCashCountAction({ shiftId: shiftToClose.id, actualCash: countedNum });
 
       if (res.success) {
         toast.success(review ? "Cierre aprobado" : "Conteo enviado para revisión");
@@ -288,38 +295,6 @@ export default function CajasPage() {
       toast.error("Error al procesar el cierre de caja.");
     } finally {
       setIsClosingShift(false);
-    }
-  };
-
-  // Manejar creación de nueva caja física
-  const handleCreateRegister = async () => {
-    if (!newRegisterName.trim() || !newRegisterCode.trim()) {
-      toast.error("El nombre y código de la caja son obligatorios.");
-      return;
-    }
-
-    setIsCreatingRegister(true);
-    try {
-      const res = await createCashRegisterAction({
-        name: newRegisterName.trim(),
-        code: newRegisterCode.trim().toUpperCase(),
-        location: newRegisterLocation.trim() || null,
-      });
-
-      if (res.success && res.data) {
-        toast.success(`Caja "${res.data.name}" creada exitosamente.`);
-        setCreateRegisterModalOpen(false);
-        setNewRegisterName("");
-        setNewRegisterCode("");
-        setNewRegisterLocation("");
-        loadRegistersData();
-      } else {
-        toast.error(res.error || "No se pudo registrar la caja.");
-      }
-    } catch {
-      toast.error("Error al crear la terminal.");
-    } finally {
-      setIsCreatingRegister(false);
     }
   };
 
@@ -342,13 +317,22 @@ export default function CajasPage() {
     });
   }, [closedShifts, historySearch, historyStatusFilter]);
 
-  const ownShift = user ? registers.find(register => register.activeShift?.userId === user.id)?.activeShift : null;
+  const busyUserIds = useMemo(
+    () => new Set(registers.filter((r) => r.activeShift).map((r) => r.activeShift!.userId)),
+    [registers]
+  );
+
+  const ownShift = user ? registers.find((register) => register.activeShift?.userId === user.id)?.activeShift : null;
   const hasOwnOpenShift = Boolean(ownShift && !ownShift.pendingReview);
+
+  if (!hasLoadedRegisters || isAuthLoading) {
+    return <CajasLoading />;
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-8">
       {/* =========================================================================
-          1. HEADER CON BOTÓN DE NUEVA CAJA Y ARQUEO
+          1. HEADER CON ACCESO A PUNTO DE VENTA Y ACTUALIZACIÓN
           ========================================================================= */}
       <div className="admin-page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
@@ -363,20 +347,6 @@ export default function CajasPage() {
             <Link href="/admin/ventas" className="inline-flex min-h-10 items-center justify-center rounded-xl bg-admin-brand px-4 text-sm font-medium text-admin-on-solid hover:bg-admin-brand-hover">
               Ir al punto de venta
             </Link>
-          )}
-          {user && user.role !== "cashier" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setNewRegisterCode(`POS-0${registers.length + 1}`);
-                setCreateRegisterModalOpen(true);
-              }}
-              className="h-10 px-3.5 rounded-xl border-admin-card-border text-xs font-bold gap-1.5 hover:bg-admin-raised cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Nueva Caja Física</span>
-            </Button>
           )}
 
           {/* Botón rápido para refrescar */}
@@ -398,34 +368,38 @@ export default function CajasPage() {
       {/* =========================================================================
           2. KPIS FINANCIEROS DE CONTROL DE CAJAS
           ========================================================================= */}
-      {user && user.role !== "cashier" && !registers.some(r => r.activeShift?.userId === user.id && !r.activeShift.pendingReview) && (
-      <section className="admin-metrics" aria-label="Indicadores de cajas">
-        <MetricCard
-          label="Fondo inicial en gavetas"
-          value={formatCurrency(kpis.activeInitialCash)}
-          detail={`${kpis.activeShiftsCount} ${kpis.activeShiftsCount === 1 ? "caja abierta" : "cajas abiertas"}`}
-          icon={Banknote}
-        />
-        <MetricCard
-          label="Ventas en efectivo hoy"
-          value={formatCurrency(kpis.todayCashSales)}
-          detail="Dinero ingresado en turnos"
-          icon={TrendingUp}
-          tone="success"
-        />
-        <MetricCard
-          label="Ventas con tarjeta o QR"
-          value={formatCurrency(kpis.todayCardTransferSales)}
-          detail="Cobros electrónicos conciliados"
-          icon={CreditCard}
-        />
-        <MetricCard
-          label="Precisión de arqueos"
-          value={`${kpis.auditPrecisionPercent}%`}
-          detail="Cierres sin diferencias"
-          icon={ShieldCheck}
-        />
-      </section>
+      {user && user.role !== "cashier" && !hasOwnOpenShift && (
+        <section className="admin-metrics" aria-label="Indicadores de cajas">
+          <MetricCard
+            label="Fondo inicial en gavetas"
+            value={formatCurrency(kpis.activeInitialCash)}
+            detail={`${kpis.activeShiftsCount} ${kpis.activeShiftsCount === 1 ? "turno abierto" : "turnos abiertos"} · ${kpis.totalRegistersCount} ${kpis.totalRegistersCount === 1 ? "caja activa" : "cajas activas"}`}
+            icon={Banknote}
+          />
+          <MetricCard
+            label="Ventas en efectivo hoy"
+            value={formatCurrency(kpis.todayCashSales)}
+            detail="Neto en turnos de hoy"
+            icon={TrendingUp}
+            tone={kpis.todayCashSales < 0 ? "warning" : "success"}
+          />
+          <MetricCard
+            label="Cobros electrónicos hoy"
+            value={formatCurrency(kpis.todayCardTransferSales)}
+            detail="Tarjeta, QR y otros en turnos"
+            icon={CreditCard}
+          />
+          <MetricCard
+            label="Precisión de arqueos"
+            value={kpis.closedShiftsCount > 0 ? `${kpis.auditPrecisionPercent}%` : "—"}
+            detail={
+              kpis.closedShiftsCount > 0
+                ? `${kpis.balancedShiftsCount} de ${kpis.closedShiftsCount} sin diferencias`
+                : "Sin arqueos cerrados aún"
+            }
+            icon={ShieldCheck}
+          />
+        </section>
       )}
 
       {/* =========================================================================
@@ -457,29 +431,24 @@ export default function CajasPage() {
           4. CONTENIDO: TERMINALES POS & TURNOS ACTIVOS
           ========================================================================= */}
       {activeTab === "registers" ? (
-        isLoadingRegisters ? (
-          <div className="p-16 text-center bg-admin-card-bg rounded-xl border border-admin-card-border">
-            <RefreshCw className="h-8 w-8 text-admin-brand-text animate-spin mx-auto mb-3" />
-            <p className="text-sm font-bold text-admin-secondary">
-              Cargando terminales y balances en vivo...
-            </p>
-          </div>
-        ) : registers.length === 0 ? (
+        registers.length === 0 ? (
           <div className="p-12 text-center bg-admin-card-bg rounded-xl border border-dashed border-admin-card-border space-y-3">
             <Store className="h-10 w-10 text-slate-300 mx-auto" />
             <h3 className="text-sm font-bold text-admin-text">
-              No hay cajas registradoras configuradas
+              No hay cajas registradoras activas
             </h3>
-            {user && user.role !== "cashier" && (
-              <Button
-                onClick={() => {
-                  setNewRegisterCode("POS-01");
-                  setCreateRegisterModalOpen(true);
-                }}
-                className="bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid rounded-xl text-xs font-bold"
+            {user && user.role !== "cashier" ? (
+              <Link
+                href="/admin/ajustes"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-admin-brand px-4 text-xs font-bold text-admin-on-solid hover:bg-admin-brand-hover"
               >
-                Crear Primera Caja Física
-              </Button>
+                <Settings className="h-4 w-4" />
+                <span>Configurar cajas en Ajustes</span>
+              </Link>
+            ) : (
+              <p className="text-xs text-slate-400">
+                Solicita a un administrador habilitar una caja física en Ajustes.
+              </p>
             )}
           </div>
         ) : (
@@ -504,12 +473,23 @@ export default function CajasPage() {
                           <div>
                             <h3 className="font-semibold text-base text-white">{reg.name}</h3>
                             <p className="text-[11px] text-slate-400">
-                              Terminal {reg.code} {reg.location && `• ${reg.location}`}
+                              Terminal {reg.code} {reg.location && `• ${reg.location}`}{" "}
+                              {!reg.isActive && "• Archivada"}
                             </p>
                           </div>
                         </div>
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-                          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <div
+                          className={cn(
+                            "inline-flex items-center gap-1.5 text-xs font-semibold",
+                            active.pendingReview ? "text-amber-400" : "text-emerald-400"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "h-2 w-2 rounded-full",
+                              active.pendingReview ? "bg-amber-400" : "bg-emerald-400 animate-pulse"
+                            )}
+                          />
                           <span>{active.pendingReview ? "Pendiente de aprobación" : "Turno abierto"}</span>
                         </div>
                       </div>
@@ -538,6 +518,12 @@ export default function CajasPage() {
                           <div><dt>Ventas en efectivo</dt><dd>{formatCurrency(active.totals.cashSales)}</dd></div>
                           <div><dt>Tarjeta y QR</dt><dd>{formatCurrency(active.totals.electronicSales)}</dd></div>
                         </dl>
+                      )}
+
+                      {active.pendingReview && !active.review && (
+                        <p className="rounded-lg bg-amber-500/10 border border-amber-400/20 px-3 py-2 text-xs text-amber-200">
+                          Conteo enviado. Esperando aprobación de un supervisor.
+                        </p>
                       )}
                     </div>
 
@@ -605,9 +591,14 @@ export default function CajasPage() {
                     variant="outline"
                     disabled={!user || !reg.isActive || (user.role === "cashier" && !!ownShift)}
                     onClick={() => {
+                      const defaultCashier =
+                        user && !busyUserIds.has(user.id)
+                          ? user.id
+                          : users.find((u) => !busyUserIds.has(u.id))?.id ?? user?.id ?? 0;
                       setSelectedRegisterToOpen(reg);
-                      setSelectedCashierId(user?.id ?? 0);
+                      setSelectedCashierId(defaultCashier);
                       setInitialCashInput("150.00");
+                      setOpenNotes("");
                       setOpenShiftModalOpen(true);
                     }}
                     className="w-full h-11 rounded-xl font-bold text-xs gap-2 border-admin-brand/30 text-admin-brand-text hover:bg-[var(--admin-brand-light)] cursor-pointer"
@@ -679,13 +670,44 @@ export default function CajasPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-admin-card-border text-admin-secondary">
-                  {isLoadingHistory ? (
-                    <tr>
-                      <td colSpan={9} className="text-center py-12 text-slate-400">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-admin-brand-text" />
-                        Cargando historial de arqueos conciliados...
-                      </td>
-                    </tr>
+                  {isLoadingHistory && closedShifts.length === 0 ? (
+                    [1, 2, 3, 4, 5].map((row) => (
+                      <tr key={row}>
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-4 w-28 rounded-md bg-admin-card-border" />
+                            <Skeleton className="h-3 w-36 rounded-md bg-admin-card-border" />
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-24 rounded-md bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-24 rounded-md bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-1">
+                            <Skeleton className="h-3 w-24 rounded-md bg-admin-card-border" />
+                            <Skeleton className="h-3 w-24 rounded-md bg-admin-card-border" />
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-16 rounded-md ml-auto bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-16 rounded-md ml-auto bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-14 rounded-md ml-auto bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-5 w-20 rounded-full mx-auto bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-8 w-16 rounded-lg ml-auto bg-admin-card-border" />
+                        </td>
+                      </tr>
+                    ))
                   ) : filteredClosedShifts.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-12 text-slate-400">
@@ -804,22 +826,49 @@ export default function CajasPage() {
           {shiftToClose?.review ? (
             <div className="space-y-4 py-3 text-sm">
               <dl className="grid grid-cols-3 gap-3 rounded-xl bg-admin-raised p-3">
-                <div><dt>Esperado</dt><dd>{formatCurrency(shiftToClose.review.expectedCash)}</dd></div>
-                <div><dt>Contado</dt><dd>{formatCurrency(shiftToClose.review.actualCash)}</dd></div>
                 <div>
-                  <dt>{shiftToClose.review.difference < 0 ? "Faltante" : shiftToClose.review.difference > 0 ? "Sobrante" : "Diferencia"}</dt>
-                  <dd>{formatCurrency(Math.abs(shiftToClose.review.difference))}</dd>
+                  <dt className="text-xs text-slate-500">Esperado</dt>
+                  <dd className="font-mono font-semibold">{formatCurrency(shiftToClose.review.expectedCash)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Contado</dt>
+                  <dd className="font-mono font-semibold">{formatCurrency(shiftToClose.review.actualCash)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">
+                    {shiftToClose.review.difference < 0
+                      ? "Faltante"
+                      : shiftToClose.review.difference > 0
+                      ? "Sobrante"
+                      : "Cuadrado"}
+                  </dt>
+                  <dd
+                    className={cn(
+                      "font-mono font-semibold",
+                      shiftToClose.review.difference < 0
+                        ? "text-rose-600 dark:text-rose-400"
+                        : shiftToClose.review.difference > 0
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    )}
+                  >
+                    {shiftToClose.review.difference === 0
+                      ? formatCurrency(0)
+                      : `${shiftToClose.review.difference > 0 ? "+" : "-"}${formatCurrency(Math.abs(shiftToClose.review.difference))}`}
+                  </dd>
                 </div>
               </dl>
-              <label className="grid gap-2" htmlFor="cash-review-note">
-                {shiftToClose.review.difference === 0 ? "Observación opcional" : "Motivo de la diferencia"}
+              <label className="grid gap-2 text-xs font-bold text-admin-secondary" htmlFor="cash-review-note">
+                {shiftToClose.review.difference === 0 ? "Observación opcional" : "Motivo de la diferencia (obligatorio)"}
                 <Input id="cash-review-note" maxLength={500} value={supervisorNote} onChange={(e) => setSupervisorNote(e.target.value)} />
               </label>
             </div>
           ) : (
             <div className="space-y-3 py-3 text-sm">
-              <p>Cuenta el dinero de la gaveta. Al enviar el conteo, el turno queda bloqueado para cobros hasta que un supervisor apruebe el cierre.</p>
-              <label className="grid gap-2" htmlFor="physical-cash-count">
+              <p className="text-xs text-admin-secondary">
+                Cuenta el dinero físico de la gaveta. Al enviar el conteo, el turno queda bloqueado para cobros hasta que un supervisor apruebe el cierre.
+              </p>
+              <label className="grid gap-2 text-xs font-bold text-admin-secondary" htmlFor="physical-cash-count">
                 Efectivo contado ({CURRENCY_SYMBOL})
                 <Input id="physical-cash-count" type="number" step="0.01" min="0" value={actualCashCounted} onChange={(e) => setActualCashCounted(e.target.value)} />
               </label>
@@ -887,17 +936,35 @@ export default function CajasPage() {
                   </span>
                 </div>
               ) : (
-                <select
-                  value={selectedCashierId}
-                  onChange={(e) => setSelectedCashierId(Number(e.target.value))}
-                  className="w-full h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border font-medium"
-                >
-                  {users.filter(user => user.role !== "warehouse").map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role})
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1.5">
+                  <select
+                    value={selectedCashierId}
+                    onChange={(e) => setSelectedCashierId(Number(e.target.value))}
+                    className="w-full h-10 px-3 text-xs rounded-xl bg-admin-raised border border-admin-card-border font-medium"
+                  >
+                    {users
+                      .filter((u) => u.role !== "warehouse")
+                      .map((u) => {
+                        const isBusy = busyUserIds.has(u.id);
+                        const roleLabel =
+                          u.role === "admin"
+                            ? "Administrador"
+                            : u.role === "manager"
+                            ? "Supervisor"
+                            : "Cajero";
+                        return (
+                          <option key={u.id} value={u.id} disabled={isBusy}>
+                            {u.name} ({roleLabel}){isBusy ? " — Turno abierto" : ""}
+                          </option>
+                        );
+                      })}
+                  </select>
+                  {users.filter((u) => u.role !== "warehouse").every((u) => busyUserIds.has(u.id)) && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                      Todos los operadores habilitados ya tienen un turno abierto.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
@@ -972,94 +1039,7 @@ export default function CajasPage() {
       </Dialog>
 
       {/* =========================================================================
-          8. MODAL: CREAR NUEVA CAJA FÍSICA
-          ========================================================================= */}
-      <Dialog open={createRegisterModalOpen} onOpenChange={setCreateRegisterModalOpen}>
-        <DialogContent className="sm:max-w-md admin-panel p-6">
-          <DialogHeader className="pb-3 border-b border-admin-card-border">
-            <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
-              <Plus className="h-5 w-5 text-admin-brand-text" />
-              Nueva Caja Física Registradora
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">
-              Registra una terminal física adicional para habilitar múltiples puntos de cobro concurrentes.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3.5 py-3 text-xs">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-admin-secondary">
-                Nombre de la Caja:
-              </label>
-              <Input
-                value={newRegisterName}
-                onChange={(e) => setNewRegisterName(e.target.value)}
-                placeholder="Ej. Caja 3 - Planta Alta / Mostrador Rápido"
-                className="h-10 text-xs rounded-xl border-admin-card-border"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-admin-secondary">
-                  Código Identificador:
-                </label>
-                <Input
-                  value={newRegisterCode}
-                  onChange={(e) => setNewRegisterCode(e.target.value.toUpperCase())}
-                  placeholder="POS-03"
-                  className="h-10 text-xs font-mono font-bold rounded-xl border-admin-card-border uppercase"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-admin-secondary">
-                  Ubicación física:
-                </label>
-                <Input
-                  value={newRegisterLocation}
-                  onChange={(e) => setNewRegisterLocation(e.target.value)}
-                  placeholder="Ej. Salón Principal"
-                  className="h-10 text-xs rounded-xl border-admin-card-border"
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-2 border-t border-admin-card-border gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isCreatingRegister}
-              className="rounded-xl h-10 text-xs font-bold border-slate-200"
-              onClick={() => setCreateRegisterModalOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              size="sm"
-              disabled={isCreatingRegister}
-              onClick={handleCreateRegister}
-              className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
-            >
-              {isCreatingRegister ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  <span>Creando...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="h-3.5 w-3.5" />
-                  <span>Guardar Caja Registradora</span>
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* =========================================================================
-          9. MODAL: VER ACTA DE ARQUEO HISTÓRICO
+          8. MODAL: VER ACTA DE ARQUEO HISTÓRICO
           ========================================================================= */}
       <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
         <DialogContent className="sm:max-w-md admin-panel p-6">
@@ -1105,7 +1085,8 @@ export default function CajasPage() {
                 <div className="flex justify-between">
                   <span className="text-slate-500">Ventas en Efectivo:</span>
                   <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                    +{formatCurrency(selectedClosedShift.cashSales)}
+                    {selectedClosedShift.cashSales >= 0 ? "+" : ""}
+                    {formatCurrency(selectedClosedShift.cashSales)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1210,28 +1191,53 @@ export default function CajasPage() {
           </DialogHeader>
 
           {isLoadingShiftSales ? (
-            <div className="py-12 text-center text-slate-400">
-              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-admin-brand-text" />
-              <p className="text-xs font-medium">Cargando tickets y productos vendidos...</p>
+            <div className="space-y-4 py-2" aria-label="Cargando tickets del turno">
+              <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-admin-raised border border-admin-card-border">
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-4 w-24 rounded-md bg-admin-card-border" />
+                  <Skeleton className="h-4 w-16 rounded-md bg-admin-card-border" />
+                </div>
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-4 w-28 rounded-md bg-admin-card-border" />
+                  <Skeleton className="h-4 w-16 rounded-md bg-admin-card-border" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                {[1, 2].map((ticket) => (
+                  <div
+                    key={ticket}
+                    className="p-3.5 rounded-xl border border-admin-card-border bg-admin-card-bg space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <Skeleton className="h-4 w-44 rounded-md bg-admin-card-border" />
+                      <Skeleton className="h-5 w-20 rounded-md bg-admin-card-border" />
+                    </div>
+                    <div className="pt-2 border-t border-admin-card-border space-y-1.5">
+                      <Skeleton className="h-3.5 w-full rounded-md bg-admin-card-border" />
+                      <Skeleton className="h-3.5 w-4/5 rounded-md bg-admin-card-border" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : !shiftSalesData || shiftSalesData.sales.length === 0 ? (
+          ) : !shiftSalesData || (shiftSalesData.sales.length === 0 && shiftSalesData.refunds.length === 0) ? (
             <div className="py-12 text-center text-slate-400 space-y-2">
               <Receipt className="h-10 w-10 mx-auto opacity-30" />
               <p className="text-sm font-bold text-admin-secondary">
-                Aún no hay tickets cobrados en este turno
+                Aún no hay tickets cobrados ni devoluciones en este turno
               </p>
               <p className="text-xs text-slate-400">
-                Cada venta realizada en el Punto de Venta (POS) aparecerá aquí automáticamente.
+                Cada venta o devolución realizada en esta caja aparecerá aquí automáticamente.
               </p>
             </div>
           ) : (
-            <div className="space-y-3 py-2">
-              {/* Desglose rápido por medio de pago */}
+            <div className="space-y-4 py-2">
+              {/* Desglose neto por medio de pago */}
               <div className="grid grid-cols-2 gap-2 text-xs p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 flex items-center gap-1.5 font-medium">
                     <Banknote className="h-3.5 w-3.5 text-emerald-600" />
-                    Efectivo:
+                    Efectivo neto:
                   </span>
                   <span className="font-bold text-admin-text">
                     {formatCurrency(shiftSalesData.cashSalesTotal)}
@@ -1240,7 +1246,7 @@ export default function CajasPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 flex items-center gap-1.5 font-medium">
                     <CreditCard className="h-3.5 w-3.5 text-admin-brand-text" />
-                    Tarjeta / QR:
+                    Tarjeta / QR / Otros:
                   </span>
                   <span className="font-bold text-admin-text">
                     {formatCurrency(shiftSalesData.electronicSalesTotal)}
@@ -1249,60 +1255,145 @@ export default function CajasPage() {
               </div>
 
               {/* Lista de tickets emitidos */}
-              <div className="space-y-2">
-                {shiftSalesData.sales.map((sale) => (
-                  <div
-                    key={sale.id}
-                    className="p-3.5 rounded-xl border border-admin-card-border bg-admin-card-bg space-y-2"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-admin-text">
-                          #{sale.saleNumber}
-                        </span>
-                        <span className="text-[10px] text-slate-400">· {sale.createdAt}</span>
-                        <span className="text-admin-secondary font-bold">
-                          {sale.customerName}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-admin-raised text-admin-secondary capitalize">
-                          {sale.paymentMethod === "cash"
-                            ? "Efectivo"
-                            : sale.paymentMethod === "card"
-                            ? "Tarjeta"
-                            : sale.paymentMethod === "other"
-                            ? "Otro"
-                            : "QR / Transf."}
-                        </span>
-                        <span className="font-semibold text-sm text-admin-text">
-                          {formatCurrency(sale.totalAmount)}
-                        </span>
-                      </div>
-                    </div>
+              {shiftSalesData.sales.length > 0 && (
+                <div className="space-y-2">
+                  {shiftSalesData.sales.map((sale) => {
+                    const isCancelled = sale.status === "cancelled";
+                    const hasRefund = sale.refundedAmount > 0;
+                    return (
+                      <div
+                        key={sale.id}
+                        className="p-3.5 rounded-xl border border-admin-card-border bg-admin-card-bg space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono font-semibold text-admin-text">
+                              #{sale.saleNumber}
+                            </span>
+                            <span className="text-[10px] text-slate-400">· {sale.createdAt}</span>
+                            <span className="text-admin-secondary font-bold">
+                              {sale.customerName}
+                            </span>
+                            {isCancelled && (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                                Anulada
+                              </span>
+                            )}
+                            {!isCancelled && hasRefund && (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                {sale.status === "refunded" ? "Devuelta" : "Dev. parcial"}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-admin-raised text-admin-secondary capitalize">
+                              {sale.paymentMethod === "cash"
+                                ? "Efectivo"
+                                : sale.paymentMethod === "card"
+                                ? "Tarjeta"
+                                : sale.paymentMethod === "other"
+                                ? "Otro"
+                                : "QR / Transf."}
+                            </span>
+                            <div className="text-right">
+                              <span
+                                className={cn(
+                                  "font-semibold text-sm block",
+                                  isCancelled ? "line-through text-slate-400" : "text-admin-text"
+                                )}
+                              >
+                                {formatCurrency(isCancelled ? sale.totalAmount : sale.netAmount)}
+                              </span>
+                              {!isCancelled && hasRefund && (
+                                <span className="text-[10px] text-slate-400 block">
+                                  Original {formatCurrency(sale.totalAmount)} · Dev. -{formatCurrency(sale.refundedAmount)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                    {/* Desglose de productos vendidos en este ticket */}
-                    <div className="pt-2 border-t border-admin-card-border space-y-1">
-                      {sale.items.map((it) => (
-                        <div
-                          key={it.id}
-                          className="flex items-center justify-between text-[11px] text-admin-secondary"
-                        >
-                          <span className="truncate pr-2">
-                            <span className="font-bold text-slate-800 dark:text-slate-200">
-                              {it.quantity}x
-                            </span>{" "}
-                            {it.productName}
+                        {/* Desglose de productos vendidos en este ticket */}
+                        <div className="pt-2 border-t border-admin-card-border space-y-1">
+                          {sale.items.map((it) => (
+                            <div
+                              key={it.id}
+                              className="flex items-center justify-between text-[11px] text-admin-secondary"
+                            >
+                              <span className="truncate pr-2">
+                                <span className="font-bold text-slate-800 dark:text-slate-200">
+                                  {it.quantity}x
+                                </span>{" "}
+                                {it.productName}
+                                {it.returnedQuantity > 0 && (
+                                  <span className="ml-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                                    ({it.returnedQuantity} dev.)
+                                  </span>
+                                )}
+                              </span>
+                              <span className="font-mono shrink-0 font-medium">
+                                {formatCurrency(it.subtotal)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Devoluciones aplicadas en este turno */}
+              {shiftSalesData.refunds.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-admin-card-border">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-admin-text">
+                    <RotateCcw className="h-3.5 w-3.5 text-amber-500" />
+                    <span>Devoluciones registradas en este turno ({shiftSalesData.refunds.length})</span>
+                  </div>
+                  <div className="space-y-2">
+                    {shiftSalesData.refunds.map((refund) => (
+                      <div
+                        key={refund.id}
+                        className="p-3 rounded-xl border border-admin-card-border bg-admin-raised/60 flex items-start justify-between gap-3 text-xs"
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono font-semibold text-admin-text">
+                              #{refund.saleNumber}
+                            </span>
+                            <span className="text-[10px] text-slate-400">· {refund.createdAt}</span>
+                            {refund.isCrossShift && (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                                Venta de otro turno
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-admin-secondary">
+                            {refund.customerName} · {refund.reason}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            Autorizado por {refund.authorizedByName}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0 space-y-1">
+                          <span className="block font-mono font-semibold text-rose-600 dark:text-rose-400">
+                            -{formatCurrency(refund.amount)}
                           </span>
-                          <span className="font-mono shrink-0 font-medium">
-                            {formatCurrency(it.subtotal)}
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-md bg-admin-card-bg border border-admin-card-border text-admin-secondary">
+                            {refund.refundMethod === "cash"
+                              ? "Efectivo"
+                              : refund.refundMethod === "card"
+                              ? "Tarjeta"
+                              : refund.refundMethod === "other"
+                              ? "Otro"
+                              : "QR / Transf."}
                           </span>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 

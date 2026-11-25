@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Banknote,
   TrendingUp,
+  Settings,
 } from "lucide-react";
 import type { UserRole } from "@/lib/auth/session-edge";
 
@@ -64,6 +65,13 @@ export const navigationItems: NavItem[] = [
     icon: ShieldCheck,
     section: "seguimiento",
     allowedRoles: ["admin"],
+  },
+  {
+    title: "Ajustes",
+    href: "/admin/ajustes",
+    icon: Settings,
+    section: "seguimiento",
+    allowedRoles: ["admin", "manager"],
   },
   {
     title: "Inventario",

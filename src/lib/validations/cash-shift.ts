@@ -46,7 +46,8 @@ export const createCashRegisterSchema = z.object({
     .trim()
     .min(2, "El código debe tener al menos 2 caracteres")
     .max(20, "El código no debe superar los 20 caracteres")
-    .toUpperCase(),
+    .toUpperCase()
+    .regex(/^[A-Z0-9_-]+$/, "El código solo puede incluir letras, números, guiones o guion bajo"),
   location: z
     .string()
     .trim()
@@ -55,7 +56,23 @@ export const createCashRegisterSchema = z.object({
     .nullable(),
 });
 
+export const updateCashRegisterSchema = createCashRegisterSchema.extend({
+  id: z.number().int().positive("Identificador de caja inválido"),
+});
+
+export const toggleCashRegisterArchiveSchema = z.object({
+  id: z.number().int().positive("Identificador de caja inválido"),
+  archive: z.boolean(),
+});
+
+export const deleteCashRegisterSchema = z.object({
+  id: z.number().int().positive("Identificador de caja inválido"),
+});
+
 export type OpenShiftInput = z.infer<typeof openShiftSchema>;
 export type SubmitCashCountInput = z.infer<typeof submitCashCountSchema>;
 export type CloseShiftInput = z.infer<typeof closeShiftSchema>;
 export type CreateCashRegisterInput = z.infer<typeof createCashRegisterSchema>;
+export type UpdateCashRegisterInput = z.infer<typeof updateCashRegisterSchema>;
+export type ToggleCashRegisterArchiveInput = z.infer<typeof toggleCashRegisterArchiveSchema>;
+export type DeleteCashRegisterInput = z.infer<typeof deleteCashRegisterSchema>;

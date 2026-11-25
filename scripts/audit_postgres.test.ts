@@ -14,7 +14,7 @@ import { productDbInsertSchema, productOptionConfigSchema } from "@/lib/validati
 import { saleFormSchema } from "@/lib/validations/sale";
 import { purchaseFormSchema, purchaseReturnSchema, type PurchaseReturnInput } from "@/lib/validations/purchase";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
-import { approveCashCountQuery, submitCashCountQuery } from "@/db/operations/cash-shifts";
+import { approveCashCountQuery, archiveCashRegisterQuery, deleteUnusedCashRegisterQuery, openShiftQuery, submitCashCountQuery } from "@/db/operations/cash-shifts";
 
 async function createDatabase(context: TestContext) {
   const db = new PGlite();
@@ -620,4 +620,50 @@ test("archivar exige desactivar canales pero conserva historial y permite regist
   );
   const adjRes = await db.query<{ newStock: number }>(adjStmt.sql, adjStmt.params);
   assert.equal(adjRes.rows[0]?.newStock, 0);
+});
+
+test("cajas físicas: archivar bloquea turnos abiertos y solo se elimina sin historial", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  await db.exec(`
+    INSERT INTO cash_registers (name, code)
+    VALUES ('Caja Principal', 'CAJA-A'), ('Caja Errónea', 'CAJA-B');
+  `);
+
+  const delUnusedStmt = dialect.sqlToQuery(deleteUnusedCashRegisterQuery(2));
+  assert.equal((await db.query(delUnusedStmt.sql, delUnusedStmt.params)).rows.length, 1);
+
+  const openAStmt = dialect.sqlToQuery(
+    openShiftQuery({
+      cashRegisterId: 1,
+      userId: 1,
+      initialCash: 100,
+      notes: null,
+      prefix: "TURNO-2026-",
+    })
+  );
+  assert.equal((await db.query(openAStmt.sql, openAStmt.params)).rows.length, 1);
+
+  const archiveOpenStmt = dialect.sqlToQuery(archiveCashRegisterQuery(1, true));
+  assert.equal((await db.query(archiveOpenStmt.sql, archiveOpenStmt.params)).rows.length, 0);
+
+  const delOpenStmt = dialect.sqlToQuery(deleteUnusedCashRegisterQuery(1));
+  assert.equal((await db.query(delOpenStmt.sql, delOpenStmt.params)).rows.length, 0);
+
+  await db.exec("UPDATE cash_shifts SET status = 'closed', closed_at = now() WHERE cash_register_id = 1");
+
+  const delUsedStmt = dialect.sqlToQuery(deleteUnusedCashRegisterQuery(1));
+  assert.equal((await db.query(delUsedStmt.sql, delUsedStmt.params)).rows.length, 0);
+
+  const archiveClosedStmt = dialect.sqlToQuery(archiveCashRegisterQuery(1, true));
+  const archivedRows = (await db.query<{ isActive: boolean }>(archiveClosedStmt.sql, archiveClosedStmt.params)).rows;
+  assert.deepEqual(archivedRows.map((r) => r.isActive), [false]);
+
+  assert.equal((await db.query(openAStmt.sql, openAStmt.params)).rows.length, 0);
+
+  const restoreStmt = dialect.sqlToQuery(archiveCashRegisterQuery(1, false));
+  const restoredRows = (await db.query<{ isActive: boolean }>(restoreStmt.sql, restoreStmt.params)).rows;
+  assert.deepEqual(restoredRows.map((r) => r.isActive), [true]);
+
+  assert.equal((await db.query(openAStmt.sql, openAStmt.params)).rows.length, 1);
 });

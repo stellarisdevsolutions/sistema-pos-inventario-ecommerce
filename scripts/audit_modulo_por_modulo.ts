@@ -17,7 +17,18 @@ import { refundUnitAmounts } from "@/lib/refund-amount";
 import { csvCell, escapeHtml } from "@/lib/sanitize";
 import { refundSaleSchema, saleFormSchema } from "@/lib/validations/sale";
 import { userUpdateSchema } from "@/lib/validations/user";
-import { closeShiftAction, openShiftAction, submitCashCountAction } from "@/app/admin/actions/cash-shifts";
+import {
+  closeShiftAction,
+  createCashRegisterAction,
+  deleteCashRegisterAction,
+  getCashRegistersAndShiftsAction,
+  getCashRegistersManagementAction,
+  getShiftSalesAction,
+  openShiftAction,
+  submitCashCountAction,
+  toggleCashRegisterArchiveAction,
+  updateCashRegisterAction,
+} from "@/app/admin/actions/cash-shifts";
 import { archiveProductAction, createCategoryAction, deleteCategoryAction, updateCategoryAction } from "@/app/admin/actions/products";
 import { createSaleAction, getPosCatalogAction, getPosContextAction, getSalesHistoryAction } from "@/app/admin/actions/sales";
 import { uploadCategoryPhotoAction, uploadProductImageAction } from "@/app/admin/actions/upload";
@@ -65,6 +76,13 @@ test("la matriz de rutas concede a cada rol su módulo y restringe usuarios", as
       const denied = await proxy(new NextRequest("http://localhost/admin/usuarios", { headers }));
       assert.equal(denied.status, 307);
       assert.equal(new URL(denied.headers.get("location")!).searchParams.get("denied"), "1");
+    }
+    const settingsRes = await proxy(new NextRequest("http://localhost/admin/ajustes", { headers }));
+    if (role === "admin" || role === "manager") {
+      assert.equal(settingsRes.status, 200);
+    } else {
+      assert.equal(settingsRes.status, 307);
+      assert.equal(new URL(settingsRes.headers.get("location")!).searchParams.get("denied"), "1");
     }
   }
 
@@ -173,6 +191,8 @@ test("las Server Actions rechazan la llamada sin sesión antes de leer o escribi
   const operations = [
     t.mock.method(db, "insert", guarded), t.mock.method(db, "update", guarded),
     t.mock.method(db, "delete", guarded), t.mock.method(db, "batch", guarded),
+    t.mock.method(db, "execute", guarded),
+    t.mock.method(db.query.cashRegisters, "findMany", guarded),
     t.mock.method(db.query.products, "findMany", guarded),
     t.mock.method(db.query.users, "findMany", guarded), t.mock.method(db.query.sales, "findMany", guarded),
   ];
@@ -181,6 +201,11 @@ test("las Server Actions rechazan la llamada sin sesión antes de leer o escribi
     getPosCatalogAction(), getPosContextAction(), getSalesHistoryAction(), createSaleAction(sale),
     createCategoryAction("Categoría"), updateCategoryAction(1, "Categoría"), deleteCategoryAction(1),
     archiveProductAction(1, true),
+    getCashRegistersAndShiftsAction(), getCashRegistersManagementAction(), getShiftSalesAction(1),
+    createCashRegisterAction({ name: "Caja Test", code: "POS-99" }),
+    updateCashRegisterAction({ id: 1, name: "Caja Test", code: "POS-99" }),
+    toggleCashRegisterArchiveAction({ id: 1, archive: true }),
+    deleteCashRegisterAction({ id: 1 }),
     openShiftAction({ cashRegisterId: 1, userId: 1, initialCash: 0 }),
     closeShiftAction({ shiftId: 1 }), submitCashCountAction({ shiftId: 1, actualCash: 0 }),
     returnPurchaseAction({ purchaseId: 1, requestId: "ad877895-785d-43b8-aab1-85ed429c414c", reason: "Prueba", items: [{ purchaseItemId: 1, quantity: 1 }] }),
