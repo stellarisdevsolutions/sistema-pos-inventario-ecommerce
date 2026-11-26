@@ -4,20 +4,21 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { StoreHeader } from "@/components/layout/store-header";
-import { StoreFooter, StoreTrustBadges } from "@/components/layout/store-footer";
+import { StoreFooter } from "@/components/layout/store-footer";
 import { StoreMobileNav } from "@/components/layout/store-mobile-nav";
 import { StoreCartSheet } from "@/components/layout/store-cart-sheet";
 import { StoreProductCard } from "@/components/store/product-card";
 import { StoreProduct, StoreCategory } from "@/app/actions/store";
 import { useCart } from "@/context/cart-context";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Check, ChevronDown, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
+  ChevronDown,
+  ChevronRight,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 
 interface CatalogoClientProps {
   initialProducts: StoreProduct[];
@@ -33,27 +34,25 @@ const PRICE_RANGES: { key: PriceRangeKey; label: string }[] = [
   { key: "over-1000", label: "Más de Bs 1.000" },
 ];
 
-type SortKey = "recent" | "price-asc" | "price-desc" | "name-asc";
-
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: "recent", label: "Más recientes" },
-  { key: "price-asc", label: "Menor precio" },
-  { key: "price-desc", label: "Mayor precio" },
-  { key: "name-asc", label: "Nombre A - Z" },
-];
-
-export function CatalogoClient({ initialProducts, categories }: CatalogoClientProps) {
+export function CatalogoClient({
+  initialProducts,
+  categories,
+}: CatalogoClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedCategory = searchParams.get("cat") || "todos";
   const urlQuery = searchParams.get("q") || "";
   const onlyFavs = searchParams.get("favs") === "true";
 
-  const [localSearch, setLocalSearch] = useState<{ base: string; value: string }>({
+  const [localSearch, setLocalSearch] = useState<{
+    base: string;
+    value: string;
+  }>({
     base: urlQuery,
     value: urlQuery,
   });
-  const searchQuery = localSearch.base === urlQuery ? localSearch.value : urlQuery;
+  const searchQuery =
+    localSearch.base === urlQuery ? localSearch.value : urlQuery;
   const setSearchQuery = (nextVal: string) =>
     setLocalSearch({ base: urlQuery, value: nextVal });
 
@@ -61,9 +60,9 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
   const [priceRange, setPriceRange] = useState<PriceRangeKey>("all");
   const [selectedBrand, setSelectedBrand] = useState<string>("all");
   const [selectedColorHex, setSelectedColorHex] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<"recent" | "price-asc" | "price-desc" | "name-asc">(
-    "recent"
-  );
+  const [sortBy, setSortBy] = useState<
+    "recent" | "price-asc" | "price-desc" | "name-asc"
+  >("recent");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const { favorites } = useCart();
@@ -129,49 +128,60 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
 
   const filteredProducts = useMemo(() => {
     return initialProducts
-      .filter((p) => {
-        if (onlyFavs && !favorites.includes(p.id)) return false;
-
-        if (selectedCategory !== "todos") {
-          const matchSlug = p.category?.slug === selectedCategory;
-          const matchName =
-            p.category?.name.toLowerCase() === selectedCategory.toLowerCase();
-          if (!matchSlug && !matchName) return false;
-        }
-
-        if (selectedBrand !== "all" && p.brand?.slug !== selectedBrand) return false;
-
-        if (selectedColorHex) {
-          const hasColor = (p.colorSwatches ?? []).some(
-            (sw) => sw.hex.toLowerCase() === selectedColorHex.toLowerCase()
-          );
-          if (!hasColor) return false;
-        }
-
-        const effectiveStock = p.totalStock ?? p.stock;
-        if (onlyInStock && effectiveStock <= 0) return false;
-
-        const effectivePrice = p.minPrice ?? p.price;
-        if (priceRange === "under-250" && effectivePrice > 250) return false;
+      .flatMap((p) => {
         if (
-          priceRange === "250-1000" &&
-          (effectivePrice < 250 || effectivePrice > 1000)
-        ) {
-          return false;
-        }
-        if (priceRange === "over-1000" && effectivePrice <= 1000) return false;
+          selectedCategory !== "todos" &&
+          p.category?.slug !== selectedCategory &&
+          p.category?.name.toLowerCase() !== selectedCategory.toLowerCase()
+        )
+          return [];
+        if (selectedBrand !== "all" && p.brand?.slug !== selectedBrand)
+          return [];
 
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase().trim();
-          const inName = p.name.toLowerCase().includes(q);
-          const inDesc = p.description ? p.description.toLowerCase().includes(q) : false;
-          const inSku = p.sku ? p.sku.toLowerCase().includes(q) : false;
-          const inVariant = p.variant ? p.variant.toLowerCase().includes(q) : false;
-          const inBrand = p.brand?.name ? p.brand.name.toLowerCase().includes(q) : false;
-          if (!inName && !inDesc && !inSku && !inVariant && !inBrand) return false;
-        }
-
-        return true;
+        const query = searchQuery.trim().toLowerCase();
+        const commonMatch = [
+          p.name,
+          p.description,
+          p.brand?.name,
+          p.category?.name,
+        ].some((term) => term?.toLowerCase().includes(query));
+        const options = (p.catalogOptions ?? []).filter((option) => {
+          if (onlyFavs && !favorites.includes(option.id)) return false;
+          if (
+            selectedColorHex &&
+            !option.colors.includes(selectedColorHex.toLowerCase())
+          )
+            return false;
+          if (onlyInStock && option.stock <= 0) return false;
+          if (priceRange === "under-250" && option.price > 250) return false;
+          if (
+            priceRange === "250-1000" &&
+            (option.price < 250 || option.price > 1000)
+          )
+            return false;
+          if (priceRange === "over-1000" && option.price <= 1000) return false;
+          return (
+            commonMatch ||
+            option.terms.some((term) => term.toLowerCase().includes(query))
+          );
+        });
+        if (!options.length) return [];
+        if (options.length === p.catalogOptions?.length) return [p];
+        const first = options.find((option) => option.stock > 0) ?? options[0];
+        const prices = options.map((option) => option.price);
+        return [
+          {
+            ...p,
+            id: first.id,
+            slug: first.slug,
+            imageUrl: first.imageUrl || p.imageUrl,
+            price: first.price,
+            stock: first.stock,
+            totalStock: options.reduce((sum, option) => sum + option.stock, 0),
+            minPrice: Math.min(...prices),
+            maxPrice: Math.max(...prices),
+          },
+        ];
       })
       .sort((a, b) => {
         const priceA = a.minPrice ?? a.price;
@@ -208,7 +218,7 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
     const found = categories.find(
       (c) =>
         c.slug === selectedCategory ||
-        c.name.toLowerCase() === selectedCategory.toLowerCase()
+        c.name.toLowerCase() === selectedCategory.toLowerCase(),
     );
     return found ? found.name : selectedCategory;
   }, [selectedCategory, categories]);
@@ -224,7 +234,7 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
 
   const hasActiveFilters = activeFilterCount > 0;
 
-  const renderSidebarSections = (onAfterSelect?: () => void) => (
+  const renderSidebarSections = () => (
     <div className="divide-y divide-store-border">
       {/* Disponibilidad */}
       <div className="pb-5">
@@ -263,7 +273,6 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                 type="button"
                 onClick={() => {
                   setPriceRange(range.key);
-                  onAfterSelect?.();
                 }}
                 className={`w-full flex items-center justify-between py-1.5 text-xs transition-colors cursor-pointer ${
                   active
@@ -284,13 +293,14 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
       {/* Marcas (solo si existen en los productos reales) */}
       {availableBrands.length > 0 && (
         <div className="py-5 space-y-2.5">
-          <span className="text-xs font-semibold text-store-ink block">Marcas</span>
+          <span className="text-xs font-semibold text-store-ink block">
+            Marcas
+          </span>
           <div className="space-y-1">
             <button
               type="button"
               onClick={() => {
                 setSelectedBrand("all");
-                onAfterSelect?.();
               }}
               className={`w-full flex items-center justify-between py-1.5 text-xs transition-colors cursor-pointer ${
                 selectedBrand === "all"
@@ -312,7 +322,6 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                   type="button"
                   onClick={() => {
                     setSelectedBrand(b.slug);
-                    onAfterSelect?.();
                   }}
                   className={`w-full flex items-center justify-between py-1.5 text-xs transition-colors cursor-pointer ${
                     active
@@ -334,10 +343,13 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
       {/* Colores (solo si existen variantes de color reales) */}
       {availableColors.length > 0 && (
         <div className="py-5 space-y-3">
-          <span className="text-xs font-semibold text-store-ink block">Color</span>
+          <span className="text-xs font-semibold text-store-ink block">
+            Color
+          </span>
           <div className="flex flex-wrap gap-2.5">
             {availableColors.map((c) => {
-              const active = selectedColorHex?.toLowerCase() === c.hex.toLowerCase();
+              const active =
+                selectedColorHex?.toLowerCase() === c.hex.toLowerCase();
               return (
                 <button
                   key={c.hex}
@@ -347,10 +359,11 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                   aria-pressed={active}
                   onClick={() => {
                     setSelectedColorHex(active ? null : c.hex);
-                    onAfterSelect?.();
                   }}
                   className={`h-7 w-7 rounded-full border border-black/15 transition-transform duration-150 cursor-pointer ${
-                    active ? "ring-2 ring-offset-2 ring-store-ink scale-105" : "hover:scale-105"
+                    active
+                      ? "ring-2 ring-offset-2 ring-store-ink scale-105"
+                      : "hover:scale-105"
                   }`}
                   style={{ backgroundColor: c.hex }}
                 />
@@ -380,25 +393,37 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
 
       {/* Cabecera editorial limpia */}
       <div className="max-w-[1320px] w-full mx-auto px-4 sm:px-6 pt-7 pb-6">
-        <nav aria-label="Migas de pan" className="flex items-center gap-1.5 text-xs text-store-muted mb-3">
+        <nav
+          aria-label="Migas de pan"
+          className="flex items-center gap-1.5 text-xs text-store-muted mb-3"
+        >
           <Link href="/" className="hover:text-store-ink transition-colors">
             Inicio
           </Link>
           <ChevronRight className="h-3.5 w-3.5" />
-          <Link href="/catalogo" className="hover:text-store-ink transition-colors">
+          <Link
+            href="/catalogo"
+            className="hover:text-store-ink transition-colors"
+          >
             Catálogo
           </Link>
           {selectedCategory !== "todos" && (
             <>
               <ChevronRight className="h-3.5 w-3.5" />
-              <span className="text-store-ink font-medium">{selectedCategoryName}</span>
+              <span className="text-store-ink font-medium">
+                {selectedCategoryName}
+              </span>
             </>
           )}
         </nav>
 
         <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-store-ink">
-            {onlyFavs ? "Mis favoritos" : selectedCategoryName}
+            {onlyFavs
+              ? "Lista de deseos"
+              : urlQuery
+                ? `Resultados para “${urlQuery}”`
+                : selectedCategoryName}
           </h1>
           <p className="text-sm text-store-muted tabular-nums">
             {filteredProducts.length}{" "}
@@ -418,7 +443,10 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                   : "bg-store-surface text-store-ink hover:bg-store-surface-hover"
               }`}
             >
-              Todas <span className="opacity-75 ml-1 tabular-nums">{initialProducts.length}</span>
+              Todas{" "}
+              <span className="opacity-75 ml-1 tabular-nums">
+                {initialProducts.length}
+              </span>
             </button>
 
             {categories.map((cat) => {
@@ -438,7 +466,9 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                   }`}
                 >
                   {cat.name}{" "}
-                  <span className="opacity-75 ml-1 tabular-nums">{cat.count}</span>
+                  <span className="opacity-75 ml-1 tabular-nums">
+                    {cat.count}
+                  </span>
                 </button>
               );
             })}
@@ -488,7 +518,10 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <label htmlFor="catalog-sort" className="text-xs text-store-muted hidden sm:inline">
+            <label
+              htmlFor="catalog-sort"
+              className="text-xs text-store-muted hidden sm:inline"
+            >
               Ordenar por
             </label>
             <div className="relative inline-flex items-center">
@@ -497,7 +530,11 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                 value={sortBy}
                 onChange={(e) =>
                   setSortBy(
-                    e.target.value as "recent" | "price-asc" | "price-desc" | "name-asc"
+                    e.target.value as
+                      | "recent"
+                      | "price-asc"
+                      | "price-desc"
+                      | "name-asc",
                   )
                 }
                 className="appearance-none bg-store-surface border border-store-border/60 hover:border-store-border text-store-ink text-xs font-medium rounded-lg h-9 pl-3.5 pr-8 focus:outline-hidden focus:border-store-ink cursor-pointer"
@@ -554,7 +591,9 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                     onClick={() => setPriceRange("all")}
                     className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
                   >
-                    <span>{PRICE_RANGES.find((r) => r.key === priceRange)?.label}</span>
+                    <span>
+                      {PRICE_RANGES.find((r) => r.key === priceRange)?.label}
+                    </span>
                     <X className="h-3 w-3 text-store-muted" />
                   </button>
                 )}
@@ -565,8 +604,8 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                     className="inline-flex items-center gap-1.5 rounded-full bg-store-surface hover:bg-store-border px-3 py-1.5 text-xs font-medium text-store-ink transition-colors cursor-pointer"
                   >
                     <span>
-                      {availableBrands.find((b) => b.slug === selectedBrand)?.name ??
-                        selectedBrand}
+                      {availableBrands.find((b) => b.slug === selectedBrand)
+                        ?.name ?? selectedBrand}
                     </span>
                     <X className="h-3 w-3 text-store-muted" />
                   </button>
@@ -583,7 +622,9 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                     />
                     <span>
                       {availableColors.find(
-                        (c) => c.hex.toLowerCase() === selectedColorHex.toLowerCase()
+                        (c) =>
+                          c.hex.toLowerCase() ===
+                          selectedColorHex.toLowerCase(),
                       )?.name ?? "Color"}
                     </span>
                     <X className="h-3 w-3 text-store-muted" />
@@ -626,7 +667,8 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
                   No encontramos productos con esos criterios
                 </p>
                 <p className="text-xs text-store-muted max-w-sm mx-auto leading-relaxed">
-                  Prueba limpiando la búsqueda o seleccionando otra categoría para ver el inventario disponible.
+                  Prueba limpiando la búsqueda o seleccionando otra categoría
+                  para ver el inventario disponible.
                 </p>
                 <Button
                   onClick={handleResetFilters}
@@ -647,52 +689,53 @@ export function CatalogoClient({ initialProducts, categories }: CatalogoClientPr
       </div>
 
       {/* Drawer móvil de filtros */}
-      {mobileFiltersOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex justify-end lg:hidden">
-          <div className="w-full max-w-xs bg-store-bg h-full p-5 flex flex-col justify-between overflow-y-auto border-l border-store-border">
-            <div>
-              <div className="flex items-center justify-between pb-3.5 mb-5 border-b border-store-border">
-                <h3 className="font-semibold text-sm text-store-ink">Filtros</h3>
-                <button
-                  type="button"
-                  onClick={() => setMobileFiltersOpen(false)}
-                  aria-label="Cerrar filtros"
-                  className="h-8 w-8 rounded-full text-store-muted hover:text-store-ink hover:bg-store-surface flex items-center justify-center"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              {renderSidebarSections(() => setMobileFiltersOpen(false))}
-            </div>
-
-            <div className="pt-4 mt-6 border-t border-store-border space-y-2">
-              <Button
+      <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+        <SheetContent
+          showCloseButton={false}
+          className="font-store bg-store-bg text-store-ink p-5 justify-between overflow-y-auto"
+        >
+          <div>
+            <div className="flex items-center justify-between pb-3.5 mb-5 border-b border-store-border">
+              <SheetTitle>Filtros</SheetTitle>
+              <button
+                type="button"
                 onClick={() => setMobileFiltersOpen(false)}
-                className="w-full bg-store-primary hover:bg-store-primary-hover text-store-on-primary font-medium text-xs rounded-full h-11 cursor-pointer"
+                aria-label="Cerrar filtros"
+                className="h-8 w-8 rounded-full text-store-muted hover:text-store-ink hover:bg-store-surface flex items-center justify-center"
               >
-                Mostrar {filteredProducts.length}{" "}
-                {filteredProducts.length === 1 ? "producto" : "productos"}
-              </Button>
-              {hasActiveFilters && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    handleResetFilters();
-                    setMobileFiltersOpen(false);
-                  }}
-                  className="w-full text-store-ink border-store-border text-xs font-medium rounded-full h-10 cursor-pointer"
-                >
-                  Restablecer filtros
-                </Button>
-              )}
+                <X className="h-4 w-4" />
+              </button>
             </div>
+            {renderSidebarSections()}
           </div>
-        </div>
-      )}
+
+          <div className="pt-4 mt-6 border-t border-store-border space-y-2">
+            <Button
+              onClick={() => setMobileFiltersOpen(false)}
+              className="w-full bg-store-primary hover:bg-store-primary-hover text-store-on-primary font-medium text-xs rounded-full h-11 cursor-pointer"
+            >
+              Mostrar {filteredProducts.length}{" "}
+              {filteredProducts.length === 1 ? "producto" : "productos"}
+            </Button>
+            {hasActiveFilters && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  handleResetFilters();
+                  setMobileFiltersOpen(false);
+                }}
+                className="w-full text-store-ink border-store-border text-xs font-medium rounded-full h-10 cursor-pointer"
+              >
+                Restablecer filtros
+              </Button>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <StoreCartSheet />
       <StoreMobileNav />
-      <StoreTrustBadges />
+
       <StoreFooter />
     </div>
   );

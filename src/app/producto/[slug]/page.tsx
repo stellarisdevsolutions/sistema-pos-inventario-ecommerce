@@ -11,6 +11,7 @@ interface PageProps {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  await connection();
   const { slug } = await params;
   const product = await getStoreProductBySlug(slug);
 
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: `${product.name} | ${STORE_NAME}`,
     description:
       product.description ||
-      `Compra ${product.name} al mejor precio en Bolivia con garantía y entrega inmediata.`,
+      `Consulta el precio y la disponibilidad de ${product.name}.`,
   };
 }
 

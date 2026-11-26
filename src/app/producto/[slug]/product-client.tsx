@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { StoreCategory, StoreProduct } from "@/app/actions/store";
 import { StoreHeader } from "@/components/layout/store-header";
-import { StoreFooter, StoreTrustBadges } from "@/components/layout/store-footer";
+import { StoreFooter } from "@/components/layout/store-footer";
 import { StoreCartSheet } from "@/components/layout/store-cart-sheet";
 import { StoreProductCard } from "@/components/store/product-card";
 import { useCart } from "@/context/cart-context";
@@ -13,17 +14,12 @@ import { STORE_WHATSAPP_NUMBER } from "@/lib/store-config";
 import {
   ChevronLeft,
   ChevronRight,
-  CreditCard,
-  FileText,
   Heart,
   MessageCircle,
   Minus,
   Plus,
-  QrCode,
   Share2,
-  ShieldCheck,
   ShoppingCart,
-  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,19 +41,22 @@ export function ProductDetailClient({
   categories = [],
 }: ProductClientProps) {
   const [variantId, setVariantId] = useState(initialProduct.id);
-  const product = variants.find((variant) => variant.id === variantId) ?? initialProduct;
+  const product =
+    variants.find((variant) => variant.id === variantId) ?? initialProduct;
   const origin = useSyncExternalStore(
     subscribeNoop,
     getOriginSnapshot,
-    getOriginServerSnapshot
+    getOriginServerSnapshot,
   );
-  const saleName = product.variant ? product.name + " — " + product.variant : product.name;
-  const images = product.images.length > 0 ? product.images : [product.imageUrl];
-  const [selectedImage, setSelectedImage] = useState(images[0] || product.imageUrl);
+  const saleName = product.variant
+    ? product.name + " — " + product.variant
+    : product.name;
+  const images =
+    product.images.length > 0 ? product.images : [product.imageUrl];
+  const [selectedImage, setSelectedImage] = useState(
+    images[0] || product.imageUrl,
+  );
   const [quantity, setQuantity] = useState(1);
-  const [activeTab, setActiveTab] = useState<"descripcion" | "especificaciones" | "envios">(
-    "descripcion"
-  );
 
   const { addToCart, toggleFavorite, isFavorite, setIsCartOpen } = useCart();
   const isFav = isFavorite(product.id);
@@ -75,13 +74,18 @@ export function ProductDetailClient({
 
   // Extraer dimensiones de atributos estructurados si existen
   const hasStructuredAttrs = variants.some(
-    (v) => v.attributes && Object.keys(v.attributes).length > 0
+    (v) => v.attributes && Object.keys(v.attributes).length > 0,
   );
 
   const attributeDimensions: {
     name: string;
     type: "text" | "color";
-    options: { value: string; hex?: string; image?: string; available: boolean }[];
+    options: {
+      value: string;
+      hex?: string;
+      image?: string;
+      available: boolean;
+    }[];
   }[] = [];
 
   if (hasStructuredAttrs) {
@@ -108,7 +112,9 @@ export function ProductDetailClient({
         if (!dim) {
           dim = {
             type:
-              k.toLowerCase().includes("color") || Boolean(v.variantColor) ? "color" : "text",
+              k.toLowerCase().includes("color") || Boolean(v.variantColor)
+                ? "color"
+                : "text",
             values: new Map(),
           };
           dimMap.set(k, dim);
@@ -128,20 +134,23 @@ export function ProductDetailClient({
           variants.some((v) => {
             const raw = v.attributes?.[dimName];
             return (raw?.includes("|") ? raw.split("|")[0] : raw) === val;
-          })
+          }),
         )
         .map(([val, hex]) => {
           const matchingVariant = variants.find((v) => {
             if (!v.attributes) return false;
             const raw = v.attributes[dimName];
-            if ((raw?.includes("|") ? raw.split("|")[0] : raw) !== val) return false;
+            if ((raw?.includes("|") ? raw.split("|")[0] : raw) !== val)
+              return false;
             return Object.entries(currentAttrs).every(([k, currVal]) => {
               if (k === dimName) return true;
               const otherRaw = v.attributes?.[k];
               const cleanOther = otherRaw?.includes("|")
                 ? otherRaw.split("|")[0]
                 : otherRaw;
-              const cleanCurr = currVal.includes("|") ? currVal.split("|")[0] : currVal;
+              const cleanCurr = currVal.includes("|")
+                ? currVal.split("|")[0]
+                : currVal;
               return cleanOther === cleanCurr;
             });
           });
@@ -153,7 +162,10 @@ export function ProductDetailClient({
             });
           const anyWithVal = variants.some((v) => {
             const raw = v.attributes?.[dimName];
-            return (raw?.includes("|") ? raw.split("|")[0] : raw) === val && v.stock > 0;
+            return (
+              (raw?.includes("|") ? raw.split("|")[0] : raw) === val &&
+              v.stock > 0
+            );
           });
           return {
             value: val,
@@ -163,7 +175,11 @@ export function ProductDetailClient({
           };
         });
       if (opts.length > 0) {
-        attributeDimensions.push({ name: dimName, type: info.type, options: opts });
+        attributeDimensions.push({
+          name: dimName,
+          type: info.type,
+          options: opts,
+        });
       }
     }
   }
@@ -177,15 +193,21 @@ export function ProductDetailClient({
       return Object.entries(currentAttrs).every(([k, currVal]) => {
         if (k === dimName) return true;
         const otherRaw = v.attributes?.[k];
-        const cleanOther = otherRaw?.includes("|") ? otherRaw.split("|")[0] : otherRaw;
-        const cleanCurr = currVal.includes("|") ? currVal.split("|")[0] : currVal;
+        const cleanOther = otherRaw?.includes("|")
+          ? otherRaw.split("|")[0]
+          : otherRaw;
+        const cleanCurr = currVal.includes("|")
+          ? currVal.split("|")[0]
+          : currVal;
         return cleanOther === cleanCurr;
       });
     });
     const fallback =
       variants.find((v) => {
         const raw = v.attributes?.[dimName];
-        return (raw?.includes("|") ? raw.split("|")[0] : raw) === val && v.stock > 0;
+        return (
+          (raw?.includes("|") ? raw.split("|")[0] : raw) === val && v.stock > 0
+        );
       }) ??
       variants.find((v) => {
         const raw = v.attributes?.[dimName];
@@ -246,7 +268,9 @@ export function ProductDetailClient({
         description: "Puedes compartirlo por WhatsApp o redes sociales.",
       });
     } catch {
-      toast.info("Copia el enlace desde tu navegador", { description: shareUrl });
+      toast.info("Copia el enlace desde tu navegador", {
+        description: shareUrl,
+      });
     }
   };
 
@@ -263,7 +287,7 @@ export function ProductDetailClient({
       `💰 Subtotal: ${totalBs}\n` +
       (product.sku ? `🏷️ SKU: ${product.sku}\n` : "") +
       `🔗 Enlace: ${productSharePath}\n\n` +
-      `¿Tienen entrega inmediata y cómo puedo realizar el pago por QR Simple?`
+      `¿Me pueden confirmar la disponibilidad?`,
   );
 
   return (
@@ -283,7 +307,10 @@ export function ProductDetailClient({
             Inicio
           </Link>
           <ChevronRight className="h-3 w-3 shrink-0" />
-          <Link href="/catalogo" className="hover:text-store-ink transition-colors">
+          <Link
+            href="/catalogo"
+            className="hover:text-store-ink transition-colors"
+          >
             Catálogo
           </Link>
           {product.category && (
@@ -298,7 +325,10 @@ export function ProductDetailClient({
             </>
           )}
           <ChevronRight className="h-3 w-3 shrink-0" />
-          <span className="text-store-ink font-medium truncate max-w-sm" aria-current="page">
+          <span
+            className="text-store-ink font-medium truncate max-w-sm"
+            aria-current="page"
+          >
             {product.name}
           </span>
         </div>
@@ -309,14 +339,7 @@ export function ProductDetailClient({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-12 items-start">
           {/* Izquierda: Escenario fotográfico con tinte acento suave */}
           <div className="lg:col-span-6 lg:sticky lg:top-32 space-y-3">
-            <div
-              className="bg-store-primary-tint rounded-2xl sm:rounded-3xl aspect-[4/3] sm:aspect-square p-5 sm:p-10 flex items-center justify-center relative overflow-hidden"
-              style={{
-                backgroundImage:
-                  "radial-gradient(color-mix(in srgb, var(--store-accent) 14%, transparent) 1px, transparent 1px)",
-                backgroundSize: "18px 18px",
-              }}
-            >
+            <div className="bg-store-surface rounded-xl aspect-[4/3] sm:aspect-square p-5 sm:p-10 flex items-center justify-center relative overflow-hidden">
               {/* Controles flotantes arriba */}
               <div className="absolute top-3.5 left-3.5 right-3.5 sm:top-4 sm:left-4 sm:right-4 z-10 flex items-center justify-between">
                 <Link
@@ -341,8 +364,13 @@ export function ProductDetailClient({
                     type="button"
                     onClick={() => toggleFavorite(product.id)}
                     className="h-9 w-9 rounded-full bg-store-bg hover:bg-store-surface text-store-ink flex items-center justify-center shadow-xs transition-colors cursor-pointer"
-                    title={isFav ? "Quitar de favoritos" : "Guardar en favoritos"}
-                    aria-label="Guardar en favoritos"
+                    title={
+                      isFav ? "Quitar de favoritos" : "Guardar en favoritos"
+                    }
+                    aria-pressed={isFav}
+                    aria-label={
+                      isFav ? "Quitar de favoritos" : "Guardar en favoritos"
+                    }
                   >
                     <Heart
                       className={`h-4 w-4 ${
@@ -353,7 +381,10 @@ export function ProductDetailClient({
                 </div>
               </div>
 
-              <img
+              <Image
+                unoptimized
+                width={640}
+                height={640}
                 src={selectedImage}
                 alt={product.name}
                 className="max-h-full max-w-full rounded-xl object-contain transition-transform duration-500 ease-out hover:scale-[1.03]"
@@ -374,7 +405,10 @@ export function ProductDetailClient({
                     }`}
                     title={`Ver imagen ${idx + 1}`}
                   >
-                    <img
+                    <Image
+                      unoptimized
+                      width={640}
+                      height={640}
                       src={img}
                       alt={`${product.name} - vista ${idx + 1}`}
                       className="max-h-full max-w-full rounded-md object-contain"
@@ -402,7 +436,9 @@ export function ProductDetailClient({
                     <span className="text-store-border">/</span>
                   )}
                   {product.brand && (
-                    <span className="text-store-muted truncate">{product.brand.name}</span>
+                    <span className="text-store-muted truncate">
+                      {product.brand.name}
+                    </span>
                   )}
                 </div>
 
@@ -422,9 +458,7 @@ export function ProductDetailClient({
                 <span className="text-3xl font-bold text-store-primary tabular-nums block">
                   {formatCurrency(product.price)}
                 </span>
-                <p className="text-xs text-store-muted">
-                  Incluye factura legal en Bolivianos (Bs) válida para descargo fiscal.
-                </p>
+                <p className="text-xs text-store-muted">Precio por unidad</p>
               </div>
 
               {/* Estado de stock usando tokens */}
@@ -443,10 +477,12 @@ export function ProductDetailClient({
                   <span className="text-store-ink font-medium tabular-nums">
                     {isLowStock
                       ? `Últimas ${product.stock} unidades disponibles`
-                      : `En stock — ${product.stock} disponibles para despacho inmediato`}
+                      : `En stock — ${product.stock} disponibles`}
                   </span>
                 ) : (
-                  <span className="text-store-muted">Temporalmente agotado</span>
+                  <span className="text-store-muted">
+                    Temporalmente agotado
+                  </span>
                 )}
               </div>
             </div>
@@ -460,13 +496,16 @@ export function ProductDetailClient({
                     ? currentRaw.split("|")[0]
                     : currentRaw;
                   const isColorDim =
-                    dim.type === "color" || dim.options.every((o) => Boolean(o.hex));
+                    dim.type === "color" ||
+                    dim.options.every((o) => Boolean(o.hex));
 
                   return (
                     <fieldset key={dim.name} className="space-y-2.5">
                       <legend className="text-xs font-medium text-store-muted">
                         {dim.name}:{" "}
-                        <span className="text-store-ink font-semibold">{currentVal}</span>
+                        <span className="text-store-ink font-semibold">
+                          {currentVal}
+                        </span>
                       </legend>
                       <div className="flex flex-wrap gap-2.5">
                         {dim.options.map((opt) => {
@@ -481,7 +520,9 @@ export function ProductDetailClient({
                                   !opt.available ? " (sin stock)" : ""
                                 }`}
                                 title={opt.value}
-                                onClick={() => handleSelectAttribute(dim.name, opt.value)}
+                                onClick={() =>
+                                  handleSelectAttribute(dim.name, opt.value)
+                                }
                                 className={`rounded-xl border-2 p-1.5 bg-store-bg flex items-center gap-2 transition-colors cursor-pointer ${
                                   selected
                                     ? "border-store-primary"
@@ -489,7 +530,10 @@ export function ProductDetailClient({
                                 } ${!opt.available ? "opacity-45" : ""}`}
                               >
                                 {opt.image ? (
-                                  <img
+                                  <Image
+                                    unoptimized
+                                    width={640}
+                                    height={640}
                                     src={opt.image}
                                     alt={opt.value}
                                     className="h-10 w-10 rounded-lg bg-store-surface object-contain p-1 shrink-0"
@@ -513,7 +557,9 @@ export function ProductDetailClient({
                               key={opt.value}
                               type="button"
                               aria-pressed={selected}
-                              onClick={() => handleSelectAttribute(dim.name, opt.value)}
+                              onClick={() =>
+                                handleSelectAttribute(dim.name, opt.value)
+                              }
                               className={`rounded-xl h-10 min-w-12 px-3.5 border text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
                                 selected
                                   ? "bg-store-primary-deep border-store-primary-deep text-store-on-primary font-semibold"
@@ -529,7 +575,9 @@ export function ProductDetailClient({
                               )}
                               <span>{opt.value}</span>
                               {!opt.available && (
-                                <span className="text-[11px] opacity-75">(Agotado)</span>
+                                <span className="text-[11px] opacity-75">
+                                  (Agotado)
+                                </span>
                               )}
                             </button>
                           );
@@ -543,7 +591,9 @@ export function ProductDetailClient({
               <fieldset className="space-y-2.5 pt-4 border-t border-store-border">
                 <legend className="text-xs font-medium text-store-muted">
                   {product.variantSelector || "Opción"}:{" "}
-                  <span className="text-store-ink font-semibold">{product.variant}</span>
+                  <span className="text-store-ink font-semibold">
+                    {product.variant}
+                  </span>
                 </legend>
                 <div className="flex flex-wrap gap-2">
                   {variants.map((option) => (
@@ -567,7 +617,9 @@ export function ProductDetailClient({
                       )}
                       <span>{option.variant}</span>
                       {option.stock === 0 && (
-                        <span className="text-[11px] opacity-75">(Agotado)</span>
+                        <span className="text-[11px] opacity-75">
+                          (Agotado)
+                        </span>
                       )}
                     </button>
                   ))}
@@ -578,7 +630,9 @@ export function ProductDetailClient({
             {/* Cantidad + Subtotal */}
             <div className="pt-4 border-t border-store-border flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-store-muted">Cantidad</span>
+                <span className="text-xs font-medium text-store-muted">
+                  Cantidad
+                </span>
                 <div className="inline-flex items-center rounded-full bg-store-surface p-1">
                   <button
                     type="button"
@@ -596,7 +650,9 @@ export function ProductDetailClient({
                   <button
                     type="button"
                     disabled={quantity >= product.stock || !inStock}
-                    onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
+                    onClick={() =>
+                      setQuantity((q) => Math.min(product.stock, q + 1))
+                    }
                     className="h-8 w-8 rounded-full flex items-center justify-center text-store-ink hover:bg-store-bg disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     title="Aumentar cantidad"
                     aria-label="Aumentar cantidad"
@@ -607,7 +663,9 @@ export function ProductDetailClient({
               </div>
 
               <div className="text-right">
-                <span className="text-[11px] text-store-muted block">Subtotal</span>
+                <span className="text-[11px] text-store-muted block">
+                  Subtotal
+                </span>
                 <span className="text-base font-bold text-store-ink tabular-nums">
                   {totalBs}
                 </span>
@@ -623,7 +681,7 @@ export function ProductDetailClient({
                   onClick={handleBuyNow}
                   className="h-12 rounded-lg bg-store-primary hover:bg-store-primary-hover text-store-on-primary text-sm font-bold flex items-center justify-center transition-[background-color,transform] duration-150 ease-out active:scale-[0.98] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Comprar ahora
+                  Revisar carrito
                 </button>
 
                 <button
@@ -637,200 +695,42 @@ export function ProductDetailClient({
                 </button>
               </div>
 
-              <a
-                href={`https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${whatsappMessage}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full h-11 rounded-lg border border-store-border hover:border-store-ink text-store-ink text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span>Consultar por WhatsApp</span>
-              </a>
+              {STORE_WHATSAPP_NUMBER && (
+                <a
+                  href={`https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${whatsappMessage}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full h-11 rounded-lg border border-store-border hover:border-store-ink text-store-ink text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Consultar por WhatsApp</span>
+                </a>
+              )}
             </div>
-
-            {/* 3 garantías en lista limpia */}
-            <ul className="pt-5 border-t border-store-border space-y-2.5 text-xs text-store-muted">
-              <li className="flex items-center gap-2.5">
-                <Truck className="h-4 w-4 text-store-primary stroke-[1.6] shrink-0" />
-                <span>Envíos asegurados a los 9 departamentos de Bolivia</span>
-              </li>
-              <li className="flex items-center gap-2.5">
-                <FileText className="h-4 w-4 text-store-primary stroke-[1.6] shrink-0" />
-                <span>Facturación electrónica autorizada con NIT o Carnet</span>
-              </li>
-              <li className="flex items-center gap-2.5">
-                <QrCode className="h-4 w-4 text-store-primary stroke-[1.6] shrink-0" />
-                <span>Pago rápido vía QR Simple sin comisiones adicionales</span>
-              </li>
-            </ul>
           </div>
         </div>
-
-        {/* Pestañas de detalles */}
-        <section className="border-t border-store-border pt-10 space-y-6">
-          <div className="flex items-center gap-8 border-b border-store-border overflow-x-auto no-scrollbar">
-            <button
-              type="button"
-              onClick={() => setActiveTab("descripcion")}
-              className={`pb-3.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
-                activeTab === "descripcion"
-                  ? "border-store-primary text-store-ink font-semibold"
-                  : "border-transparent text-store-muted hover:text-store-ink"
-              }`}
-            >
-              Descripción
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("especificaciones")}
-              className={`pb-3.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
-                activeTab === "especificaciones"
-                  ? "border-store-primary text-store-ink font-semibold"
-                  : "border-transparent text-store-muted hover:text-store-ink"
-              }`}
-            >
-              Especificaciones
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("envios")}
-              className={`pb-3.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
-                activeTab === "envios"
-                  ? "border-store-primary text-store-ink font-semibold"
-                  : "border-transparent text-store-muted hover:text-store-ink"
-              }`}
-            >
-              Envíos y pago
-            </button>
-          </div>
-
-          <div className="text-store-ink text-sm leading-relaxed">
-            {activeTab === "descripcion" && (
-              <div className="space-y-6 max-w-3xl">
-                {product.description ? (
-                  <p className="whitespace-pre-line text-store-muted leading-relaxed">
-                    {product.description}
-                  </p>
-                ) : (
-                  <p className="text-store-muted">
-                    Este producto cuenta con especificaciones de fábrica y garantía oficial en Bolivia. Consulta detalles adicionales de compatibilidad mediante WhatsApp.
-                  </p>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-5 rounded-2xl bg-store-surface space-y-1.5">
-                    <h4 className="font-semibold text-xs text-store-ink flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-store-primary stroke-[1.75]" />
-                      Garantía certificada
-                    </h4>
-                    <p className="text-xs text-store-muted leading-relaxed">
-                      Cobertura contra defectos de fabricación con respaldo técnico local.
-                    </p>
-                  </div>
-                  <div className="p-5 rounded-2xl bg-store-surface space-y-1.5">
-                    <h4 className="font-semibold text-xs text-store-ink flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-store-primary stroke-[1.75]" />
-                      Factura legal de venta
-                    </h4>
-                    <p className="text-xs text-store-muted leading-relaxed">
-                      Emitimos factura con código QR fiscal para descargo de compras empresariales o personales.
-                    </p>
-                  </div>
+        <section className="border-t border-store-border pt-7 max-w-3xl space-y-4">
+          <h2 className="text-2xl font-semibold">Detalles del producto</h2>
+          {product.description && (
+            <p className="whitespace-pre-line">{product.description}</p>
+          )}
+          <dl className="divide-y divide-store-border">
+            {[
+              ["Marca", product.brand?.name],
+              ["Categoría", product.category?.name],
+              ["Variante", product.variant],
+              ["SKU", product.sku],
+              ["Código de barras", product.barcode],
+            ]
+              .filter(([, value]) => value)
+              .map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-5 py-2">
+                  <dt className="text-store-muted">{label}</dt>
+                  <dd>{value}</dd>
                 </div>
-              </div>
-            )}
-
-            {activeTab === "especificaciones" && (
-              <div className="max-w-2xl">
-                <table className="w-full text-xs text-left">
-                  <tbody className="divide-y divide-store-border">
-                    <tr>
-                      <td className="font-medium text-store-muted py-3">Nombre comercial</td>
-                      <td className="font-semibold text-store-ink py-3 text-right">
-                        {product.name}
-                      </td>
-                    </tr>
-                    {product.brand && (
-                      <tr>
-                        <td className="font-medium text-store-muted py-3">Marca</td>
-                        <td className="font-semibold text-store-ink py-3 text-right">
-                          {product.brand.name}
-                        </td>
-                      </tr>
-                    )}
-                    <tr>
-                      <td className="font-medium text-store-muted py-3">Código SKU</td>
-                      <td className="font-mono text-store-ink py-3 text-right">
-                        {product.sku || "No asignado"}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="font-medium text-store-muted py-3">Código de barras</td>
-                      <td className="font-mono text-store-ink py-3 text-right">
-                        {product.barcode || "No asignado"}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="font-medium text-store-muted py-3">Categoría</td>
-                      <td className="font-semibold text-store-ink py-3 text-right">
-                        {product.category?.name || "General"}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="font-medium text-store-muted py-3">Stock físico</td>
-                      <td className="font-semibold text-store-ink py-3 text-right tabular-nums">
-                        {product.stock} unidades
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="font-medium text-store-muted py-3">Moneda</td>
-                      <td className="font-semibold text-store-ink py-3 text-right">
-                        Bolivianos (Bs)
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {activeTab === "envios" && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-4xl text-xs">
-                <div className="p-5 rounded-2xl bg-store-surface space-y-2">
-                  <Truck className="h-5 w-5 text-store-primary stroke-[1.6]" />
-                  <h4 className="font-semibold text-store-ink text-xs">
-                    Envíos departamentales
-                  </h4>
-                  <p className="text-store-muted leading-relaxed">
-                    Despachos en 24 a 48 horas a La Paz, El Alto, Cochabamba, Santa Cruz, Oruro, Potosí, Sucre, Tarija, Beni y Pando.
-                  </p>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-store-surface space-y-2">
-                  <QrCode className="h-5 w-5 text-store-primary stroke-[1.6]" />
-                  <h4 className="font-semibold text-store-ink text-xs">
-                    Pago con QR Simple
-                  </h4>
-                  <p className="text-store-muted leading-relaxed">
-                    Paga sin comisiones desde la aplicación móvil de cualquier banco del sistema financiero boliviano.
-                  </p>
-                </div>
-
-                <div className="p-5 rounded-2xl bg-store-surface space-y-2">
-                  <CreditCard className="h-5 w-5 text-store-primary stroke-[1.6]" />
-                  <h4 className="font-semibold text-store-ink text-xs">
-                    Pago contra entrega
-                  </h4>
-                  <p className="text-store-muted leading-relaxed">
-                    Disponible para entregas locales y retiro en sucursal con previa coordinación por WhatsApp.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+              ))}
+          </dl>
         </section>
-
         {/* Productos relacionados */}
         {relatedProducts.length > 0 && (
           <section className="space-y-6 pt-10 border-t border-store-border">
@@ -895,7 +795,7 @@ export function ProductDetailClient({
       </div>
 
       <StoreCartSheet />
-      <StoreTrustBadges />
+
       <StoreFooter />
     </div>
   );

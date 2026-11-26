@@ -24,7 +24,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: `${STORE_NAME} | ${STORE_TAGLINE}`,
-  description: "Lo último en tecnología, accesorios, audio y estilo de vida con entrega rápida",
+  description: "Consulta los productos, precios y variantes publicados en nuestra tienda.",
 };
 
 export default function RootLayout({

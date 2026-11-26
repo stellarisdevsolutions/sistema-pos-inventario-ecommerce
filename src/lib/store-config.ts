@@ -1,9 +1,9 @@
 export const STORE_NAME = process.env.NEXT_PUBLIC_STORE_NAME || "Aura Store";
 export const STORE_SHORT_NAME = "Aura";
-export const STORE_TAGLINE = "Tecnología & Retail Bolivia";
-export const STORE_WHATSAPP_NUMBER = (process.env.NEXT_PUBLIC_WHATSAPP_PHONE || "59170000000").replace(/\D/g, "") || "59170000000";
-export const STORE_PHONE_DISPLAY = process.env.NEXT_PUBLIC_STORE_PHONE || "+591 2 2440000";
-export const STORE_EMAIL = process.env.NEXT_PUBLIC_STORE_EMAIL || "ventas@aurastore.bo";
-export const STORE_ADDRESS = process.env.NEXT_PUBLIC_STORE_ADDRESS || "Av. Camacho esq. Bueno #1420, La Paz - Bolivia";
+export const STORE_TAGLINE = "Catálogo en línea";
+export const STORE_WHATSAPP_NUMBER = (process.env.NEXT_PUBLIC_WHATSAPP_PHONE || "").replace(/\D/g, "");
+export const STORE_PHONE_DISPLAY = process.env.NEXT_PUBLIC_STORE_PHONE || "";
+export const STORE_EMAIL = process.env.NEXT_PUBLIC_STORE_EMAIL || "";
+export const STORE_ADDRESS = process.env.NEXT_PUBLIC_STORE_ADDRESS || "";
 export const STORE_FREE_SHIPPING_MIN_BS = 350;
 export const STORE_DELIVERY_FEE_BS = 20;

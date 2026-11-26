@@ -1,35 +1,46 @@
-/* ============================================================================
-   SISTEMA DE COLOR DE LA TIENDA PÚBLICA — REGLA 60 / 30 / 10 (Estilo GadgetHub)
-   Edita solo las 4 variables maestras para cambiar el tema de toda la tienda.
-   Ejemplos de --store-accent:
-     - Naranja GadgetHub (actual): #f96302
-     - Rojo comercio: #c81e1e
-     - Azul tech: #2563eb
-     - Verde bosque: #15803d
-   ============================================================================ */
 :root {
   /* 1. LAS 4 VARIABLES MAESTRAS EDITABLES */
-  --store-base: #ffffff;          /* 60% Dominante: fondo blanco limpio y tarjetas */
-  --store-surface-base: #f4f6f9;  /* 30% Secundario claro: categorías, filtros, badges */
-  --store-ink-base: #0f1d32;      /* 30% Estructura navy: header, footer, titulares */
-  --store-accent: #f96302;        /* 10% Acento: CTA, círculo hero, banner, iconos */
+  --store-base: #ffffff; /* 60% Dominante: fondo blanco limpio y tarjetas */
+  --store-surface-base: #f5f2ed; /* 30% Secundario claro: categorías, filtros, badges */
+  --store-ink-base: #282821; /* 30% Estructura navy: header, footer, titulares */
+  --store-accent: #a84624; /* 10% Acento: CTA, círculo hero, banner, iconos */
 
   /* 2. TOKENS DERIVADOS AUTOMÁTICOS (no editar) */
   --store-bg: var(--store-base);
   --store-surface: var(--store-surface-base);
-  --store-surface-hover: color-mix(in srgb, var(--store-surface-base) 92%, var(--store-ink-base));
-  --store-border: color-mix(in srgb, var(--store-ink-base) 12%, var(--store-base));
+  --store-surface-hover: color-mix(
+    in srgb,
+    var(--store-surface-base) 92%,
+    var(--store-ink-base)
+  );
+  --store-border: color-mix(
+    in srgb,
+    var(--store-ink-base) 12%,
+    var(--store-base)
+  );
   --store-ink: var(--store-ink-base);
   --store-ink-deep: color-mix(in srgb, var(--store-ink-base) 82%, #000000);
   --store-ink-soft: color-mix(in srgb, var(--store-ink-base) 90%, #ffffff);
   --store-on-ink: #ffffff;
   --store-on-ink-muted: color-mix(in srgb, #ffffff 68%, var(--store-ink-base));
-  --store-muted: color-mix(in srgb, var(--store-ink-base) 58%, var(--store-base));
+  --store-muted: color-mix(
+    in srgb,
+    var(--store-ink-base) 58%,
+    var(--store-base)
+  );
 
   --store-primary: var(--store-accent);
   --store-primary-hover: color-mix(in srgb, var(--store-accent) 86%, #000000);
-  --store-primary-deep: color-mix(in srgb, var(--store-accent) 68%, var(--store-ink-base));
-  --store-primary-tint: color-mix(in srgb, var(--store-accent) 7%, var(--store-base));
+  --store-primary-deep: color-mix(
+    in srgb,
+    var(--store-accent) 68%,
+    var(--store-ink-base)
+  );
+  --store-primary-tint: color-mix(
+    in srgb,
+    var(--store-accent) 7%,
+    var(--store-base)
+  );
   --store-primary-light: var(--store-primary-tint);
   --store-on-primary: #ffffff;
 
@@ -37,4 +48,81 @@
   --store-success: #16a34a;
   --store-warning: #d97706;
   --store-danger: #dc2626;
+}
+
+.store-width {
+  width: min(100% - 2rem, 78rem);
+  margin-inline: auto;
+}
+.store-wordmark {
+  font-size: 1.45rem;
+  font-weight: 750;
+  letter-spacing: -0.055em;
+}
+.store-title {
+  font-size: clamp(2.3rem, 5vw, 4.5rem);
+  font-weight: 600;
+  letter-spacing: -0.055em;
+  line-height: 1.03;
+  overflow-wrap: anywhere;
+}
+.store-cover {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: var(--store-surface);
+  border-radius: 1.25rem;
+  overflow: hidden;
+}
+.store-photo {
+  background: var(--store-surface);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.store-button,
+.store-chip,
+.store-text-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.store-button {
+  background: var(--store-primary);
+  color: var(--store-on-primary);
+  border-radius: 0.55rem;
+  padding: 0.85rem 1.3rem;
+}
+.store-button:hover {
+  background: var(--store-primary-hover);
+}
+.store-chip {
+  padding: 0.55rem 1rem;
+  border-radius: 2rem;
+  border: 1px solid var(--store-border);
+}
+.store-chip:hover {
+  background: var(--store-surface);
+}
+.store-text-action {
+  color: var(--store-primary-deep);
+  min-height: 2.25rem;
+}
+.store-text-action:hover {
+  text-decoration: underline;
+}
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2rem 1.25rem;
+}
+@media (max-width: 680px) {
+  .store-cover {
+    grid-template-columns: 1fr;
+  }
+  .store-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem 0.8rem;
+  }
 }

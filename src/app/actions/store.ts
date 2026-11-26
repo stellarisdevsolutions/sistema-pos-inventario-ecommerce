@@ -1,6 +1,17 @@
 import { db } from "@/db";
-import { products, categories, brands, productModels, type ProductOptionConfig } from "@/db/schema";
+import {
+  products,
+  categories,
+  brands,
+  productModels,
+  type ProductOptionConfig,
+} from "@/db/schema";
 import { and, eq, desc } from "drizzle-orm";
+
+export type SavedOption = Pick<
+  StoreProduct,
+  "id" | "slug" | "name" | "variant" | "price" | "imageUrl"
+>;
 
 export interface StoreProduct {
   id: number;
@@ -33,6 +44,15 @@ export interface StoreProduct {
   isActive: boolean;
   isVisibleWeb: boolean;
   isFeatured: boolean;
+  catalogOptions?: {
+    id: number;
+    slug: string;
+    stock: number;
+    price: number;
+    terms: string[];
+    colors: string[];
+    imageUrl: string | null;
+  }[];
   variantCount?: number;
   totalStock?: number;
   minPrice?: number;
@@ -49,8 +69,7 @@ export interface StoreCategory {
   count: number;
 }
 
-const DEFAULT_PRODUCT_IMAGE =
-  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80";
+const DEFAULT_PRODUCT_IMAGE = "/product-placeholder.svg";
 
 type ProductRow = typeof products.$inferSelect & {
   category: typeof categories.$inferSelect | null;
@@ -58,45 +77,80 @@ type ProductRow = typeof products.$inferSelect & {
   brand: typeof brands.$inferSelect | null;
 };
 
-function toStoreProduct(p: ProductRow, fallbackImage?: string | null): StoreProduct {
+function toStoreProduct(
+  p: ProductRow,
+  fallbackImage?: string | null,
+): StoreProduct {
   const baseImage = p.model?.imageUrl || null;
-  const galleryImages = p.model?.images?.length ? p.model.images : (p.images ?? []);
+  const galleryImages = p.model?.images?.length
+    ? p.model.images
+    : (p.images ?? []);
   const imageUrl =
-    p.imageUrl || baseImage || galleryImages[0] || fallbackImage || DEFAULT_PRODUCT_IMAGE;
+    p.imageUrl ||
+    baseImage ||
+    galleryImages[0] ||
+    fallbackImage ||
+    DEFAULT_PRODUCT_IMAGE;
   return {
-    id: p.id, name: p.model?.name ?? p.name, slug: p.slug, sku: p.sku, barcode: p.barcode,
-    modelCode: p.modelCode, variant: p.variant, variantColor: p.variantColor,
+    id: p.id,
+    name: p.model?.name ?? p.name,
+    slug: p.slug,
+    sku: p.sku,
+    barcode: p.barcode,
+    modelCode: p.modelCode,
+    variant: p.variant,
+    variantColor: p.variantColor,
     variantSelector: p.model?.variantSelector,
     attributes: p.attributes ?? null,
     modelOptions: p.model?.options ?? null,
-    description: p.description, price: Number(p.price), stock: p.stock, minStock: p.minStock,
+    description: p.description,
+    price: Number(p.price),
+    stock: p.stock,
+    minStock: p.minStock,
     imageUrl,
-    images: [...new Set([imageUrl, baseImage, ...galleryImages].filter((img): img is string => Boolean(img && img.trim())))],
+    images: [
+      ...new Set(
+        [imageUrl, baseImage, ...galleryImages].filter((img): img is string =>
+          Boolean(img && img.trim()),
+        ),
+      ),
+    ],
     category: p.category,
-    brand: p.brand ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug } : null,
-    isActive: p.isActive, isVisibleWeb: p.isVisibleWeb, isFeatured: p.isFeatured,
+    brand: p.brand
+      ? { id: p.brand.id, name: p.brand.name, slug: p.brand.slug }
+      : null,
+    isActive: p.isActive,
+    isVisibleWeb: p.isVisibleWeb,
+    isFeatured: p.isFeatured,
   };
 }
 
 export async function getStoreProducts(): Promise<StoreProduct[]> {
   try {
     const rows = await db.query.products.findMany({
-      where: and(eq(products.isActive, true), eq(products.isArchived, false), eq(products.isVisibleWeb, true)),
+      where: and(
+        eq(products.isActive, true),
+        eq(products.isArchived, false),
+        eq(products.isVisibleWeb, true),
+      ),
       with: { category: true, model: true, brand: true },
       orderBy: [desc(products.id)],
     });
     const groups = new Map<string, ProductRow[]>();
     for (const row of rows) {
-      const key = row.modelCode ? "model:" + row.modelCode : "product:" + row.id;
+      const key = row.modelCode
+        ? "model:" + row.modelCode
+        : "product:" + row.id;
       const group = groups.get(key) ?? [];
       group.push(row);
       groups.set(key, group);
     }
-    return [...groups.values()].map(group => {
-      const representative = group.find(row => row.stock > 0) ?? group[0];
+    return [...groups.values()].map((group) => {
+      const representative = group.find((row) => row.stock > 0) ?? group[0];
       const baseModelImage = representative.model?.imageUrl || null;
-      const modelImage = group.find(row => row.imageUrl || row.images[0]);
-      const fallbackCover = modelImage?.imageUrl || modelImage?.images[0] || null;
+      const modelImage = group.find((row) => row.imageUrl || row.images[0]);
+      const fallbackCover =
+        modelImage?.imageUrl || modelImage?.images[0] || null;
       const repProduct = toStoreProduct(representative, fallbackCover);
       const baseGallery = representative.model?.images?.length
         ? representative.model.images
@@ -105,11 +159,20 @@ export async function getStoreProducts(): Promise<StoreProduct[]> {
         ? {
             ...repProduct,
             imageUrl: baseModelImage,
-            images: [...new Set([baseModelImage, repProduct.imageUrl, ...baseGallery].filter((img): img is string => Boolean(img && img.trim())))],
+            images: [
+              ...new Set(
+                [baseModelImage, repProduct.imageUrl, ...baseGallery].filter(
+                  (img): img is string => Boolean(img && img.trim()),
+                ),
+              ),
+            ],
           }
         : repProduct;
-      const prices = group.map(row => Number(row.price));
-      const totalStock = group.reduce((sum, row) => sum + Math.max(0, row.stock), 0);
+      const prices = group.map((row) => Number(row.price));
+      const totalStock = group.reduce(
+        (sum, row) => sum + Math.max(0, row.stock),
+        0,
+      );
 
       const swatchMap = new Map<string, string>();
       for (const row of group) {
@@ -123,7 +186,11 @@ export async function getStoreProducts(): Promise<StoreProduct[]> {
           for (const val of Object.values(row.attributes)) {
             if (typeof val === "string" && val.includes("|")) {
               const [label, hex] = val.split("|");
-              if (hex && /^#[0-9A-Fa-f]{6}$/.test(hex) && !swatchMap.has(hex.toLowerCase())) {
+              if (
+                hex &&
+                /^#[0-9A-Fa-f]{6}$/.test(hex) &&
+                !swatchMap.has(hex.toLowerCase())
+              ) {
                 swatchMap.set(hex.toLowerCase(), label || hex);
               }
             }
@@ -133,12 +200,34 @@ export async function getStoreProducts(): Promise<StoreProduct[]> {
 
       return {
         ...product,
-        isFeatured: group.some(row => row.isFeatured),
+        isFeatured: group.some((row) => row.isFeatured),
+        catalogOptions: group.map((row) => {
+          const attributes = Object.values(row.attributes ?? {});
+          return {
+            id: row.id,
+            slug: row.slug,
+            stock: row.stock,
+            price: Number(row.price),
+            imageUrl: row.imageUrl,
+            terms: [row.sku, row.barcode, row.variant, ...attributes].filter(
+              (term): term is string => !!term,
+            ),
+            colors: [
+              row.variantColor,
+              ...attributes.map((value) => value.split("|")[1]),
+            ]
+              .filter((hex): hex is string => !!hex)
+              .map((hex) => hex.toLowerCase()),
+          };
+        }),
         variantCount: group.length,
         totalStock,
         minPrice: Math.min(...prices),
         maxPrice: Math.max(...prices),
-        colorSwatches: [...swatchMap.entries()].map(([hex, name]) => ({ hex, name })),
+        colorSwatches: [...swatchMap.entries()].map(([hex, name]) => ({
+          hex,
+          name,
+        })),
       };
     });
   } catch (error) {
@@ -158,7 +247,12 @@ export async function getStoreCategories(): Promise<StoreCategory[]> {
         orderBy: (c, { asc }) => [asc(c.name)],
       }),
       db.query.products.findMany({
-        where: (p, { and, eq }) => and(eq(p.isActive, true), eq(p.isArchived, false), eq(p.isVisibleWeb, true)),
+        where: (p, { and, eq }) =>
+          and(
+            eq(p.isActive, true),
+            eq(p.isArchived, false),
+            eq(p.isVisibleWeb, true),
+          ),
         columns: {
           categoryId: true,
           modelCode: true,
@@ -194,39 +288,91 @@ export async function getStoreCategories(): Promise<StoreCategory[]> {
 /**
  * Obtiene un producto individual por slug o ID
  */
-export async function getStoreProductBySlug(slug: string): Promise<StoreProduct | null> {
+export async function getStoreProductBySlug(
+  slug: string,
+): Promise<StoreProduct | null> {
   try {
     const p = await db.query.products.findFirst({
-      where: (p, { eq, or }) => or(
-        eq(p.slug, slug),
-        /^\d+$/.test(slug) && Number(slug) <= 2147483647 ? eq(p.id, Number(slug)) : undefined
-      ),
+      where: (p, { eq, or }) =>
+        or(
+          eq(p.slug, slug),
+          /^\d+$/.test(slug) && Number(slug) <= 2147483647
+            ? eq(p.id, Number(slug))
+            : undefined,
+        ),
       with: { category: true, model: true, brand: true },
     });
-    return p?.isActive && !p.isArchived && p.isVisibleWeb ? toStoreProduct(p) : null;
+    return p?.isActive && !p.isArchived && p.isVisibleWeb
+      ? toStoreProduct(p)
+      : null;
   } catch (error) {
     console.error("Error al buscar producto por slug:", error);
     return null;
   }
 }
 
-export async function getStoreVariants(modelCode: string): Promise<StoreProduct[]> {
+export async function getStoreVariants(
+  modelCode: string,
+): Promise<StoreProduct[]> {
   try {
     const rows = await db.query.products.findMany({
-      where: and(eq(products.modelCode, modelCode), eq(products.isActive, true), eq(products.isArchived, false), eq(products.isVisibleWeb, true)),
+      where: and(
+        eq(products.modelCode, modelCode),
+        eq(products.isActive, true),
+        eq(products.isArchived, false),
+        eq(products.isVisibleWeb, true),
+      ),
       with: { category: true, model: true, brand: true },
       orderBy: (p, { asc }) => [asc(p.variant), asc(p.id)],
     });
-    const firstImage = rows.find(row => row.imageUrl || row.images[0]);
+    const firstImage = rows.find((row) => row.imageUrl || row.images[0]);
     // Un modelo importado puede tener etiquetas anteriores a los atributos estructurados.
     // En ese caso el selector por etiqueta permite elegir también las variantes antiguas.
-    const completeAttributes = rows.every(row => row.attributes && Object.keys(row.attributes).length > 0);
-    return rows.map(row => {
-      const variant = toStoreProduct(row, firstImage?.imageUrl || firstImage?.images[0]);
+    const completeAttributes = rows.every(
+      (row) => row.attributes && Object.keys(row.attributes).length > 0,
+    );
+    return rows.map((row) => {
+      const variant = toStoreProduct(
+        row,
+        firstImage?.imageUrl || firstImage?.images[0],
+      );
       return completeAttributes ? variant : { ...variant, attributes: null };
     });
   } catch (error) {
     console.error("Error al obtener variantes del producto:", error);
     return [];
   }
+}
+
+export async function getSavedOptions(): Promise<SavedOption[]> {
+  const rows = await db.query.products.findMany({
+    where: and(
+      eq(products.isActive, true),
+      eq(products.isArchived, false),
+      eq(products.isVisibleWeb, true),
+    ),
+    columns: {
+      id: true,
+      slug: true,
+      name: true,
+      variant: true,
+      price: true,
+      imageUrl: true,
+      images: true,
+    },
+    with: { model: { columns: { name: true, imageUrl: true, images: true } } },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    name: row.model?.name ?? row.name,
+    variant: row.variant,
+    price: Number(row.price),
+    imageUrl:
+      row.imageUrl ||
+      row.model?.imageUrl ||
+      row.model?.images?.[0] ||
+      row.images?.[0] ||
+      DEFAULT_PRODUCT_IMAGE,
+  }));
 }
