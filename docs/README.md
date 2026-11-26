@@ -27,8 +27,9 @@ El acceso a cada ruta del panel administrativo está validado tanto en el proxy 
 | `/admin/inventario` | Catálogo SKU, altas, edición, archivo/borrado, Kárdex, bajas y Excel | ✅ | ✅ | ❌ | ✅ *(Inicio)* |
 | `/admin/compras` | Recepción de compras, anulación y devoluciones a proveedor | ✅ | ✅ | ❌ | ✅ |
 | `/admin/proveedores` | Directorio y gestión de proveedores | ✅ | ✅ | ❌ | ✅ |
-| `/admin/reportes` | Reporte Z / Cierre diario consolidado | ✅ | ✅ | ❌ | ❌ |
-| `/admin/analitica` | Analítica por rango de fechas, márgenes y rendimiento | ✅ | ✅ | ❌ | ❌ |
+| `/admin/reportes` | Ventas del día | ✅ | ✅ | ❌ | ❌ |
+| `/admin/analitica` | Ventas y ganancias por período | ✅ | ✅ | ❌ | ❌ |
+| `/admin/informe-compras` | Compras y devoluciones por período | ✅ | ✅ | ❌ | ❌ |
 | `/admin/usuarios` | Gestión de operadores, roles y PIN de supervisor | ✅ | ❌ | ❌ | ❌ |
 
 > **Nota para tienda pública:** Las rutas `/`, `/catalogo` y `/producto/[slug]` son públicas y muestran únicamente productos con `isActive = true` y `isVisibleWeb = true`.

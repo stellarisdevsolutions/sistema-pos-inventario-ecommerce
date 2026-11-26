@@ -60,7 +60,7 @@ En [`src/db/operations/catalog.ts`](../src/db/operations/catalog.ts), un product
 
 - **Turnos de caja (`/admin/cajas`):** Los ingresos ya cobrados en turnos abiertos o cerrados permanecen intactos.
 - **Compras y capital invertido (`/admin/compras`, `/admin`):** El historial de compras y su inversión quedan intactos. El capital de unidades aún existentes (`stock × costo`) sigue sumando tanto en **Valor en bodega** de Inventario como en el **valor de inventario del Dashboard** ([dashboard.ts](../src/app/admin/actions/dashboard.ts)), sin generar alertas falsas de stock crítico.
-- **Ventas históricas, Reporte Z (`/admin/reportes`) y Analítica (`/admin/analitica`):** Calculan ingresos brutos, devoluciones, costos históricos (`sale_items.unit_cost`) y utilidad bruta leyendo todas las ventas emitidas aunque el producto hoy esté inactivo o archivado.
+- **Ventas históricas, Ventas del día (`/admin/reportes`) y Ventas y ganancias (`/admin/analitica`):** Calculan ingresos brutos, devoluciones, costos históricos (`sale_items.unit_cost`) y utilidad bruta leyendo todas las ventas emitidas aunque el producto hoy esté inactivo o archivado.
 - **Kárdex:** Todos los movimientos históricos siguen visibles con el nombre y SKU del producto.
 - **Baja posterior:** Si decides no volver a vender un saldo archivado (`stock > 0`), puedes registrar un **Acta de Baja / Merma** en Inventario para llevar el stock a `0` y contabilizar la pérdida en **Pérdidas del mes**.
 - **Tienda Online (`/`, `/catalogo`):** Tanto `Inactivo` como `Archivado` retiran el artículo de la web al instante.

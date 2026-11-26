@@ -5,7 +5,7 @@ const baseUrl = process.env.AUDIT_BASE_URL || "http://127.0.0.1:3000";
 const adminPaths = [
   "/admin", "/admin/ventas", "/admin/cajas", "/admin/inventario", "/admin/inventario/nuevo",
   "/admin/inventario/1/editar", "/admin/compras", "/admin/compras/nueva", "/admin/proveedores",
-  "/admin/reportes", "/admin/analitica", "/admin/usuarios",
+  "/admin/informe-compras", "/admin/ajustes", "/admin/reportes", "/admin/analitica", "/admin/usuarios",
 ];
 
 test("el portal presenta el formulario de acceso", async () => {

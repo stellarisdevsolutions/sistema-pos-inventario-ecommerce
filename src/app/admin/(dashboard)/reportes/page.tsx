@@ -4,16 +4,11 @@ import { addBusinessDays, businessDate } from "@/lib/business-date";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   BarChart3,
@@ -23,20 +18,14 @@ import {
   Receipt,
   RotateCcw,
   Printer,
-  Download,
   CheckCircle2,
   AlertTriangle,
   Wallet,
-  ShieldCheck,
   Building2,
   RefreshCw,
   Search,
-  Filter,
   Package,
-  Layers,
-  Clock,
   ArrowRight,
-  Lock,
   FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -48,10 +37,6 @@ import { PaginationBar } from "@/components/ui/pagination-bar";
 import {
   getReporteZAction,
   type ReporteZData,
-  type ReporteZShiftItem,
-  type ReporteZTopProduct,
-  type ReporteZSaleItem,
-  type ReporteZReturnItem,
 } from "@/app/admin/actions/reports";
 
 export default function ReportesPage() {
@@ -79,7 +64,7 @@ export default function ReportesPage() {
       if (res.success && res.data) {
         setReportData(res.data);
       } else {
-        const msg = res.error || "No se pudo cargar el Reporte Z.";
+        const msg = res.error || "No se pudo cargar las ventas del día.";
         setReportData(null);
         setLoadError(msg);
         toast.error(msg);
@@ -104,7 +89,7 @@ export default function ReportesPage() {
           setReportData(res.data);
           setLoadError(null);
         } else {
-          const msg = res.error || "No se pudo cargar el Reporte Z.";
+          const msg = res.error || "No se pudo cargar las ventas del día.";
           setReportData(null);
           setLoadError(msg);
           toast.error(msg);
@@ -189,7 +174,7 @@ export default function ReportesPage() {
     if (!reportData) return;
     try {
       let csv = "\uFEFF"; // UTF-8 BOM
-      csv += `${csvCell(`REPORTE Z Y CIERRE FINANCIERO DIARIO - ${STORE_NAME.toUpperCase()}`)}\n`;
+      csv += `${csvCell(`VENTAS DEL DÍA - ${STORE_NAME.toUpperCase()}`)}\n`;
       csv += `Fecha del Reporte:;${csvCell(reportData.reportDate)}\n`;
       csv += `Generado el:;${csvCell(reportData.generatedAt)}\n\n`;
 
@@ -253,7 +238,7 @@ export default function ReportesPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      link.setAttribute("download", `Reporte_Z_${reportData.reportDate}.csv`);
+      link.setAttribute("download", `Ventas_del_dia_${reportData.reportDate}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -272,11 +257,11 @@ export default function ReportesPage() {
       <div className="admin-page-header flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-admin-card-border">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="admin-page-title">Reporte Z</h1>
+            <h1 className="admin-page-title">Ventas del día</h1>
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
               <span className={cn("h-2 w-2 rounded-full", reportData?.isToday ? "bg-emerald-500" : "bg-slate-400")} />
               <span className={reportData?.isToday ? "text-emerald-700 dark:text-emerald-400" : "text-admin-muted"}>
-                {reportData?.isToday ? "Corte del Día" : "Cierre Histórico"}
+                {reportData?.isToday ? "Hoy" : "Día anterior"}
               </span>
             </div>
           </div>
@@ -350,7 +335,7 @@ export default function ReportesPage() {
             className="h-9 rounded-xl text-xs font-semibold gap-1.5 bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid cursor-pointer"
           >
             <Printer className="h-3.5 w-3.5" />
-            <span>Reporte Z (80mm)</span>
+            <span>Imprimir (80 mm)</span>
           </Button>
         </div>
       </div>
@@ -560,7 +545,7 @@ export default function ReportesPage() {
             className="admin-segment"
           >
             <Package className="h-3.5 w-3.5" />
-            <span>Top Productos ({reportData?.topProducts.length || 0})</span>
+            <span>Productos más vendidos ({reportData?.topProducts.length || 0})</span>
           </button>
 
           <button
@@ -570,7 +555,7 @@ export default function ReportesPage() {
             className="admin-segment"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            <span>Auditoría de Devoluciones ({reportData?.returns.length || 0})</span>
+            <span>Devoluciones del día ({reportData?.returns.length || 0})</span>
           </button>
 
           <button
@@ -684,7 +669,7 @@ export default function ReportesPage() {
             <div className="p-4 border-b border-admin-card-border flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-sm text-admin-text">
-                  Auditoría Individual de Gavetas Físicas
+                  Arqueos por caja
                 </h3>
                 <p className="text-xs text-admin-muted">
                   Verificación de fondos iniciales, cobros en efectivo y cuadre de conteo ciego.
@@ -1112,7 +1097,7 @@ export default function ReportesPage() {
               </h2>
               <p className="text-[10px] text-admin-muted">Punto de Venta Central</p>
               <div className="my-1.5 py-1 px-2 rounded bg-slate-900 text-white font-semibold text-[11px] text-center">
-                *** REPORTE Z - CIERRE DIARIO ***
+                VENTAS DEL DÍA
               </div>
               <p className="text-[10px] text-slate-600">
                 Fecha Contable: <strong>{reportData?.reportDate}</strong>

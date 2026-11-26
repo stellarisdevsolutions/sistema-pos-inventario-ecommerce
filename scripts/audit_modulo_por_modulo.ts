@@ -3,6 +3,8 @@ import { importCatalogAction } from "@/app/admin/actions/catalog-import";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
+import nextHeaders from "next/headers";
+import { createSession, destroySession, getCurrentUser, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { NextRequest } from "next/server";
 import { proxy } from "@/proxy";
 import { db } from "@/db";
@@ -56,6 +58,49 @@ test("la sesión exige una clave, expira y conserva solo identificador y rol", a
   assert.equal(await decodeSessionToken(token), null);
 });
 
+test("cerrar sesión permite reintentar un fallo y revoca el acceso al panel", async (t) => {
+  const previousSecret = process.env.SESSION_SECRET;
+  process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+  t.after(() => {
+    if (previousSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = previousSecret;
+  });
+
+  const jar = new Map<string, { value: string }>();
+  t.mock.method(nextHeaders, "cookies", async () => ({
+    set: (name: string, value: string) => jar.set(name, { value }),
+    get: (name: string) => jar.get(name),
+    delete: (name: string) => jar.delete(name),
+  }));
+  const account = { ...user, role: "admin" as const, sessionVersion: 1 };
+  t.mock.method(db.query.users, "findFirst", async () => account);
+  let databaseAvailable = false;
+  t.mock.method(db, "update", () => ({
+    set: () => ({
+      where: async () => {
+        if (!databaseAvailable) throw new Error("Base de datos temporalmente inaccesible");
+        account.sessionVersion++;
+      },
+    }),
+  }));
+
+  await createSession(account);
+  const cookie = jar.get(SESSION_COOKIE_NAME)!;
+  assert.deepEqual(await getCurrentUser(), account);
+  await assert.rejects(destroySession(), /temporalmente inaccesible/);
+  assert.equal(jar.get(SESSION_COOKIE_NAME), cookie);
+  databaseAvailable = true;
+  await destroySession();
+  assert.equal(jar.has(SESSION_COOKIE_NAME), false);
+  assert.equal(await getCurrentUser(), null);
+
+  jar.set(SESSION_COOKIE_NAME, cookie);
+  assert.equal(await getCurrentUser(), null);
+  t.mock.method(console, "error", () => {});
+  assert.equal((await getPosCatalogAction()).success, false);
+  assert.equal((await createCategoryAction("Categoría")).success, false);
+});
+
 test("la matriz de rutas concede a cada rol su módulo y restringe usuarios", async (t) => {
   const oldSecret = process.env.SESSION_SECRET;
   process.env.SESSION_SECRET = randomBytes(32).toString("hex");
@@ -79,6 +124,8 @@ test("la matriz de rutas concede a cada rol su módulo y restringe usuarios", as
       assert.equal(denied.status, 307);
       assert.equal(new URL(denied.headers.get("location")!).searchParams.get("denied"), "1");
     }
+    const purchasesReport = await proxy(new NextRequest("http://localhost/admin/informe-compras", { headers }));
+    assert.equal(purchasesReport.status, role === "admin" || role === "manager" ? 200 : 307);
     const settingsRes = await proxy(new NextRequest("http://localhost/admin/ajustes", { headers }));
     if (role === "admin" || role === "manager") {
       assert.equal(settingsRes.status, 200);

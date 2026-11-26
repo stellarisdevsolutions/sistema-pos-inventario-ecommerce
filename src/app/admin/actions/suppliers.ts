@@ -2,6 +2,7 @@
 
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
+import { purchaseReceivedAt } from "@/db/operations/reporting";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -49,6 +50,7 @@ export async function getSuppliersAction(): Promise<{
     const list = await db.query.suppliers.findMany({
       with: {
         purchases: {
+          extras: { receivedAt: purchaseReceivedAt },
           columns: {
             id: true,
             totalAmount: true,
@@ -105,8 +107,8 @@ export async function getSuppliersAction(): Promise<{
         }
 
         totalPurchased += Math.max(0, total - totalReturned);
-        const pDate = p.createdAt ? new Date(p.createdAt) : null;
-        const inMonth = pDate !== null && pDate >= startOfMonth && pDate < endOfMonth;
+        const pDate = new Date(p.receivedAt);
+        const inMonth = pDate >= startOfMonth && pDate < endOfMonth;
         monthlyPurchased += (inMonth ? total : 0) - monthReturned;
       }
 

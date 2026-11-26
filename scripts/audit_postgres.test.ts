@@ -1,3 +1,8 @@
+import { supplierReceiptsQuery, type SupplierReceipts } from "@/db/operations/purchase-report";
+import { drizzle } from "drizzle-orm/pglite";
+import * as schema from "@/db/schema";
+import { periodRefundLinesQuery, purchaseReceivedAt, saleDayQuantity, type RefundLine } from "@/db/operations/reporting";
+import { businessDayStart } from "@/lib/business-date";
 import ExcelJS from "exceljs";
 import { makeCatalogWorkbook, readCatalogWorkbook } from "@/lib/catalog-workbook";
 import { extendModelOptions } from "@/lib/model-variants";
@@ -1296,4 +1301,63 @@ test("reconteo ciego mantiene POS bloqueado, permite edición auditada y concili
     (await db.query("SELECT actual_transfer, transfer_difference FROM cash_shifts WHERE id = 2")).rows,
     [{ actual_transfer: "40.00", transfer_difference: "-10.00" }]
   );
+});
+
+test("una devolución del mes siguiente revierte el margen en la fecha de devolución", async t => {
+  const db = await createDatabase(t);
+  await db.exec(`
+    INSERT INTO products (name,slug,price,cost_price) VALUES ('Zapatilla','zap',100,60);
+    INSERT INTO sales (sale_number,user_id,status,total_amount,refunded_amount,net_amount,created_at)
+      VALUES ('T1',1,'refunded',100,100,0,'2026-11-01 03:59:00');
+    INSERT INTO sale_items (sale_id,product_id,quantity,unit_price,unit_cost,subtotal,returned_quantity)
+      VALUES (1,1,1,100,60,100,1);
+    INSERT INTO sale_refunds (sale_id,user_id,authorized_by_user_id,refund_method,amount,reason,created_at)
+      VALUES (1,1,2,'cash',100,'Cambio', '2026-11-01 04:00:00');
+    INSERT INTO inventory_movements (product_id,movement_type,quantity,previous_stock,new_stock,unit_cost,reference_type,reference_id,created_at)
+      VALUES (1,'return_in',1,0,1,60,'sale',1,'2026-11-01 04:00:00');
+  `);
+  async function lines(start: string, end: string) {
+    const stmt = new PgDialect().sqlToQuery(periodRefundLinesQuery(businessDayStart(start), businessDayStart(end)));
+    return (await db.query<RefundLine>(stmt.sql, stmt.params)).rows;
+  }
+  assert.equal(saleDayQuantity({ quantity: 1, returnedQuantity: 1 }, true) * (100 - 60), 40);
+  assert.deepEqual(await lines("2026-10-01", "2026-11-01"), []);
+  const november = await lines("2026-11-01", "2026-12-01");
+  assert.equal(november.length, 1);
+  assert.equal(Number(november[0].amount), 100);
+  assert.equal(Number(november[0].cost), 60);
+  assert.equal(Number(november[0].cost) - Number(november[0].amount), -40);
+});
+
+test("compras y proveedores leen la misma fecha de recepción del Kárdex", async t => {
+  const db = await createDatabase(t);
+  await db.exec(`
+    INSERT INTO suppliers (name) VALUES ('Mayorista');
+    INSERT INTO products (name,slug,price) VALUES ('Cable','cable',10);
+    INSERT INTO purchases (purchase_number,supplier_id,user_id,created_at) VALUES ('C1',1,1,'2026-10-31 15:00');
+    INSERT INTO inventory_movements (product_id,movement_type,quantity,previous_stock,new_stock,unit_cost,reference_type,reference_id,created_at)
+      VALUES (1,'purchase_in',2,0,2,8,'purchase',1,'2026-11-02 15:00');
+  `);
+  await db.exec(`
+    UPDATE purchases SET total_amount = 24 WHERE id = 1;
+    INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal)
+      VALUES (1,1,2,8,16), (1,1,1,8,8);
+    INSERT INTO purchases (purchase_number,supplier_id,user_id,created_at,status,total_amount)
+      VALUES ('C2',1,1,'2026-11-03','cancelled',50), ('C3',1,1,'2026-11-04','pending',80);
+  `);
+  async function supplierTotals(from: string, to: string) {
+    const query = new PgDialect().sqlToQuery(supplierReceiptsQuery(businessDayStart(from), businessDayStart(to)));
+    return (await db.query<SupplierReceipts>(query.sql, query.params)).rows;
+  }
+  assert.deepEqual(await supplierTotals("2026-10-01","2026-11-01"), []);
+  assert.deepEqual(await supplierTotals("2026-11-01","2026-12-01"), [
+    { supplierId: 1, supplier: "Mayorista", receipts: 1, units: 3, amount: "24.00" },
+  ]);
+  const orm = drizzle(db, { schema });
+  const extras = { receivedAt: purchaseReceivedAt };
+  const [purchase] = await orm.query.purchases.findMany({ extras, orderBy: (p, { asc }) => asc(p.id) });
+  const [supplier] = await orm.query.suppliers.findMany({ with: { purchases: { extras, orderBy: (p, { asc }) => asc(p.id) } } });
+  for (const row of [purchase, supplier.purchases[0]]) {
+    assert.equal(new Date(row.receivedAt).toISOString(), "2026-11-02T15:00:00.000Z");
+  }
 });

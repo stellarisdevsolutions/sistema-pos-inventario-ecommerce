@@ -42,7 +42,7 @@ async function runSeed() {
   try {
     // 1. Sembrar Usuarios con Roles
     console.log("👤 Insertando usuarios y roles del sistema...");
-    const [adminUser, supervisorUser, cashierUser, warehouseUser] = await db
+    const [, supervisorUser, cashierUser, warehouseUser] = await db
       .insert(schema.users)
       .values([
         {

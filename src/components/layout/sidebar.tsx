@@ -10,7 +10,8 @@ import { isModuleActive, navigationItems } from "./nav-items";
 const sections = [
   { id: "general", label: "Operación diaria" },
   { id: "operaciones", label: "Abastecimiento" },
-  { id: "seguimiento", label: "Control y análisis" },
+  { id: "reportes", label: "Reportes" },
+  { id: "seguimiento", label: "Administración" },
 ] as const;
 
 export function Sidebar({ collapsed = false, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {

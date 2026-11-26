@@ -3,7 +3,6 @@
 import { MetricCard } from "@/components/admin/metric-card";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import {
   Building2,
@@ -13,30 +12,24 @@ import {
   Mail,
   MapPin,
   Truck,
-  ExternalLink,
   MoreVertical,
   Edit,
   Trash2,
   CheckCircle2,
   XCircle,
-  FileText,
   DollarSign,
-  Boxes,
   Loader2,
   X,
   LayoutGrid,
   List,
   RotateCcw,
-  Receipt,
   Eye,
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -50,12 +43,11 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrency, formatCurrencyLocale } from "@/lib/currency";
+import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrencyLocale } from "@/lib/currency";
 import { useAuth } from "@/context/auth-context";
 import {
   getSuppliersAction,
@@ -274,7 +266,6 @@ export default function ProveedoresPage() {
   // KPIs Calculados
   const totalSuppliersCount = suppliers.length;
   const activeSuppliersCount = suppliers.filter((s) => s.isActive).length;
-  const totalPurchasedSum = suppliers.reduce((acc, s) => acc + s.totalPurchased, 0);
   const totalMonthlyPurchasedSum = suppliers.reduce((acc, s) => acc + (s.monthlyPurchased || 0), 0);
   const totalPurchasesOrders = suppliers.reduce((acc, s) => acc + s.purchasesCount, 0);
 

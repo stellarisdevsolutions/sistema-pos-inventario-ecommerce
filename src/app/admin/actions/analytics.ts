@@ -2,6 +2,8 @@
 
 import { adminActionError } from "@/lib/admin-action-error";
 import { productName } from "@/lib/product-name";
+import { periodRefundLinesQuery, groupRefundLines, saleDayQuantity, type RefundLine } from "@/db/operations/reporting";
+import { refundUnitAmounts } from "@/lib/refund-amount";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { and, gte, lt, desc } from "drizzle-orm";
@@ -126,7 +128,7 @@ export async function getPeriodAnalyticsAction(
       return { success: false, error: "Selecciona un rango de entre 1 y 366 días." };
     }
 
-    const [sales, periodRefunds, periodAdjustments, periodPurchaseReturns] = await Promise.all([
+    const [sales, periodRefunds, periodAdjustments, periodPurchaseReturns, refundLines] = await Promise.all([
       db.query.sales.findMany({
         where: and(
           gte(schema.sales.createdAt, startOfDay),
@@ -149,7 +151,7 @@ export async function getPeriodAnalyticsAction(
             },
           },
           refunds: {
-            columns: { id: true },
+            columns: { id: true, amount: true, createdAt: true },
           },
         },
         orderBy: [desc(schema.sales.createdAt)],
@@ -162,6 +164,7 @@ export async function getPeriodAnalyticsAction(
         with: {
           sale: {
             columns: { id: true, cashShiftId: true, userId: true },
+            with: { user: { columns: { name: true, role: true } } },
           },
         },
       }),
@@ -184,8 +187,10 @@ export async function getPeriodAnalyticsAction(
           },
         },
       }),
+      db.execute<RefundLine>(periodRefundLinesQuery(startOfDay, endOfDay)),
     ]);
 
+    const linesByRefund = groupRefundLines(refundLines.rows);
     let grossSales = 0;
     let refunds = 0;
     let netSales = 0;
@@ -241,25 +246,21 @@ export async function getPeriodAnalyticsAction(
 
     for (const s of sales) {
       const origTotal = parseFloat(s.totalAmount) || 0;
-      const refAmount = parseFloat(s.refundedAmount || "0") || 0;
+      const ticketRefunds = s.refunds.filter(r => r.createdAt < endOfDay);
+      const refAmount = s.refunds.length
+        ? ticketRefunds.reduce((sum, r) => sum + Number(r.amount), 0)
+        : Number(s.refundedAmount ?? 0);
       const isCountedSale = s.status === "completed" || s.status === "refunded";
-      const persistedNet =
-        !isCountedSale
-          ? 0
-          : s.netAmount !== null && s.netAmount !== undefined
-          ? parseFloat(s.netAmount) || 0
-          : Math.max(0, origTotal - refAmount);
+      const reportStatus = s.status === "refunded" && s.refunds.length > 0 && !ticketRefunds.length
+        ? "completed" : s.status;
+      const persistedNet = isCountedSale ? origTotal - refAmount : 0;
 
-      const saleSubtotal = parseFloat(s.subtotal) || 0;
-      const saleDiscount = parseFloat(s.discountAmount) || 0;
-      const discountRatio =
-        saleSubtotal > 0 ? Math.max(0, (saleSubtotal - saleDiscount) / saleSubtotal) : 1;
-
+      const lineAmounts = refundUnitAmounts(s.items, origTotal);
       let saleCost = 0;
       for (const item of s.items) {
         const qty = item.quantity;
-        const returnedQty = item.returnedQuantity || 0;
-        const netQty = Math.max(0, qty - returnedQty);
+        const netQty = saleDayQuantity(item, s.refunds.length > 0);
+        const returnedQty = qty - netQty;
         const unitCost = parseFloat(item.unitCost) || 0;
         const itemCost = isCountedSale ? netQty * unitCost : 0;
         saleCost += itemCost;
@@ -282,7 +283,7 @@ export async function getPeriodAnalyticsAction(
           prevP.unitsSold += qty;
           prevP.unitsReturned += returnedQty;
           prevP.netUnits += netQty;
-          prevP.revenue += netQty * (parseFloat(item.unitPrice) || 0) * discountRatio;
+          prevP.revenue += lineAmounts.get(item.id)!(returnedQty, netQty) / 100;
           prevP.cost += itemCost;
           prevP.profit = prevP.revenue - prevP.cost;
           prevP.marginPercent = prevP.revenue > 0 ? (prevP.profit / prevP.revenue) * 100 : 0;
@@ -290,15 +291,17 @@ export async function getPeriodAnalyticsAction(
         }
       }
 
-      const saleProfit = isCountedSale ? persistedNet - saleCost : 0;
+      const ticketCost = saleCost - ticketRefunds.reduce((sum, r) =>
+        sum + (linesByRefund.get(r.id) ?? []).reduce((cost, line) => cost + Number(line.cost), 0), 0);
+      const saleProfit = isCountedSale ? persistedNet - ticketCost : 0;
       const hasLegacyRefund = s.status === "refunded" && s.refunds.length === 0 && refAmount > 0;
 
-      if (s.status === "completed") {
+      if (reportStatus === "completed") {
         completedCount += 1;
         grossSales += origTotal;
         netSales += origTotal;
         totalCost += saleCost;
-      } else if (s.status === "refunded") {
+      } else if (reportStatus === "refunded") {
         refundedCount += 1;
         grossSales += origTotal;
         netSales += origTotal;
@@ -378,11 +381,11 @@ export async function getPeriodAnalyticsAction(
           cashierName: s.user?.name || "Cajero",
           paymentMethod: s.paymentMethod,
           isAdministrative: !s.cashShiftId,
-          status: s.status,
+          status: reportStatus,
           originalTotal: origTotal,
           refundedAmount: isCountedSale ? refAmount : 0,
           netTotal: persistedNet,
-          cost: isCountedSale ? saleCost : 0,
+          cost: isCountedSale ? ticketCost : 0,
           profit: saleProfit,
         });
       }
@@ -390,6 +393,23 @@ export async function getPeriodAnalyticsAction(
 
     for (const r of periodRefunds) {
       const amount = parseFloat(r.amount) || 0;
+      const lines = linesByRefund.get(r.id) ?? [];
+      const restoredCost = lines.reduce((sum, line) => sum + Number(line.cost), 0);
+      totalCost -= restoredCost;
+      for (const line of lines) {
+        const row = productMap.get(line.productId) ?? {
+          productId: line.productId, productName: productName(line), sku: line.sku,
+          unitsSold: 0, unitsReturned: 0, netUnits: 0, revenue: 0, cost: 0, profit: 0,
+          categoryName: line.categoryName, marginPercent: 0,
+        };
+        row.unitsReturned += line.quantity;
+        row.netUnits -= line.quantity;
+        row.revenue -= Number(line.amount);
+        row.cost -= Number(line.cost);
+        row.profit = row.revenue - row.cost;
+        row.marginPercent = row.revenue > 0 ? 100 * row.profit / row.revenue : 0;
+        productMap.set(row.productId, row);
+      }
       refunds += amount;
       netSales -= amount;
 
@@ -413,15 +433,18 @@ export async function getPeriodAnalyticsAction(
       if (refundDay) {
         refundDay.refunds += amount;
         refundDay.netSales -= amount;
-        refundDay.profit -= amount;
+        refundDay.cost -= restoredCost;
+        refundDay.profit += restoredCost - amount;
       }
 
       if (r.sale?.userId) {
-        const prevC = cashierMap.get(r.sale.userId);
-        if (prevC) {
-          prevC.netRevenue -= amount;
-          prevC.profitGenerated -= amount;
-        }
+        const prevC = cashierMap.get(r.sale.userId) ?? {
+          userId: r.sale.userId, userName: r.sale.user.name, role: r.sale.user.role,
+          salesCount: 0, netRevenue: 0, profitGenerated: 0,
+        };
+        prevC.netRevenue -= amount;
+        prevC.profitGenerated += restoredCost - amount;
+        cashierMap.set(r.sale.userId, prevC);
       }
     }
 
@@ -438,8 +461,7 @@ export async function getPeriodAnalyticsAction(
     const averageDailySales = netSales / daysInPeriod;
 
     const topProducts = Array.from(productMap.values())
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 15);
+      .sort((a, b) => b.revenue - a.revenue);
 
     const cashiers = Array.from(cashierMap.values()).sort((a, b) => b.netRevenue - a.netRevenue);
 

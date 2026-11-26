@@ -80,7 +80,6 @@ export default function NuevaCompraPage() {
   const [supplierId, setSupplierId] = useState<number | "">("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"transfer" | "qr" | "cash">("transfer");
-  const [purchaseStatus, setPurchaseStatus] = useState<"received" | "pending">("received");
   const [notes, setNotes] = useState("");
 
   // Renglones de productos agregados a la orden
@@ -241,7 +240,7 @@ export default function NuevaCompraPage() {
     return filteredModalProducts.slice(start, start + modalPageSize);
   }, [filteredModalProducts, safeModalPage, modalPageSize]);
 
-  // Guardar e ingresar mercadería o crear orden pendiente
+  // Registrar la compra e ingresar la mercadería
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -273,8 +272,6 @@ export default function NuevaCompraPage() {
         supplierId: Number(supplierId),
         invoiceNumber: invoiceNumber.trim() || null,
         paymentMethod,
-        paymentStatus: "paid" as const,
-        status: purchaseStatus,
         notes: notes.trim() || null,
         items: items.map((it) => ({
           productId: it.productId,
@@ -286,15 +283,9 @@ export default function NuevaCompraPage() {
       const res = await createPurchaseAction(payload);
       if (res.success) {
         setPurchaseRequestId(crypto.randomUUID());
-        if (purchaseStatus === "received") {
-          toast.success("Compra ingresada a almacén", {
-            description: `Se sumaron ${totalUnits} piezas físicas al inventario y se actualizó el Kárdex.`,
-          });
-        } else {
-          toast.success("Orden de compra pendiente registrada", {
-            description: "El stock se sumará cuando confirmes la recepción en almacén.",
-          });
-        }
+        toast.success("Compra registrada y pagada", {
+          description: `Ingresaron ${totalUnits} unidades al inventario y se actualizó el Kárdex.`,
+        });
         router.push("/admin/compras");
       } else {
         toast.error("Error al registrar compra", { description: res.error });
@@ -420,23 +411,6 @@ export default function NuevaCompraPage() {
                     </select>
                   </div>
 
-                  {/* Estado de Recepción */}
-                  <div className="space-y-1.5">
-                    <label className="font-semibold text-admin-secondary">
-                      Estado de Recepción
-                    </label>
-                    <select
-                      value={purchaseStatus}
-                      onChange={(e) =>
-                        setPurchaseStatus(e.target.value as "received" | "pending")
-                      }
-                      className="h-10 w-full rounded-xl border border-admin-card-border bg-admin-card-bg px-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20"
-                    >
-                      <option value="received">Recibida ahora (sumar stock)</option>
-                      <option value="pending">Pendiente de entrega (orden de compra)</option>
-                    </select>
-                  </div>
-
                   {/* Notas */}
                   <div className="space-y-1.5">
                     <label className="font-semibold text-admin-secondary">
@@ -543,14 +517,10 @@ export default function NuevaCompraPage() {
                                 <span>
                                   Stock actual: <strong className="text-admin-secondary font-mono">{it.currentStock}</strong> u.
                                 </span>
-                                {purchaseStatus === "received" && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                                      Nuevo stock: <strong className="font-mono">{it.currentStock + it.quantity}</strong> u.
-                                    </span>
-                                  </>
-                                )}
+                                <span>•</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                                  Nuevo stock: <strong className="font-mono">{it.currentStock + it.quantity}</strong> u.
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -640,7 +610,7 @@ export default function NuevaCompraPage() {
                   </div>
 
                   <div className="flex justify-between items-center text-slate-500">
-                    <span>{purchaseStatus === "received" ? "Unidades físicas a ingresar:" : "Unidades solicitadas:"}</span>
+                    <span>Unidades a ingresar</span>
                     <span className="font-bold text-admin-brand-text font-mono">
                       {totalUnits} piezas
                     </span>
@@ -677,20 +647,12 @@ export default function NuevaCompraPage() {
                     {isSubmitting ? (
                       <>
                         <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>
-                          {purchaseStatus === "received"
-                            ? "Procesando e ingresando stock..."
-                            : "Guardando orden pendiente..."}
-                        </span>
+                        <span>Registrando compra...</span>
                       </>
                     ) : (
                       <>
                         <Check className="h-4 w-4 stroke-[2.5]" />
-                        <span>
-                          {purchaseStatus === "received"
-                            ? "Guardar e Incrementar Stock"
-                            : "Guardar Orden Pendiente"}
-                        </span>
+                        <span>Registrar compra</span>
                       </>
                     )}
                   </Button>
@@ -713,9 +675,7 @@ export default function NuevaCompraPage() {
                     <span>Actualización de inventario</span>
                   </div>
                   <p>
-                    {purchaseStatus === "received"
-                      ? "Al guardar esta compra, las unidades ingresarán automáticamente a tu inventario y se actualizará el costo de compra de cada producto."
-                      : "La compra se guardará como pendiente y las unidades se sumarán a tu inventario cuando confirmes que llegaron al almacén."}
+                    Al guardar, la compra queda pagada y recibida. Las unidades ingresan al inventario y se actualiza su costo promedio.
                   </p>
                 </div>
               </div>

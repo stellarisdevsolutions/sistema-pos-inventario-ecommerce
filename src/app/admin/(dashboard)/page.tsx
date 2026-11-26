@@ -296,7 +296,7 @@ export default function AdminDashboardPage() {
               <>
                 <span>{kpis.profitMargin.toFixed(1)}% de margen</span>
                 <span className="block text-[11px] font-medium text-admin-secondary mt-0.5">
-                  Neta tras mermas/cargos: {formatMetric(kpis.netOperatingProfit)}
+                  Tras mermas y penalidades: {formatMetric(kpis.netOperatingProfit)}
                 </span>
               </>
             ) : (
@@ -538,7 +538,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 shrink-0 tabular-nums">
                 <span className="h-2 w-2 rounded-full bg-rose-500" />
-                <span>{formatMetric(monthLossesTotal + monthSupplierPenalties)} este mes</span>
+                <span>{formatMetric(monthLossesTotal)} este mes</span>
               </div>
             </div>
 

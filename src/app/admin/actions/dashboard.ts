@@ -3,6 +3,7 @@
 import { productName } from "@/lib/product-name";
 
 import { adminActionError } from "@/lib/admin-action-error";
+import { groupRefundLines, periodRefundLinesQuery, saleDayQuantity, type RefundLine } from "@/db/operations/reporting";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { eq, desc, and, gte, lt } from "drizzle-orm";
@@ -129,6 +130,7 @@ export async function getDashboardSummaryAction(): Promise<{
       allProducts,
       monthAdjustments,
       monthPurchaseReturns,
+      refundLines,
     ] = await Promise.all([
         db.query.sales.findMany({
           where: and(
@@ -160,6 +162,7 @@ export async function getDashboardSummaryAction(): Promise<{
             lt(schema.saleRefunds.createdAt, endOfMonth)
           ),
           columns: {
+            id: true,
             amount: true,
             refundMethod: true,
             createdAt: true,
@@ -208,6 +211,7 @@ export async function getDashboardSummaryAction(): Promise<{
             },
           },
         }),
+        db.execute<RefundLine>(periodRefundLinesQuery(startOfMonth, endOfMonth)),
       ]);
 
     const dailySales = Array<number>(day).fill(0);
@@ -260,7 +264,7 @@ export async function getDashboardSummaryAction(): Promise<{
 
         for (const it of s.items || []) {
           const uCost = parseFloat(it.unitCost) || 0;
-          const netQty = Math.max(0, it.quantity - (it.returnedQuantity || 0));
+          const netQty = saleDayQuantity(it, s.refunds.length > 0);
           cost += uCost * netQty;
         }
         monthSalesCost += cost;
@@ -272,7 +276,10 @@ export async function getDashboardSummaryAction(): Promise<{
       }
     }
 
+    const linesByRefund = groupRefundLines(refundLines.rows);
     for (const r of monthRefunds) {
+      const restoredCost = (linesByRefund.get(r.id) ?? []).reduce((sum, line) => sum + Number(line.cost), 0);
+      monthSalesCost -= restoredCost;
       const rAmount = parseFloat(r.amount) || 0;
       monthSalesTotal -= rAmount;
       if (r.refundMethod === "cash") {
@@ -287,7 +294,7 @@ export async function getDashboardSummaryAction(): Promise<{
       const rIndex = Number(businessDate(r.createdAt).slice(-2)) - 1;
       if (rIndex >= 0 && rIndex < day) {
         dailySales[rIndex] -= rAmount;
-        dailyProfit[rIndex] -= rAmount;
+        dailyProfit[rIndex] += restoredCost - rAmount;
       }
     }
 

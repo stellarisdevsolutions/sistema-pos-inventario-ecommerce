@@ -3,8 +3,6 @@
 import { addBusinessDays, businessDate } from "@/lib/business-date";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,18 +10,12 @@ import {
   Calendar,
   DollarSign,
   Receipt,
-  RotateCcw,
-  Printer,
   FileSpreadsheet,
   Package,
   Wallet,
   Users,
   Search,
   RefreshCw,
-  ArrowRight,
-  ChevronRight,
-  Building2,
-  SlidersHorizontal,
   BarChart2,
   AlertTriangle,
 } from "lucide-react";
@@ -36,9 +28,6 @@ import { PaginationBar } from "@/components/ui/pagination-bar";
 import {
   getPeriodAnalyticsAction,
   type PeriodAnalyticsData,
-  type AnalyticsDailyItem,
-  type AnalyticsTopProduct,
-  type AnalyticsCashierItem,
 } from "@/app/admin/actions/analytics";
 
 type PresetType = "week" | "month" | "last30" | "year" | "custom";
@@ -72,7 +61,7 @@ export default function AnaliticaPage() {
       if (res.success && res.data) {
         setData(res.data);
       } else {
-        const msg = res.error || "No se pudo cargar la analítica.";
+        const msg = res.error || "No se pudieron cargar las ventas y ganancias.";
         setData(null);
         setLoadError(msg);
         toast.error(msg);
@@ -97,7 +86,7 @@ export default function AnaliticaPage() {
           setData(res.data);
           setLoadError(null);
         } else {
-          const msg = res.error || "No se pudo cargar la analítica.";
+          const msg = res.error || "No se pudieron cargar las ventas y ganancias.";
           setData(null);
           setLoadError(msg);
           toast.error(msg);
@@ -189,24 +178,26 @@ export default function AnaliticaPage() {
     );
   }, [filteredSales, salesPage]);
 
+  const periodResult = data ? [
+    { label: "Ganancia bruta de ventas", amount: data.summary.grossProfit },
+    { label: "Mermas y bajas", amount: -data.summary.inventoryLosses },
+    { label: "Penalidades de proveedores", amount: -data.summary.supplierPenalties },
+    { label: "Resultado después de mermas y penalidades", amount: data.summary.netOperatingProfit },
+  ] : [];
+
   // Exportar reporte consolidado a CSV
   const handleExportCsv = () => {
     if (!data) return;
     try {
       let csv = "\uFEFF"; // UTF-8 BOM
-      csv += `${csvCell(`REPORTE FINANCIERO CONSOLIDADO - ${STORE_NAME.toUpperCase()} (${data.startDate} al ${data.endDate})`)}\n\n`;
+      csv += `${csvCell(`VENTAS Y GANANCIAS - ${STORE_NAME.toUpperCase()} (${data.startDate} al ${data.endDate})`)}\n\n`;
 
       csv += `RESUMEN EJECUTIVO\n`;
       csv += `Ventas Brutas;${csvCell(`${data.summary.grossSales.toFixed(2)} Bs`)}\n`;
       csv += `Devoluciones (-);${csvCell(`${data.summary.refunds.toFixed(2)} Bs`)}\n`;
       csv += `Ventas Netas;${csvCell(`${data.summary.netSales.toFixed(2)} Bs`)}\n`;
       csv += `Costo Mercaderia Vendida;${csvCell(`${data.summary.totalCost.toFixed(2)} Bs`)}\n`;
-      csv += `Ganancia Bruta Real;${csvCell(`${data.summary.grossProfit.toFixed(2)} Bs`)}\n`;
-      if (data.summary.inventoryLosses > 0 || data.summary.supplierPenalties > 0) {
-        csv += `Mermas y Bajas (-);${csvCell(`${data.summary.inventoryLosses.toFixed(2)} Bs`)}\n`;
-        csv += `Penalidades de Proveedores (-);${csvCell(`${data.summary.supplierPenalties.toFixed(2)} Bs`)}\n`;
-        csv += `Resultado Neto Operativo;${csvCell(`${data.summary.netOperatingProfit.toFixed(2)} Bs`)}\n`;
-      }
+      csv += `Ganancia bruta de ventas;${csvCell(`${data.summary.grossProfit.toFixed(2)} Bs`)}\n`;
       csv += `Margen de Ganancia;${csvCell(`${data.summary.profitMargin.toFixed(1)}%`)}\n`;
       csv += `Tickets Emitidos;${csvCell(data.summary.totalSalesCount)}\n`;
       csv += `Ticket Promedio;${csvCell(`${data.summary.averageTicket.toFixed(2)} Bs`)}\n`;
@@ -234,8 +225,8 @@ export default function AnaliticaPage() {
       });
       csv += `\n`;
 
-      csv += `TOP PRODUCTOS DEL PERIODO\n`;
-      csv += `Producto;SKU;Categoria;Vendidas;Devueltas;Netas;Recaudacion;Costo;Ganancia;Margen %\n`;
+      csv += `GANANCIA BRUTA POR PRODUCTO\n`;
+      csv += `Producto;SKU;Categoria;Vendidas;Devueltas;Netas;Recaudacion;Costo;Ganancia bruta;Margen %\n`;
       data.topProducts.forEach((p) => {
         csv += [
           p.productName,
@@ -272,11 +263,16 @@ export default function AnaliticaPage() {
           .join(";") + "\n";
       });
 
+      csv += "\nRESULTADO DEL PERIODO\n";
+      for (const row of periodResult) {
+        csv += [row.label, row.amount.toFixed(2)].map(csvCell).join(";") + "\n";
+      }
+
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      link.setAttribute("download", `Reporte_Consolidado_${data.startDate}_al_${data.endDate}.csv`);
+      link.setAttribute("download", `Ventas_y_ganancias_${data.startDate}_al_${data.endDate}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -302,7 +298,7 @@ export default function AnaliticaPage() {
       <div className="admin-page-header flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-admin-card-border">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="admin-page-title">Analítica</h1>
+            <h1 className="admin-page-title">Ventas y ganancias</h1>
           </div>
           <p className="admin-page-description">Ventas, costos y margen para el período elegido.</p>
         </div>
@@ -438,11 +434,11 @@ export default function AnaliticaPage() {
           </div>
         </div>
 
-        {/* Card 2: Ganancia Bruta Real */}
+        {/* Card 2: Ganancia bruta de ventas */}
         <div className="admin-financial-card admin-panel p-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-admin-muted uppercase tracking-wider">
-              Ganancia Bruta Real
+              Ganancia bruta de ventas
             </span>
             <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <TrendingUp className="h-4 w-4" />
@@ -460,21 +456,7 @@ export default function AnaliticaPage() {
             <span>Costo Total Mercancía:</span>
             <span className="font-bold">{formatCurrency(data?.summary.totalCost || 0)}</span>
           </div>
-          {((data?.summary.inventoryLosses || 0) > 0 || (data?.summary.supplierPenalties || 0) > 0) && (
-            <div className="mt-1.5 pt-1.5 border-t border-admin-card-border space-y-0.5 text-[11px]">
-              <div className="flex items-center justify-between text-admin-secondary">
-                <span>Resultado neto (-mermas/cargos):</span>
-                <span className="font-bold text-admin-text">
-                  {formatCurrency(data?.summary.netOperatingProfit || 0)}
-                </span>
-              </div>
-              {(data?.summary.supplierPenalties || 0) > 0 && (
-                <p className="text-[10px] text-amber-700 dark:text-amber-400 text-right">
-                  Incluye -{formatCurrency(data?.summary.supplierPenalties || 0)} penalidades prov.
-                </p>
-              )}
-            </div>
-          )}
+
         </div>
 
         {/* Card 3: Tickets y Volumen */}
@@ -631,7 +613,7 @@ export default function AnaliticaPage() {
             className="admin-segment"
           >
             <Package className="h-3.5 w-3.5" />
-            <span>Top Productos ({data?.topProducts.length || 0})</span>
+            <span>Productos vendidos ({data?.topProducts.length || 0})</span>
           </button>
 
           <button
@@ -987,6 +969,19 @@ export default function AnaliticaPage() {
           </div>
         )}
       </div>
+      {data && (
+        <section className="admin-panel p-5" aria-labelledby="period-result-title">
+          <h2 id="period-result-title" className="font-semibold text-admin-text">Resultado del período</h2>
+          <dl className="mt-3 divide-y divide-admin-card-border">
+            {periodResult.map(row => (
+              <div key={row.label} className="flex justify-between gap-4 py-2 text-sm last:font-bold">
+                <dt>{row.label}</dt>
+                <dd className="tabular-nums">{formatCurrency(row.amount || 0)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
     </div>
   );
 }

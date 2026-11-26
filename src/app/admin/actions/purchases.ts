@@ -4,6 +4,7 @@ import { productName } from "@/lib/product-name";
 
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
+import { purchaseReceivedAt } from "@/db/operations/reporting";
 import { db } from "@/db";
 import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, receivePurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
 import { businessDate, businessMonthEnd, businessMonthStart, formatBusinessDate } from "@/lib/business-date";
@@ -112,6 +113,7 @@ export async function getPurchasesAction(): Promise<{
     await requireRole(["admin", "manager", "warehouse"]);
 
     const list = await db.query.purchases.findMany({
+      extras: { receivedAt: purchaseReceivedAt },
       with: {
         returns: { with: { user: true, items: true }, orderBy: (r, { desc }) => [desc(r.id)] },
         supplier: true,
@@ -143,7 +145,7 @@ export async function getPurchasesAction(): Promise<{
       const itemsList = p.items || [];
       const totalUnits = itemsList.reduce((acc, it) => acc + (it.quantity || 0), 0);
       const totalNum = parseFloat(p.totalAmount) || 0;
-      const pDate = new Date(p.createdAt);
+      const pDate = new Date(p.receivedAt);
 
       if (p.supplierId && p.status === "received") {
         allTimeSupplierIds.add(p.supplierId);
@@ -383,9 +385,9 @@ export async function getSuppliersForPurchaseAction() {
 }
 
 /**
- * Server Action: Registrar una orden de compra o entrada directa de stock
+ * Server Action: Registrar una compra pagada y recibir el stock
  */
-export async function createPurchaseAction(input: PurchaseFormInput): Promise<{
+export async function createPurchaseAction(input: Omit<PurchaseFormInput, "status" | "paymentStatus">): Promise<{
   success: boolean;
   data?: { id: number; purchaseNumber: string };
   error?: string;
@@ -393,7 +395,7 @@ export async function createPurchaseAction(input: PurchaseFormInput): Promise<{
   try {
     const currentUser = await requireRole(["admin", "manager", "warehouse"]);
 
-    const parsed = purchaseFormSchema.parse(input);
+    const parsed = purchaseFormSchema.parse({ ...input, status: "received", paymentStatus: "paid" });
 
     if (parsed.requestId) {
       const existing = await db.query.purchases.findFirst({

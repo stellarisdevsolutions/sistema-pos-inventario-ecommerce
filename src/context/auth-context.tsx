@@ -72,7 +72,8 @@ export function AuthProvider({
       if (!result.success) throw new Error("No se pudo cerrar la sesión.");
       setUser(null);
       toast.success("Has cerrado sesión exitosamente.");
-      window.location.href = "/portal";
+      // Descarta también los datos del panel que Next conserva al navegar.
+      window.location.replace("/portal");
     } catch {
       toast.error("No se pudo cerrar la sesión. Inténtalo de nuevo.");
     }

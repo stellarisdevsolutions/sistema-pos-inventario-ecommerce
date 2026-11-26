@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import {
   type SessionUser,
@@ -59,16 +59,12 @@ export async function destroySession(): Promise<void> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (token) {
-    try {
-      const claims = await decodeSessionToken(token);
-      if (claims) {
-        await db
-          .update(schema.users)
-          .set({ sessionVersion: sql`${schema.users.sessionVersion} + 1` })
-          .where(eq(schema.users.id, claims.id));
-      }
-    } catch {
-      // No bloquear el cierre de sesión si falla la actualización en BD
+    const claims = await decodeSessionToken(token);
+    if (claims) {
+      await db
+        .update(schema.users)
+        .set({ sessionVersion: sql`${schema.users.sessionVersion} + 1` })
+        .where(and(eq(schema.users.id, claims.id), eq(schema.users.sessionVersion, claims.sessionVersion ?? 1)));
     }
   }
   cookieStore.delete(SESSION_COOKIE_NAME);

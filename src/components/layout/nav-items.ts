@@ -11,6 +11,7 @@ import {
   Banknote,
   TrendingUp,
   Settings,
+  PackageSearch,
 } from "lucide-react";
 import type { UserRole } from "@/lib/auth/session-edge";
 
@@ -19,7 +20,7 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   badge?: string;
-  section: "general" | "seguimiento" | "operaciones" | "canales";
+  section: "reportes" | "general" | "seguimiento" | "operaciones" | "canales";
   allowedRoles: UserRole[];
 }
 
@@ -46,17 +47,24 @@ export const navigationItems: NavItem[] = [
     allowedRoles: ["admin", "manager", "cashier"],
   },
   {
-    title: "Reporte Z",
+    title: "Ventas del día",
     href: "/admin/reportes",
     icon: BarChart3,
-    section: "seguimiento",
+    section: "reportes",
     allowedRoles: ["admin", "manager"],
   },
   {
-    title: "Analítica",
+    title: "Ventas y ganancias",
     href: "/admin/analitica",
     icon: TrendingUp,
-    section: "seguimiento",
+    section: "reportes",
+    allowedRoles: ["admin", "manager"],
+  },
+  {
+    title: "Compras y devoluciones",
+    href: "/admin/informe-compras",
+    icon: PackageSearch,
+    section: "reportes",
     allowedRoles: ["admin", "manager"],
   },
   {

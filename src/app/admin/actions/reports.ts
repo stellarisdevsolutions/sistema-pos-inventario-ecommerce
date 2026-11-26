@@ -2,6 +2,8 @@
 
 import { adminActionError } from "@/lib/admin-action-error";
 import { productName } from "@/lib/product-name";
+import { periodRefundLinesQuery, groupRefundLines, saleDayQuantity, type RefundLine } from "@/db/operations/reporting";
+import { refundUnitAmounts } from "@/lib/refund-amount";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { and, gte, lt, eq, desc, or, isNotNull } from "drizzle-orm";
@@ -133,7 +135,7 @@ export async function getReporteZAction(
     const endOfDay = addBusinessDays(startOfDay, 1);
     const isToday = targetDateStr === todayStr;
 
-    const [daySales, periodRefunds, dayShifts] = await Promise.all([
+    const [daySales, periodRefunds, dayShifts, refundLines] = await Promise.all([
       db.query.sales.findMany({
         where: and(
           gte(schema.sales.createdAt, startOfDay),
@@ -152,7 +154,7 @@ export async function getReporteZAction(
             },
           },
           refunds: {
-            columns: { id: true },
+            columns: { id: true, amount: true, createdAt: true },
           },
         },
         orderBy: [desc(schema.sales.createdAt)],
@@ -193,8 +195,10 @@ export async function getReporteZAction(
         },
         orderBy: [desc(schema.cashShifts.openedAt)],
       }),
+      db.execute<RefundLine>(periodRefundLinesQuery(startOfDay, endOfDay)),
     ]);
 
+    const linesByRefund = groupRefundLines(refundLines.rows);
     let grossSales = 0;
     let refunds = 0;
     let netSales = 0;
@@ -217,25 +221,21 @@ export async function getReporteZAction(
 
     for (const sale of daySales) {
       const origTotal = parseFloat(sale.totalAmount) || 0;
-      const refAmount = parseFloat(sale.refundedAmount || "0") || 0;
+      const ticketRefunds = sale.refunds.filter(r => r.createdAt < endOfDay);
+      const refAmount = sale.refunds.length
+        ? ticketRefunds.reduce((sum, r) => sum + Number(r.amount), 0)
+        : Number(sale.refundedAmount ?? 0);
       const isCountedSale = sale.status === "completed" || sale.status === "refunded";
-      const persistedNet =
-        !isCountedSale
-          ? 0
-          : sale.netAmount !== null && sale.netAmount !== undefined
-          ? parseFloat(sale.netAmount) || 0
-          : Math.max(0, origTotal - refAmount);
+      const reportStatus = sale.status === "refunded" && sale.refunds.length > 0 && !ticketRefunds.length
+        ? "completed" : sale.status;
+      const persistedNet = isCountedSale ? origTotal - refAmount : 0;
 
-      const saleSubtotal = parseFloat(sale.subtotal) || 0;
-      const saleDiscount = parseFloat(sale.discountAmount) || 0;
-      const discountRatio =
-        saleSubtotal > 0 ? Math.max(0, (saleSubtotal - saleDiscount) / saleSubtotal) : 1;
-
+      const lineAmounts = refundUnitAmounts(sale.items, origTotal);
       let saleCost = 0;
       for (const item of sale.items) {
         const qty = item.quantity;
-        const returnedQty = item.returnedQuantity || 0;
-        const netQty = Math.max(0, qty - returnedQty);
+        const netQty = saleDayQuantity(item, sale.refunds.length > 0);
+        const returnedQty = qty - netQty;
         const unitCost = parseFloat(item.unitCost) || 0;
         const itemCost = isCountedSale ? netQty * unitCost : 0;
         saleCost += itemCost;
@@ -256,21 +256,23 @@ export async function getReporteZAction(
           prev.unitsSold += qty;
           prev.unitsReturned += returnedQty;
           prev.netUnits += netQty;
-          prev.revenue += netQty * (parseFloat(item.unitPrice) || 0) * discountRatio;
+          prev.revenue += lineAmounts.get(item.id)!(returnedQty, netQty) / 100;
           prev.cost += itemCost;
           prev.profit = prev.revenue - prev.cost;
           productMap.set(item.productId, prev);
         }
       }
 
-      const saleProfit = isCountedSale ? persistedNet - saleCost : 0;
+      const ticketCost = saleCost - ticketRefunds.reduce((sum, r) =>
+        sum + (linesByRefund.get(r.id) ?? []).reduce((cost, line) => cost + Number(line.cost), 0), 0);
+      const saleProfit = isCountedSale ? persistedNet - ticketCost : 0;
 
-      if (sale.status === "completed") {
+      if (reportStatus === "completed") {
         completedCount += 1;
         grossSales += origTotal;
         netSales += origTotal;
         totalCost += saleCost;
-      } else if (sale.status === "refunded") {
+      } else if (reportStatus === "refunded") {
         refundedCount += 1;
         grossSales += origTotal;
         netSales += origTotal;
@@ -343,11 +345,11 @@ export async function getReporteZAction(
             sale.cashShift?.cashRegister?.name || (sale.cashShiftId ? "Caja" : "Adm. Directa"),
           paymentMethod: sale.paymentMethod,
           channel: sale.channel,
-          status: sale.status,
+          status: reportStatus,
           originalTotal: origTotal,
           refundedAmount: isCountedSale ? refAmount : 0,
           netTotal: persistedNet,
-          cost: isCountedSale ? saleCost : 0,
+          cost: isCountedSale ? ticketCost : 0,
           profit: saleProfit,
         });
       }
@@ -355,6 +357,21 @@ export async function getReporteZAction(
 
     for (const r of periodRefunds) {
       const amount = parseFloat(r.amount) || 0;
+      const lines = linesByRefund.get(r.id) ?? [];
+      const restoredCost = lines.reduce((sum, line) => sum + Number(line.cost), 0);
+      totalCost -= restoredCost;
+      for (const line of lines) {
+        const row = productMap.get(line.productId) ?? {
+          productId: line.productId, productName: productName(line), sku: line.sku,
+          unitsSold: 0, unitsReturned: 0, netUnits: 0, revenue: 0, cost: 0, profit: 0,
+        };
+        row.unitsReturned += line.quantity;
+        row.netUnits -= line.quantity;
+        row.revenue -= Number(line.amount);
+        row.cost -= Number(line.cost);
+        row.profit = row.revenue - row.cost;
+        productMap.set(row.productId, row);
+      }
       refunds += amount;
       netSales -= amount;
 
@@ -495,7 +512,7 @@ export async function getReporteZAction(
   } catch (error) {
     return {
       success: false,
-      error: adminActionError(error, "Error al calcular el Reporte Z diario."),
+      error: adminActionError(error, "Error al calcular las ventas del día."),
     };
   }
 }

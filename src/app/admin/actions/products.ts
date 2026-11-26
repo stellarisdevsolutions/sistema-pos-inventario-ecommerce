@@ -1222,6 +1222,7 @@ export async function getInventoryAdjustmentsAction() {
         id: a.id,
         adjustmentNumber: a.adjustmentNumber,
         date: formattedDate,
+        businessDay: businessDate(a.createdAt),
         datePart,
         timePart,
         productId: product?.id || 0,

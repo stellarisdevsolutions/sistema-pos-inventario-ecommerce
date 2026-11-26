@@ -5,6 +5,7 @@ import { BrandManagerDialog, type BrandOption } from "@/components/admin/brand-m
 
 import { MetricCard } from "@/components/admin/metric-card";
 
+import { businessDate } from "@/lib/business-date";
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
 import {
   ProductDetailSheet,
@@ -108,6 +109,7 @@ interface KardexMovement {
 }
 
 interface AdjustmentItem {
+  businessDay: string;
   id: number;
   adjustmentNumber: string;
   date: string;
@@ -878,6 +880,8 @@ export default function InventarioPage() {
 
   // Fuente de Bajas & Mermas y Paginación
   const activeAdjustmentsSource = adjustments;
+  const currentMonth = businessDate().slice(0, 7);
+  const monthAdjustments = adjustments.filter(a => a.businessDay.startsWith(currentMonth));
   const adjustmentsQuery = adjustmentsSearch.trim().toLowerCase();
   const filteredAdjustments = activeAdjustmentsSource.filter((a) => {
     if (!adjustmentsQuery) return true;
@@ -1047,7 +1051,7 @@ export default function InventarioPage() {
         <MetricCard
           label="Valor en bodega"
           value={formatCurrencyLocale(products.reduce((sum, p) => sum + p.stock * p.costPrice, 0))}
-          detail="Costo de reposición"
+          detail="Stock valorado al costo promedio"
           icon={DollarSign}
         />
         <MetricCard
@@ -1065,8 +1069,8 @@ export default function InventarioPage() {
         />
         <MetricCard
           label="Mermas del mes"
-          value={formatCurrencyLocale(activeAdjustmentsSource.reduce((sum, a) => sum + a.totalLoss, 0))}
-          detail={`${activeAdjustmentsSource.length} actas de baja`}
+          value={formatCurrencyLocale(monthAdjustments.reduce((sum, a) => sum + a.totalLoss, 0))}
+          detail={`${monthAdjustments.length} actas de baja`}
           icon={ShieldAlert}
           tone="danger"
         />

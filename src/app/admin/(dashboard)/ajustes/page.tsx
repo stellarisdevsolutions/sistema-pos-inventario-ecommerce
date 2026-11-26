@@ -580,7 +580,7 @@ export default function AjustesPage() {
           <p className="text-xs text-admin-secondary py-2 leading-relaxed">
             Al archivarla dejará de aparecer en <strong>Cajas y turnos</strong> para abrir nuevas
             jornadas, pero conservará intactos todos sus arqueos históricos y su registro en{" "}
-            <strong>Reporte Z</strong>. Podrás restaurarla cuando quieras.
+            <strong>Ventas del día</strong>. Podrás restaurarla cuando quieras.
           </p>
 
           <DialogFooter className="pt-2 border-t border-admin-card-border gap-2">
