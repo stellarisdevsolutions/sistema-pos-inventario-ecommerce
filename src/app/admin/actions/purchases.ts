@@ -5,12 +5,13 @@ import { productName } from "@/lib/product-name";
 import { adminActionError } from "@/lib/admin-action-error";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
-import { businessDate, businessMonthStart, formatBusinessDate } from "@/lib/business-date";
+import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, receivePurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
+import { businessDate, businessMonthEnd, businessMonthStart, formatBusinessDate } from "@/lib/business-date";
 import * as schema from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { purchaseFormSchema, purchaseReturnSchema, type PurchaseFormInput, type PurchaseReturnInput } from "@/lib/validations/purchase";
 import { requireRole } from "@/lib/auth/session";
+import { summarizePurchaseReturnAmounts } from "@/lib/purchase-return-math";
 
 function safeRevalidatePath(path: string) {
   try {
@@ -59,13 +60,20 @@ export type PurchaseListItem = {
   subtotal: number;
   taxAmount: number;
   totalAmount: number;
+  returnedAmount: number;
+  returnedMerchandiseAmount: number;
+  supplierPenaltyAmount: number;
+  netMerchandiseAmount: number;
+  netAmount: number;
   status: "pending" | "received" | "cancelled";
   paymentStatus: "paid" | "pending" | "partial";
-  paymentMethod: "cash" | "card" | "transfer" | "other";
+  paymentMethod: "cash" | "card" | "transfer" | "qr" | "other";
   notes: string | null;
   createdAt: string;
   rawCreatedAt: string;
   itemsCount: number;
+  returnedUnits: number;
+  netUnits: number;
   linesCount: number;
   items: PurchaseItemDetail[];
   returns: {
@@ -74,14 +82,20 @@ export type PurchaseListItem = {
     userName: string;
     reason: string;
     creditNoteReference: string | null;
+    expectedAmount: number;
+    creditedAmount: number;
+    adjustmentAmount: number;
     items: { purchaseItemId: number; quantity: number; originalUnitCost: number; inventoryUnitCost: number }[];
   }[];
 };
 
 export type PurchasesKpiSummary = {
   monthlyInvestment: number;
+  monthlyMerchandiseInvestment: number;
+  monthlySupplierPenalties: number;
   monthlyPurchasesCount: number;
   monthlyUnitsReceived: number;
+  monthlySuppliersCount: number;
   totalSuppliersCount: number;
 };
 
@@ -116,11 +130,14 @@ export async function getPurchasesAction(): Promise<{
     });
 
     const startOfMonth = businessMonthStart();
+    const endOfMonth = businessMonthEnd();
 
     let monthlyInvestment = 0;
+    let monthlySupplierPenalties = 0;
     let monthlyPurchasesCount = 0;
     let monthlyUnitsReceived = 0;
-    const activeSupplierIds = new Set<number>();
+    const monthlySupplierIds = new Set<number>();
+    const allTimeSupplierIds = new Set<number>();
 
     const formatted: PurchaseListItem[] = list.map((p) => {
       const itemsList = p.items || [];
@@ -128,27 +145,54 @@ export async function getPurchasesAction(): Promise<{
       const totalNum = parseFloat(p.totalAmount) || 0;
       const pDate = new Date(p.createdAt);
 
-      if (p.supplierId && p.status !== "cancelled") {
-        activeSupplierIds.add(p.supplierId);
+      if (p.supplierId && p.status === "received") {
+        allTimeSupplierIds.add(p.supplierId);
       }
 
       const returnedByLine = new Map<number, number>();
       let totalReturnedUnits = 0;
       let totalReturnedValue = 0;
+      let totalReturnedMerchandise = 0;
+      let totalSupplierPenalties = 0;
+      let monthReturnedUnits = 0;
+      let monthReturnedValue = 0;
+      let monthSupplierPenalties = 0;
       for (const receipt of p.returns) {
+        const receiptDate = new Date(receipt.createdAt);
+        const returnInMonth = receiptDate >= startOfMonth && receiptDate < endOfMonth;
+        let receiptUnits = 0;
         for (const item of receipt.items) {
           returnedByLine.set(item.purchaseItemId, (returnedByLine.get(item.purchaseItemId) ?? 0) + item.quantity);
-          totalReturnedUnits += item.quantity;
-          totalReturnedValue += item.quantity * (parseFloat(item.originalUnitCost) || 0);
+          receiptUnits += item.quantity;
+        }
+        const {
+          expectedAmount: receiptExpectedValue,
+          creditedAmount: receiptCreditedValue,
+          penaltyAmount: receiptPenaltyValue,
+        } = summarizePurchaseReturnAmounts(receipt.items, receipt.creditedAmount);
+        totalReturnedUnits += receiptUnits;
+        totalReturnedValue += receiptCreditedValue;
+        totalReturnedMerchandise += receiptExpectedValue;
+        totalSupplierPenalties += receiptPenaltyValue;
+        if (returnInMonth) {
+          monthReturnedUnits += receiptUnits;
+          monthReturnedValue += receiptCreditedValue;
+          monthSupplierPenalties += receiptPenaltyValue;
         }
       }
 
-      if (pDate >= startOfMonth && p.status !== "cancelled") {
-        monthlyInvestment += Math.max(0, totalNum - totalReturnedValue);
-        monthlyPurchasesCount += 1;
-        if (p.status === "received") {
-          monthlyUnitsReceived += Math.max(0, totalUnits - totalReturnedUnits);
+      if (p.status === "received") {
+        if (pDate >= startOfMonth && pDate < endOfMonth) {
+          monthlyInvestment += totalNum;
+          monthlyPurchasesCount += 1;
+          monthlyUnitsReceived += totalUnits;
+          if (p.supplierId) {
+            monthlySupplierIds.add(p.supplierId);
+          }
         }
+        monthlyInvestment -= monthReturnedValue;
+        monthlyUnitsReceived -= monthReturnedUnits;
+        monthlySupplierPenalties += monthSupplierPenalties;
       }
 
       const formattedDate = formatBusinessDate(p.createdAt);
@@ -166,6 +210,20 @@ export async function getPurchasesAction(): Promise<{
         subtotal: parseFloat(it.subtotal) || 0,
       }));
 
+      const returnedAmount = Number(totalReturnedValue.toFixed(2));
+      const returnedMerchandiseAmount = Number(totalReturnedMerchandise.toFixed(2));
+      const supplierPenaltyAmount =
+        p.status === "cancelled" ? 0 : Number(totalSupplierPenalties.toFixed(2));
+      const netMerchandiseAmount =
+        p.status === "cancelled"
+          ? 0
+          : Number(Math.max(0, totalNum - returnedMerchandiseAmount).toFixed(2));
+      const netAmount =
+        p.status === "cancelled"
+          ? 0
+          : Number(Math.max(0, totalNum - returnedAmount).toFixed(2));
+      const netUnits = p.status === "cancelled" ? 0 : Math.max(0, totalUnits - totalReturnedUnits);
+
       return {
         id: p.id,
         purchaseNumber: p.purchaseNumber,
@@ -178,6 +236,11 @@ export async function getPurchasesAction(): Promise<{
         subtotal: parseFloat(p.subtotal) || 0,
         taxAmount: parseFloat(p.taxAmount) || 0,
         totalAmount: totalNum,
+        returnedAmount,
+        returnedMerchandiseAmount,
+        supplierPenaltyAmount,
+        netMerchandiseAmount,
+        netAmount,
         status: p.status,
         paymentStatus: p.paymentStatus,
         paymentMethod: p.paymentMethod || "transfer",
@@ -185,21 +248,30 @@ export async function getPurchasesAction(): Promise<{
         createdAt: formattedDate,
         rawCreatedAt: p.createdAt.toISOString(),
         itemsCount: totalUnits,
+        returnedUnits: totalReturnedUnits,
+        netUnits,
         linesCount: itemsList.length,
         items: formattedItems,
-        returns: p.returns.map(receipt => ({
-          id: receipt.id,
-          createdAt: businessDate(receipt.createdAt),
-          userName: receipt.user?.name ?? "Usuario",
-          reason: receipt.reason,
-          creditNoteReference: receipt.creditNoteReference,
-          items: receipt.items.map(item => ({
-            purchaseItemId: item.purchaseItemId,
-            quantity: item.quantity,
-            originalUnitCost: Number(item.originalUnitCost),
-            inventoryUnitCost: Number(item.inventoryUnitCost),
-          })),
-        })),
+        returns: p.returns.map((receipt) => {
+          const { expectedAmount, creditedAmount, penaltyAmount } =
+            summarizePurchaseReturnAmounts(receipt.items, receipt.creditedAmount);
+          return {
+            id: receipt.id,
+            createdAt: businessDate(receipt.createdAt),
+            userName: receipt.user?.name ?? "Usuario",
+            reason: receipt.reason,
+            creditNoteReference: receipt.creditNoteReference,
+            expectedAmount: Number(expectedAmount.toFixed(2)),
+            creditedAmount: Number(creditedAmount.toFixed(2)),
+            adjustmentAmount: Number(penaltyAmount.toFixed(2)),
+            items: receipt.items.map(item => ({
+              purchaseItemId: item.purchaseItemId,
+              quantity: item.quantity,
+              originalUnitCost: Number(item.originalUnitCost),
+              inventoryUnitCost: Number(item.inventoryUnitCost),
+            })),
+          };
+        }),
       };
     });
 
@@ -207,10 +279,13 @@ export async function getPurchasesAction(): Promise<{
       success: true,
       data: formatted,
       kpis: {
-        monthlyInvestment,
+        monthlyInvestment: Number(monthlyInvestment.toFixed(2)),
+        monthlyMerchandiseInvestment: Number((monthlyInvestment - monthlySupplierPenalties).toFixed(2)),
+        monthlySupplierPenalties: Number(monthlySupplierPenalties.toFixed(2)),
         monthlyPurchasesCount,
         monthlyUnitsReceived,
-        totalSuppliersCount: activeSupplierIds.size,
+        monthlySuppliersCount: monthlySupplierIds.size,
+        totalSuppliersCount: allTimeSupplierIds.size,
       },
     };
   } catch (error) {
@@ -219,8 +294,11 @@ export async function getPurchasesAction(): Promise<{
       data: [],
       kpis: {
         monthlyInvestment: 0,
+        monthlyMerchandiseInvestment: 0,
+        monthlySupplierPenalties: 0,
         monthlyPurchasesCount: 0,
         monthlyUnitsReceived: 0,
+        monthlySuppliersCount: 0,
         totalSuppliersCount: 0,
       },
       error: adminActionError(error, "Error al leer compras del sistema."),
@@ -378,7 +456,10 @@ export async function cancelPurchaseAction(
       db.execute(cancelPurchaseQuery(purchaseId, currentUser.id, reason?.trim() || "Cancelación de orden")),
     ]);
     if (!rows.length) {
-      return { success: false, error: "La compra ya fue anulada, tiene devoluciones registradas o falta stock para revertirla." };
+      return {
+        success: false,
+        error: "No se puede anular la compra completa: ya fue anulada, tiene devoluciones o algún producto ya no tiene stock suficiente. Registra una devolución parcial por el saldo disponible.",
+      };
     }
 
     revalidatePurchasePaths();
@@ -392,6 +473,43 @@ export async function cancelPurchaseAction(
   }
 }
 
+/**
+ * Server Action: Confirmar recepción en almacén de una compra pendiente
+ */
+export async function receivePurchaseAction(purchaseId: number): Promise<{
+  success: boolean;
+  data?: { id: number; purchaseNumber: string };
+  error?: string;
+}> {
+  try {
+    const currentUser = await requireRole(["admin", "manager", "warehouse"]);
+
+    if (!Number.isSafeInteger(purchaseId) || purchaseId <= 0) {
+      return { success: false, error: "Identificador de compra inválido." };
+    }
+
+    const [, { rows }] = await db.batch([
+      db.execute(lockPurchaseQuery(purchaseId)),
+      db.execute(receivePurchaseQuery(purchaseId, currentUser.id)),
+    ]);
+    const received = rows[0] as { id: number; purchaseNumber: string } | undefined;
+    if (!received) {
+      return {
+        success: false,
+        error: "La compra ya fue recibida o anulada, o uno de sus productos ya no está activo.",
+      };
+    }
+
+    revalidatePurchasePaths();
+    return { success: true, data: received };
+  } catch (error) {
+    return {
+      success: false,
+      error: adminActionError(error, "Error al confirmar la recepción de la compra."),
+    };
+  }
+}
+
 export async function returnPurchaseAction(input: PurchaseReturnInput): Promise<{ success: boolean; error?: string }> {
   try {
     const actor = await requireRole(["admin", "manager", "warehouse"]);
@@ -401,7 +519,7 @@ export async function returnPurchaseAction(input: PurchaseReturnInput): Promise<
       db.execute(returnPurchaseQuery(parsed, actor.id)),
     ]);
     if (!rows.length) {
-      return { success: false, error: "Verifica que la compra siga recibida y que las cantidades no superen lo pendiente por devolver ni el stock disponible." };
+      return { success: false, error: "Verifica que la compra siga recibida, que las cantidades no superen lo disponible y que el monto reconocido no supere el valor de la mercadería devuelta." };
     }
 
     revalidatePurchasePaths();

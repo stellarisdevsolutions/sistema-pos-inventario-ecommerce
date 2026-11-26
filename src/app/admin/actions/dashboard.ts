@@ -14,6 +14,7 @@ import {
   formatBusinessShortDateTime,
 } from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
+import { sumPurchaseReturnPenalties } from "@/lib/purchase-return-math";
 
 export interface DashboardSalesItem {
   id: string;
@@ -78,6 +79,7 @@ export interface DashboardData {
     posPercentage: number;
     adminPercentage: number;
     grossProfit: number;
+    netOperatingProfit: number;
     profitMargin: number;
     averageTicket: number;
     cashInDrawers: number;
@@ -95,6 +97,7 @@ export interface DashboardData {
   recentAdjustments: DashboardAdjustmentItem[];
   monthAdjustmentsCount: number;
   monthLossesTotal: number;
+  monthSupplierPenalties: number;
 }
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
@@ -118,8 +121,15 @@ export async function getDashboardSummaryAction(): Promise<{
     const startOfMonth = businessMonthStart();
     const endOfMonth = businessDayStart(nextMonthStr);
 
-    const [monthSales, monthRefunds, allRegisters, openShifts, allProducts, monthAdjustments] =
-      await Promise.all([
+    const [
+      monthSales,
+      monthRefunds,
+      allRegisters,
+      openShifts,
+      allProducts,
+      monthAdjustments,
+      monthPurchaseReturns,
+    ] = await Promise.all([
         db.query.sales.findMany({
           where: and(
             gte(schema.sales.createdAt, startOfMonth),
@@ -180,6 +190,23 @@ export async function getDashboardSummaryAction(): Promise<{
             },
           },
           orderBy: [desc(schema.inventoryAdjustments.createdAt)],
+        }),
+        db.query.purchaseReturns.findMany({
+          where: and(
+            gte(schema.purchaseReturns.createdAt, startOfMonth),
+            lt(schema.purchaseReturns.createdAt, endOfMonth)
+          ),
+          columns: {
+            creditedAmount: true,
+          },
+          with: {
+            items: {
+              columns: {
+                quantity: true,
+                originalUnitCost: true,
+              },
+            },
+          },
         }),
       ]);
 
@@ -386,6 +413,8 @@ export async function getDashboardSummaryAction(): Promise<{
       (sum, a) => sum + (parseFloat(a.totalCost) || 0),
       0
     );
+    const monthSupplierPenalties = sumPurchaseReturnPenalties(monthPurchaseReturns);
+    const netOperatingProfit = Number((grossProfit - monthLossesTotal - monthSupplierPenalties).toFixed(2));
 
     const recentAdjustments: DashboardAdjustmentItem[] = monthAdjustments.slice(0, 5).map((a) => {
       const costNum = parseFloat(a.totalCost) || 0;
@@ -416,6 +445,7 @@ export async function getDashboardSummaryAction(): Promise<{
           posPercentage,
           adminPercentage,
           grossProfit,
+          netOperatingProfit,
           profitMargin,
           averageTicket,
           cashInDrawers,
@@ -433,6 +463,7 @@ export async function getDashboardSummaryAction(): Promise<{
         recentAdjustments,
         monthAdjustmentsCount: monthAdjustments.length,
         monthLossesTotal,
+        monthSupplierPenalties,
       },
     };
   } catch (error) {

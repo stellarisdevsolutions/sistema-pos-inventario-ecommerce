@@ -7,7 +7,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   ArrowLeft,
-  PackagePlus,
   Building2,
   Receipt,
   Package,
@@ -63,7 +61,9 @@ interface FormItem {
   productImage: string | null;
   currentStock: number;
   quantity: number;
+  quantityInput: string;
   unitCost: number;
+  unitCostInput: string;
 }
 
 export default function NuevaCompraPage() {
@@ -79,7 +79,8 @@ export default function NuevaCompraPage() {
   // Campos de cabecera
   const [supplierId, setSupplierId] = useState<number | "">("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"transfer" | "cash" | "card" | "other">("transfer");
+  const [paymentMethod, setPaymentMethod] = useState<"transfer" | "qr" | "cash">("transfer");
+  const [purchaseStatus, setPurchaseStatus] = useState<"received" | "pending">("received");
   const [notes, setNotes] = useState("");
 
   // Renglones de productos agregados a la orden
@@ -102,12 +103,20 @@ export default function NuevaCompraPage() {
         if (cancelled) return;
         if (prodsRes.success && prodsRes.data) {
           setAvailableProducts(prodsRes.data);
+        } else {
+          toast.error("Error al cargar productos", {
+            description: prodsRes.error || "No se pudo obtener el catálogo de compra.",
+          });
         }
         if (suppsRes.success && suppsRes.data) {
           setAvailableSuppliers(suppsRes.data);
           if (suppsRes.data.length > 0) {
             setSupplierId(suppsRes.data[0].id);
           }
+        } else {
+          toast.error("Error al cargar proveedores", {
+            description: suppsRes.error || "No se pudo obtener el directorio de proveedores.",
+          });
         }
       })
       .catch((err: unknown) => {
@@ -132,13 +141,16 @@ export default function NuevaCompraPage() {
       const nextQuantity = existing.quantity + 1;
       setItems((prev) =>
         prev.map((it) =>
-          it.productId === productId ? { ...it, quantity: nextQuantity } : it
+          it.productId === productId
+            ? { ...it, quantity: nextQuantity, quantityInput: String(nextQuantity) }
+            : it
         )
       );
       toast.info(`"${prod.name}" incrementado a ${nextQuantity} unidades`);
       return;
     }
 
+    const initialCost = prod.costPrice > 0 ? Number(prod.costPrice.toFixed(2)) : 0;
     const newItem: FormItem = {
       tempId: crypto.randomUUID(),
       productId: prod.id,
@@ -147,24 +159,39 @@ export default function NuevaCompraPage() {
       productImage: prod.imageUrl || null,
       currentStock: prod.stock,
       quantity: 1,
-      unitCost: prod.costPrice > 0 ? prod.costPrice : 0,
+      quantityInput: "1",
+      unitCost: initialCost,
+      unitCostInput: initialCost.toFixed(2),
     };
 
     setItems((prev) => [...prev, newItem]);
     toast.success(`"${prod.name}" agregado a la orden`);
   };
 
-  // Modificar cantidad o costo unitario
-  const handleUpdateItem = (tempId: string, field: "quantity" | "unitCost", value: number) => {
+  // Modificar cantidad o costo unitario conservando texto de entrada
+  const handleUpdateItem = (
+    tempId: string,
+    field: "quantity" | "unitCost",
+    rawValue: string
+  ) => {
     setItems((prev) =>
       prev.map((it) => {
-        if (it.tempId === tempId) {
+        if (it.tempId !== tempId) return it;
+        if (field === "quantity") {
+          const parsed = Number.parseInt(rawValue, 10);
           return {
             ...it,
-            [field]: isNaN(value) ? 0 : Math.max(0, value),
+            quantityInput: rawValue,
+            quantity: Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
           };
         }
-        return it;
+        const parsed = Number.parseFloat(rawValue);
+        const clamped = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+        return {
+          ...it,
+          unitCostInput: rawValue,
+          unitCost: Math.round(clamped * 100) / 100,
+        };
       })
     );
   };
@@ -180,13 +207,17 @@ export default function NuevaCompraPage() {
     return found ? found.quantity : 0;
   };
 
-  // Totales calculados en vivo
+  // Totales calculados en vivo (centavos enteros para alinear con redondeo SQL a 2 decimales)
   const totalUnits = useMemo(() => {
     return items.reduce((acc, it) => acc + (it.quantity || 0), 0);
   }, [items]);
 
   const totalAmount = useMemo(() => {
-    return items.reduce((acc, it) => acc + (it.quantity || 0) * (it.unitCost || 0), 0);
+    const totalCents = items.reduce(
+      (acc, it) => acc + (it.quantity || 0) * Math.round((it.unitCost || 0) * 100),
+      0
+    );
+    return totalCents / 100;
   }, [items]);
 
   // Proveedor seleccionado
@@ -203,13 +234,14 @@ export default function NuevaCompraPage() {
   }, [availableProducts, modalSearchTerm]);
 
   const modalTotalPages = Math.max(1, Math.ceil(filteredModalProducts.length / modalPageSize));
+  const safeModalPage = Math.min(modalCurrentPage, modalTotalPages);
 
   const paginatedModalProducts = useMemo(() => {
-    const start = (modalCurrentPage - 1) * modalPageSize;
+    const start = (safeModalPage - 1) * modalPageSize;
     return filteredModalProducts.slice(start, start + modalPageSize);
-  }, [filteredModalProducts, modalCurrentPage, modalPageSize]);
+  }, [filteredModalProducts, safeModalPage, modalPageSize]);
 
-  // Guardar e ingresar mercadería
+  // Guardar e ingresar mercadería o crear orden pendiente
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -242,21 +274,27 @@ export default function NuevaCompraPage() {
         invoiceNumber: invoiceNumber.trim() || null,
         paymentMethod,
         paymentStatus: "paid" as const,
-        status: "received" as const,
+        status: purchaseStatus,
         notes: notes.trim() || null,
         items: items.map((it) => ({
           productId: it.productId,
           quantity: it.quantity,
-          unitCost: it.unitCost,
+          unitCost: Number(it.unitCost.toFixed(2)),
         })),
       };
 
       const res = await createPurchaseAction(payload);
       if (res.success) {
         setPurchaseRequestId(crypto.randomUUID());
-        toast.success("Compra ingresada a almacén", {
-          description: `Se sumaron ${totalUnits} piezas físicas al inventario y se actualizó el Kardex.`,
-        });
+        if (purchaseStatus === "received") {
+          toast.success("Compra ingresada a almacén", {
+            description: `Se sumaron ${totalUnits} piezas físicas al inventario y se actualizó el Kárdex.`,
+          });
+        } else {
+          toast.success("Orden de compra pendiente registrada", {
+            description: "El stock se sumará cuando confirmes la recepción en almacén.",
+          });
+        }
         router.push("/admin/compras");
       } else {
         toast.error("Error al registrar compra", { description: res.error });
@@ -299,7 +337,7 @@ export default function NuevaCompraPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* ===================================================================
                 COLUMNA PRINCIPAL (8 COLS): DATOS DE CABECERA Y ARTÍCULOS
                 =================================================================== */}
@@ -372,19 +410,35 @@ export default function NuevaCompraPage() {
                     <select
                       value={paymentMethod}
                       onChange={(e) =>
-                        setPaymentMethod(e.target.value as "transfer" | "cash" | "card" | "other")
+                        setPaymentMethod(e.target.value as "transfer" | "qr" | "cash")
                       }
                       className="h-10 w-full rounded-xl border border-admin-card-border bg-admin-card-bg px-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20"
                     >
                       <option value="transfer">Transferencia Bancaria</option>
-                      <option value="cash">Efectivo de Caja</option>
-                      <option value="card">Tarjeta de Débito / Crédito</option>
-                      <option value="other">Otro medio</option>
+                      <option value="qr">QR</option>
+                      <option value="cash">Efectivo</option>
+                    </select>
+                  </div>
+
+                  {/* Estado de Recepción */}
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-admin-secondary">
+                      Estado de Recepción
+                    </label>
+                    <select
+                      value={purchaseStatus}
+                      onChange={(e) =>
+                        setPurchaseStatus(e.target.value as "received" | "pending")
+                      }
+                      className="h-10 w-full rounded-xl border border-admin-card-border bg-admin-card-bg px-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-admin-brand/20"
+                    >
+                      <option value="received">Recibida ahora (sumar stock)</option>
+                      <option value="pending">Pendiente de entrega (orden de compra)</option>
                     </select>
                   </div>
 
                   {/* Notas */}
-                  <div className="space-y-1.5 sm:col-span-2">
+                  <div className="space-y-1.5">
                     <label className="font-semibold text-admin-secondary">
                       Notas u Observaciones de la Compra
                     </label>
@@ -456,7 +510,7 @@ export default function NuevaCompraPage() {
                 ) : (
                   <div className="divide-y divide-slate-100 dark:divide-slate-800 w-full">
                     {items.map((it, idx) => {
-                      const lineSubtotal = it.quantity * it.unitCost;
+                      const lineSubtotal = ((it.quantity || 0) * Math.round((it.unitCost || 0) * 100)) / 100;
                       return (
                         <div
                           key={it.tempId}
@@ -469,7 +523,6 @@ export default function NuevaCompraPage() {
                             </span>
 
                             {it.productImage ? (
-                              // eslint-disable-next-line @next/next/no-img-element
                               <ProductThumbnail
                                 src={it.productImage}
                                 alt={it.productName}
@@ -490,10 +543,14 @@ export default function NuevaCompraPage() {
                                 <span>
                                   Stock actual: <strong className="text-admin-secondary font-mono">{it.currentStock}</strong> u.
                                 </span>
-                                <span>•</span>
-                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                                  Nuevo stock: <strong className="font-mono">{it.currentStock + it.quantity}</strong> u.
-                                </span>
+                                {purchaseStatus === "received" && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                                      Nuevo stock: <strong className="font-mono">{it.currentStock + it.quantity}</strong> u.
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -508,9 +565,9 @@ export default function NuevaCompraPage() {
                               <Input
                                 type="number"
                                 min="1"
-                                value={it.quantity || ""}
+                                value={it.quantityInput}
                                 onChange={(e) =>
-                                  handleUpdateItem(it.tempId, "quantity", parseInt(e.target.value) || 0)
+                                  handleUpdateItem(it.tempId, "quantity", e.target.value)
                                 }
                                 className="h-9 w-24 text-xs rounded-lg border-admin-card-border text-center font-bold font-mono"
                               />
@@ -525,13 +582,9 @@ export default function NuevaCompraPage() {
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={it.unitCost || ""}
+                                value={it.unitCostInput}
                                 onChange={(e) =>
-                                  handleUpdateItem(
-                                    it.tempId,
-                                    "unitCost",
-                                    parseFloat(e.target.value) || 0
-                                  )
+                                  handleUpdateItem(it.tempId, "unitCost", e.target.value)
                                 }
                                 className="h-9 w-32 text-xs rounded-lg border-admin-card-border text-right font-bold font-mono"
                               />
@@ -587,7 +640,7 @@ export default function NuevaCompraPage() {
                   </div>
 
                   <div className="flex justify-between items-center text-slate-500">
-                    <span>Unidades físicas a ingresar:</span>
+                    <span>{purchaseStatus === "received" ? "Unidades físicas a ingresar:" : "Unidades solicitadas:"}</span>
                     <span className="font-bold text-admin-brand-text font-mono">
                       {totalUnits} piezas
                     </span>
@@ -624,12 +677,20 @@ export default function NuevaCompraPage() {
                     {isSubmitting ? (
                       <>
                         <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>Procesando e ingresando stock...</span>
+                        <span>
+                          {purchaseStatus === "received"
+                            ? "Procesando e ingresando stock..."
+                            : "Guardando orden pendiente..."}
+                        </span>
                       </>
                     ) : (
                       <>
                         <Check className="h-4 w-4 stroke-[2.5]" />
-                        <span>Guardar e Incrementar Stock</span>
+                        <span>
+                          {purchaseStatus === "received"
+                            ? "Guardar e Incrementar Stock"
+                            : "Guardar Orden Pendiente"}
+                        </span>
                       </>
                     )}
                   </Button>
@@ -645,14 +706,16 @@ export default function NuevaCompraPage() {
                   </Button>
                 </div>
 
-                {/* Nota de Auditoría de Almacén */}
+                {/* Nota informativa de inventario */}
                 <div className="p-3.5 rounded-xl bg-admin-raised border border-admin-card-border space-y-1.5 text-[11px] text-admin-secondary leading-relaxed">
                   <div className="flex items-center gap-1.5 font-bold text-admin-text">
                     <Info className="h-3.5 w-3.5 text-admin-brand-text shrink-0" />
-                    <span>Impacto en Almacén & Kardex</span>
+                    <span>Actualización de inventario</span>
                   </div>
                   <p>
-                    Al confirmar, el stock disponible aumentará y se recalculará automáticamente el Costo Promedio Ponderado (CPP).
+                    {purchaseStatus === "received"
+                      ? "Al guardar esta compra, las unidades ingresarán automáticamente a tu inventario y se actualizará el costo de compra de cada producto."
+                      : "La compra se guardará como pendiente y las unidades se sumarán a tu inventario cuando confirmes que llegaron al almacén."}
                   </p>
                 </div>
               </div>
@@ -746,7 +809,6 @@ export default function NuevaCompraPage() {
                         <td className="py-3 px-5">
                           <div className="flex items-center gap-3">
                             {p.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
                               <ProductThumbnail
                                 src={p.imageUrl}
                                 alt={p.name}
@@ -819,7 +881,7 @@ export default function NuevaCompraPage() {
           {/* Footer del Modal con Paginación Cómoda y Separada */}
           <DialogFooter className="p-4 px-6 pb-6 border-t border-admin-card-border bg-admin-raised shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="text-xs text-admin-muted font-medium">
-              Mostrando página <span className="font-bold text-admin-text">{modalCurrentPage}</span> de{" "}
+              Mostrando página <span className="font-bold text-admin-text">{safeModalPage}</span> de{" "}
               <span className="font-bold text-admin-text">{modalTotalPages}</span> ({filteredModalProducts.length} productos)
             </div>
 
@@ -827,15 +889,15 @@ export default function NuevaCompraPage() {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  disabled={modalCurrentPage <= 1}
-                  onClick={() => setModalCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={safeModalPage <= 1}
+                  onClick={() => setModalCurrentPage((prev) => Math.max(1, Math.min(prev, modalTotalPages) - 1))}
                   className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-admin-secondary disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   title="Página anterior"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
 
-                {getPaginationItems(modalCurrentPage, modalTotalPages).map((item, idx) =>
+                {getPaginationItems(safeModalPage, modalTotalPages).map((item, idx) =>
                   item === "..." ? (
                     <span
                       key={`ellipsis-${idx}`}
@@ -850,7 +912,7 @@ export default function NuevaCompraPage() {
                       onClick={() => setModalCurrentPage(item)}
                       className={cn(
                         "h-8 w-8 rounded-lg text-xs font-bold flex items-center justify-center cursor-pointer transition-all",
-                        modalCurrentPage === item
+                        safeModalPage === item
                           ? "bg-admin-brand text-white border border-admin-brand"
                           : "border border-admin-card-border bg-admin-card-bg text-admin-secondary hover:bg-admin-raised"
                       )}
@@ -862,8 +924,8 @@ export default function NuevaCompraPage() {
 
                 <button
                   type="button"
-                  disabled={modalCurrentPage >= modalTotalPages}
-                  onClick={() => setModalCurrentPage((prev) => Math.min(modalTotalPages, prev + 1))}
+                  disabled={safeModalPage >= modalTotalPages}
+                  onClick={() => setModalCurrentPage((prev) => Math.min(modalTotalPages, Math.min(prev, modalTotalPages) + 1))}
                   className="h-8 w-8 rounded-lg border border-admin-card-border bg-admin-card-bg hover:bg-admin-raised flex items-center justify-center text-admin-secondary disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   title="Página siguiente"
                 >

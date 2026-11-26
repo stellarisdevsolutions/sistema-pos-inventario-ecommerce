@@ -202,6 +202,11 @@ export default function AnaliticaPage() {
       csv += `Ventas Netas;${csvCell(`${data.summary.netSales.toFixed(2)} Bs`)}\n`;
       csv += `Costo Mercaderia Vendida;${csvCell(`${data.summary.totalCost.toFixed(2)} Bs`)}\n`;
       csv += `Ganancia Bruta Real;${csvCell(`${data.summary.grossProfit.toFixed(2)} Bs`)}\n`;
+      if (data.summary.inventoryLosses > 0 || data.summary.supplierPenalties > 0) {
+        csv += `Mermas y Bajas (-);${csvCell(`${data.summary.inventoryLosses.toFixed(2)} Bs`)}\n`;
+        csv += `Penalidades de Proveedores (-);${csvCell(`${data.summary.supplierPenalties.toFixed(2)} Bs`)}\n`;
+        csv += `Resultado Neto Operativo;${csvCell(`${data.summary.netOperatingProfit.toFixed(2)} Bs`)}\n`;
+      }
       csv += `Margen de Ganancia;${csvCell(`${data.summary.profitMargin.toFixed(1)}%`)}\n`;
       csv += `Tickets Emitidos;${csvCell(data.summary.totalSalesCount)}\n`;
       csv += `Ticket Promedio;${csvCell(`${data.summary.averageTicket.toFixed(2)} Bs`)}\n`;
@@ -455,6 +460,21 @@ export default function AnaliticaPage() {
             <span>Costo Total Mercancía:</span>
             <span className="font-bold">{formatCurrency(data?.summary.totalCost || 0)}</span>
           </div>
+          {((data?.summary.inventoryLosses || 0) > 0 || (data?.summary.supplierPenalties || 0) > 0) && (
+            <div className="mt-1.5 pt-1.5 border-t border-admin-card-border space-y-0.5 text-[11px]">
+              <div className="flex items-center justify-between text-admin-secondary">
+                <span>Resultado neto (-mermas/cargos):</span>
+                <span className="font-bold text-admin-text">
+                  {formatCurrency(data?.summary.netOperatingProfit || 0)}
+                </span>
+              </div>
+              {(data?.summary.supplierPenalties || 0) > 0 && (
+                <p className="text-[10px] text-amber-700 dark:text-amber-400 text-right">
+                  Incluye -{formatCurrency(data?.summary.supplierPenalties || 0)} penalidades prov.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Card 3: Tickets y Volumen */}

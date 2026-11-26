@@ -1,6 +1,5 @@
 import { productOptionConfigSchema, productOptionsSchema, safeImageUrlSchema } from "@/lib/validations/product";
 import { importCatalogAction } from "@/app/admin/actions/catalog-import";
-import { returnPurchaseAction } from "@/app/admin/actions/purchases";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
@@ -12,11 +11,13 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { checkRateLimit, recordFailedAttempt, resetRateLimit } from "@/lib/auth/rate-limit";
 import { decodeSessionToken, encodeSessionToken, type SessionUser } from "@/lib/auth/session-edge";
 import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
-import { businessDate, businessDayStart } from "@/lib/business-date";
+import { businessDate, businessDayStart, businessMonthEnd } from "@/lib/business-date";
 import { refundUnitAmounts } from "@/lib/refund-amount";
+import { summarizePurchaseReturnAmounts, sumPurchaseReturnPenalties } from "@/lib/purchase-return-math";
 import { csvCell, escapeHtml } from "@/lib/sanitize";
 import { refundSaleSchema, saleFormSchema } from "@/lib/validations/sale";
 import { userUpdateSchema } from "@/lib/validations/user";
+import { receivePurchaseAction, returnPurchaseAction } from "@/app/admin/actions/purchases";
 import {
   closeShiftAction,
   createCashRegisterAction,
@@ -183,6 +184,8 @@ test("el prorrateo devuelve exactamente el importe cobrado tras descuento", () =
 test("reporte local incluye ventas de la noche boliviana y rechaza fechas inválidas", () => {
   assert.equal(businessDate(new Date("2026-11-20T02:59:00Z")), "2026-11-19");
   assert.equal(businessDayStart("2026-11-20").toISOString(), "2026-11-20T04:00:00.000Z");
+  assert.equal(businessMonthEnd(new Date("2026-11-20T12:00:00Z")).toISOString(), "2026-12-01T04:00:00.000Z");
+  assert.equal(businessMonthEnd(new Date("2026-12-15T12:00:00Z")).toISOString(), "2027-01-01T04:00:00.000Z");
   assert.throws(() => businessDayStart("2026-02-30"), /Fecha inválida/);
 });
 
@@ -210,6 +213,7 @@ test("las Server Actions rechazan la llamada sin sesión antes de leer o escribi
     openShiftAction({ cashRegisterId: 1, userId: 1, initialCash: 0 }),
     closeShiftAction({ shiftId: 1 }), submitCashCountAction({ shiftId: 1, actualCash: 0 }),
     requestCashRecountAction({ shiftId: 1, reason: "Reconteo prueba" }),
+    receivePurchaseAction(1),
     returnPurchaseAction({ purchaseId: 1, requestId: "ad877895-785d-43b8-aab1-85ed429c414c", reason: "Prueba", items: [{ purchaseItemId: 1, quantity: 1 }] }),
     importCatalogAction(new FormData()), importCatalogAction(new FormData(), true),
     uploadCategoryPhotoAction(new FormData()), uploadProductImageAction(new FormData()),
@@ -289,4 +293,21 @@ test("rate limiter bloquea al alcanzar el límite y se reinicia tras resetRateLi
   assert.ok(blocked.retryAfterSec >= 1);
   resetRateLimit(key);
   assert.equal(checkRateLimit(key, 3, windowMs).allowed, true);
+});
+
+test("separa el costo de mercadería y las penalidades de proveedor sin distorsionar totales", () => {
+  const partialReturn = summarizePurchaseReturnAmounts([{ quantity: 1, originalUnitCost: "100.00" }], "85.00");
+  assert.deepEqual(partialReturn, { expectedAmount: 100, creditedAmount: 85, penaltyAmount: 15 });
+
+  const fullReturn = summarizePurchaseReturnAmounts([{ quantity: 2, originalUnitCost: "100.00" }], "180.00");
+  assert.deepEqual(fullReturn, { expectedAmount: 200, creditedAmount: 180, penaltyAmount: 20 });
+
+  const legacyNull = summarizePurchaseReturnAmounts([{ quantity: 2, originalUnitCost: "75.00" }], null);
+  assert.deepEqual(legacyNull, { expectedAmount: 150, creditedAmount: 150, penaltyAmount: 0 });
+
+  const penalties = sumPurchaseReturnPenalties([
+    { creditedAmount: "85.00", items: [{ quantity: 1, originalUnitCost: "100.00" }] },
+    { creditedAmount: "180.00", items: [{ quantity: 2, originalUnitCost: "100.00" }] },
+  ]);
+  assert.equal(penalties, 35);
 });

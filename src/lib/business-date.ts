@@ -23,6 +23,13 @@ export function businessMonthStart(date = new Date()): Date {
   return businessDayStart(`${businessDate(date).slice(0, 7)}-01`);
 }
 
+export function businessMonthEnd(date = new Date()): Date {
+  const [year, month] = businessDate(date).split("-").map(Number);
+  const nextMonthStr =
+    month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  return businessDayStart(nextMonthStr);
+}
+
 export function addBusinessDays(date: Date, numberOfDays: number): Date {
   return new Date(date.getTime() + numberOfDays * DAY_MS);
 }

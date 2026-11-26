@@ -123,6 +123,7 @@ export default function AdminDashboardPage() {
     recentAdjustments,
     monthAdjustmentsCount,
     monthLossesTotal,
+    monthSupplierPenalties,
   } = data;
 
   const filteredSales = recentSales.filter((s) => {
@@ -290,7 +291,18 @@ export default function AdminDashboardPage() {
           label="Ganancia bruta"
           trend={kpis.dailyProfit}
           value={formatMetric(kpis.grossProfit)}
-          detail={`${kpis.profitMargin.toFixed(1)}% de margen`}
+          detail={
+            monthLossesTotal > 0 || monthSupplierPenalties > 0 ? (
+              <>
+                <span>{kpis.profitMargin.toFixed(1)}% de margen</span>
+                <span className="block text-[11px] font-medium text-admin-secondary mt-0.5">
+                  Neta tras mermas/cargos: {formatMetric(kpis.netOperatingProfit)}
+                </span>
+              </>
+            ) : (
+              `${kpis.profitMargin.toFixed(1)}% de margen`
+            )
+          }
           icon={DollarSign}
           tone="success"
         />
@@ -526,40 +538,60 @@ export default function AdminDashboardPage() {
               </div>
               <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 shrink-0 tabular-nums">
                 <span className="h-2 w-2 rounded-full bg-rose-500" />
-                <span>{formatMetric(monthLossesTotal)} este mes</span>
+                <span>{formatMetric(monthLossesTotal + monthSupplierPenalties)} este mes</span>
               </div>
             </div>
 
-            {recentAdjustments.length === 0 ? (
+            {recentAdjustments.length === 0 && monthSupplierPenalties === 0 ? (
               <div className="px-5 py-10 text-center text-admin-muted text-xs">
-                No hay actas de baja registradas este mes.
+                No hay actas de baja ni penalidades registradas este mes.
               </div>
             ) : (
-              <ul className="divide-y divide-admin-card-border/70">
-                {recentAdjustments.map((a) => (
-                  <li
-                    key={a.id}
-                    className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-admin-raised/50 transition-colors"
-                  >
+              <>
+                {recentAdjustments.length > 0 && (
+                  <ul className="divide-y divide-admin-card-border/70">
+                    {recentAdjustments.map((a) => (
+                      <li
+                        key={a.id}
+                        className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-admin-raised/50 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-semibold text-admin-text truncate">
+                              {a.productName}
+                            </span>
+                            <span className="text-[11px] font-mono text-admin-muted shrink-0">
+                              ×{a.quantity}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-admin-muted truncate mt-0.5">
+                            {a.adjustmentNumber} · {a.reasonLabel} · {a.date}
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold font-mono tabular-nums text-rose-600 dark:text-rose-400 shrink-0">
+                          -{formatMetric(a.totalCost)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {monthSupplierPenalties > 0 && (
+                  <div className="px-5 py-3 border-t border-admin-card-border bg-amber-50/60 dark:bg-amber-950/20 flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs font-semibold text-admin-text truncate">
-                          {a.productName}
-                        </span>
-                        <span className="text-[11px] font-mono text-admin-muted shrink-0">
-                          ×{a.quantity}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-admin-muted truncate mt-0.5">
-                        {a.adjustmentNumber} · {a.reasonLabel} · {a.date}
+                      <p className="text-xs font-semibold text-admin-text">
+                        Penalidades en devoluciones a proveedores
+                      </p>
+                      <p className="text-[11px] text-admin-muted">
+                        Diferencia no reconocida en notas de crédito
                       </p>
                     </div>
-                    <span className="text-xs font-semibold font-mono tabular-nums text-rose-600 dark:text-rose-400 shrink-0">
-                      -{formatMetric(a.totalCost)}
+                    <span className="text-xs font-semibold font-mono tabular-nums text-amber-700 dark:text-amber-400 shrink-0">
+                      -{formatMetric(monthSupplierPenalties)}
                     </span>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

@@ -9,7 +9,6 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -24,11 +23,8 @@ import {
   Search,
   DollarSign,
   Calendar,
-  Layers,
-  ArrowRight,
   CheckCircle2,
   Building2,
-  FileText,
   X,
   ChevronLeft,
   ChevronRight,
@@ -36,13 +32,9 @@ import {
   Trash2,
   Eye,
   RefreshCw,
-  Clock,
-  CreditCard,
   Package,
   PackagePlus,
   Receipt,
-  User,
-  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -50,9 +42,35 @@ import { CURRENCY_SYMBOL, CURRENCY_NAME, formatCurrencyLocale } from "@/lib/curr
 import {
   getPurchasesAction,
   cancelPurchaseAction,
+  receivePurchaseAction,
   type PurchaseListItem,
   type PurchasesKpiSummary,
 } from "@/app/admin/actions/purchases";
+
+const PURCHASE_PAYMENT_METHOD_LABELS: Record<PurchaseListItem["paymentMethod"], string> = {
+  transfer: "Transferencia bancaria",
+  qr: "QR",
+  cash: "Efectivo",
+  card: "Tarjeta",
+  other: "Otro medio",
+};
+
+function canCancelPurchase(purchase: PurchaseListItem): boolean {
+  if (purchase.status === "cancelled" || purchase.returns.length > 0) return false;
+  if (purchase.status !== "received") return true;
+  const requiredByProduct = new Map<number, { required: number; available: number }>();
+  for (const item of purchase.items) {
+    const current = requiredByProduct.get(item.productId);
+    requiredByProduct.set(item.productId, {
+      required: (current?.required ?? 0) + item.quantity,
+      available: item.availableStock,
+    });
+  }
+  for (const { required, available } of requiredByProduct.values()) {
+    if (available < required) return false;
+  }
+  return true;
+}
 
 // Helper de paginación
 function getPaginationItems(currentPage: number, totalPages: number): (number | "...")[] {
@@ -152,8 +170,11 @@ export default function ComprasPage() {
   const [purchases, setPurchases] = useState<PurchaseListItem[]>([]);
   const [kpis, setKpis] = useState<PurchasesKpiSummary>({
     monthlyInvestment: 0,
+    monthlyMerchandiseInvestment: 0,
+    monthlySupplierPenalties: 0,
     monthlyPurchasesCount: 0,
     monthlyUnitsReceived: 0,
+    monthlySuppliersCount: 0,
     totalSuppliersCount: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -169,10 +190,12 @@ export default function ComprasPage() {
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseListItem | null>(null);
   const [returnRequestId, setReturnRequestId] = useState<string | null>(null);
 
-  // Modal de Cancelación
+  // Modal de Cancelación y Recepción
   const [purchaseToCancel, setPurchaseToCancel] = useState<PurchaseListItem | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+  const [purchaseToReceive, setPurchaseToReceive] = useState<PurchaseListItem | null>(null);
+  const [isReceiving, setIsReceiving] = useState(false);
 
   const applyPurchasesResult = (res: Awaited<ReturnType<typeof getPurchasesAction>>) => {
     if (res.success) {
@@ -187,15 +210,15 @@ export default function ComprasPage() {
   };
 
   // Cargar lista de compras desde PostgreSQL
-  const loadPurchases = async () => {
+  const loadPurchases = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       applyPurchasesResult(await getPurchasesAction());
     } catch (err: unknown) {
       console.error(err);
       toast.error("Error de conexión al cargar compras");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -219,7 +242,7 @@ export default function ComprasPage() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadPurchases();
+    await loadPurchases(true);
     setIsRefreshing(false);
     toast.success("Listado actualizado");
   };
@@ -232,14 +255,17 @@ export default function ComprasPage() {
       const res = await cancelPurchaseAction(purchaseToCancel.id, cancelReason);
       if (res.success) {
         toast.success("Orden de compra anulada", {
-          description: "Se revirtió el stock ingresado y se registró la salida en Kardex.",
+          description:
+            purchaseToCancel.status === "received"
+              ? "Se revirtió el stock ingresado y se registró la salida en Kárdex."
+              : "La orden pendiente fue anulada sin afectar el stock ni el Kárdex.",
         });
         setPurchaseToCancel(null);
         setCancelReason("");
         if (selectedPurchase?.id === purchaseToCancel.id) {
           setSelectedPurchase(null);
         }
-        loadPurchases();
+        await loadPurchases(true);
       } else {
         toast.error("No se pudo anular", { description: res.error });
       }
@@ -248,6 +274,29 @@ export default function ComprasPage() {
       toast.error("Error de conexión al anular la orden");
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  // Confirmar recepción de orden pendiente
+  const handleConfirmReceive = async () => {
+    if (!purchaseToReceive || isReceiving) return;
+    try {
+      setIsReceiving(true);
+      const res = await receivePurchaseAction(purchaseToReceive.id);
+      if (res.success) {
+        toast.success("Orden recibida en almacén", {
+          description: "Se sumó el stock al inventario y se actualizó el Kárdex.",
+        });
+        setPurchaseToReceive(null);
+        await loadPurchases(true);
+      } else {
+        toast.error("No se pudo confirmar la recepción", { description: res.error });
+      }
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error("Error de conexión al confirmar la recepción");
+    } finally {
+      setIsReceiving(false);
     }
   };
 
@@ -269,12 +318,13 @@ export default function ComprasPage() {
     });
   }, [purchases, searchTerm, statusFilter]);
 
-  // Paginación
+  // Paginación acotada
   const totalPages = Math.max(1, Math.ceil(filteredPurchases.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedPurchases = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
+    const start = (safeCurrentPage - 1) * pageSize;
     return filteredPurchases.slice(start, start + pageSize);
-  }, [filteredPurchases, currentPage, pageSize]);
+  }, [filteredPurchases, safeCurrentPage, pageSize]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -321,27 +371,34 @@ export default function ComprasPage() {
         <MetricCard
           label="Inversión del mes"
           value={formatCurrencyLocale(kpis.monthlyInvestment)}
-          detail={`Compras en el mes en curso (${CURRENCY_NAME})`}
+          detail={
+            kpis.monthlySupplierPenalties > 0
+              ? `Mercadería ${formatCurrencyLocale(kpis.monthlyMerchandiseInvestment)} · Penalidades ${formatCurrencyLocale(kpis.monthlySupplierPenalties)}`
+              : `Neto recibido este mes (${CURRENCY_NAME})`
+          }
           icon={DollarSign}
         />
         <MetricCard
           label="Facturas del mes"
           value={kpis.monthlyPurchasesCount}
-          detail="Recepciones en almacén"
+          detail="Recepciones en almacén este mes"
           icon={Receipt}
-          appearance="desk"
         />
         <MetricCard
           label="Unidades ingresadas"
           value={kpis.monthlyUnitsReceived.toLocaleString("es-BO")}
-          detail="Piezas sumadas al stock disponible"
+          detail="Piezas netas sumadas este mes"
           icon={PackagePlus}
           tone="success"
         />
         <MetricCard
-          label="Proveedores"
-          value={kpis.totalSuppliersCount}
-          detail="Empresas con compras registradas"
+          label="Proveedores del mes"
+          value={kpis.monthlySuppliersCount}
+          detail={
+            kpis.totalSuppliersCount > 0
+              ? `${kpis.totalSuppliersCount} en historial total`
+              : "Empresas con recepciones este mes"
+          }
           icon={Building2}
         />
       </section>
@@ -542,10 +599,22 @@ export default function ComprasPage() {
 
                         {/* 4. Unidades e Ítems */}
                         <td className="py-4 px-4 text-center">
-                          <span className="font-bold text-admin-text">
-                            {p.itemsCount}{" "}
-                            <span className="text-[10px] font-normal text-slate-400">piezas</span>
-                          </span>
+                          {p.status !== "cancelled" && p.returnedUnits > 0 ? (
+                            <>
+                              <span className="font-bold text-admin-text">
+                                {p.netUnits}{" "}
+                                <span className="text-[10px] font-normal text-slate-400">piezas</span>
+                              </span>
+                              <span className="text-[10px] text-amber-700 dark:text-amber-400 block">
+                                Orig. {p.itemsCount} · Dev. -{p.returnedUnits}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="font-bold text-admin-text">
+                              {p.itemsCount}{" "}
+                              <span className="text-[10px] font-normal text-slate-400">piezas</span>
+                            </span>
+                          )}
                           <span className="text-[10px] text-slate-400 block">
                             {p.linesCount} {p.linesCount === 1 ? "artículo" : "artículos"}
                           </span>
@@ -553,13 +622,33 @@ export default function ComprasPage() {
 
                         {/* 5. Total */}
                         <td className="py-4 px-4 text-right">
-                          <div className="font-bold text-admin-text font-mono text-sm">
+                          <div
+                            className={cn(
+                              "font-bold font-mono text-sm",
+                              p.status === "cancelled"
+                                ? "line-through text-slate-400"
+                                : "text-admin-text"
+                            )}
+                          >
                             {CURRENCY_SYMBOL}{" "}
-                            {p.totalAmount.toLocaleString("es-BO", {
+                            {(p.status !== "cancelled" && p.returnedAmount > 0
+                              ? p.netAmount
+                              : p.totalAmount
+                            ).toLocaleString("es-BO", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
                           </div>
+                          {p.status !== "cancelled" && p.returnedAmount > 0 && (
+                            <span className="text-[10px] text-amber-700 dark:text-amber-400 font-mono block">
+                              Orig. {CURRENCY_SYMBOL} {p.totalAmount.toFixed(2)} · Dev. -{CURRENCY_SYMBOL} {p.returnedAmount.toFixed(2)}
+                            </span>
+                          )}
+                          {p.status !== "cancelled" && p.supplierPenaltyAmount > 0 && (
+                            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono block">
+                              Mercadería {CURRENCY_SYMBOL} {p.netMerchandiseAmount.toFixed(2)} · Penalidad {CURRENCY_SYMBOL} {p.supplierPenaltyAmount.toFixed(2)}
+                            </span>
+                          )}
                         </td>
 
                         {/* 6. Recepción en Almacén */}
@@ -592,14 +681,8 @@ export default function ComprasPage() {
 
                         {/* 7. Medio de Pago */}
                         <td className="py-4 px-4 text-center">
-                          <span className="text-[11px] font-medium text-admin-secondary capitalize">
-                            {p.paymentMethod === "transfer"
-                              ? "Transferencia"
-                              : p.paymentMethod === "cash"
-                              ? "Efectivo"
-                              : p.paymentMethod === "card"
-                              ? "Tarjeta"
-                              : "Otro medio"}
+                          <span className="text-[11px] font-medium text-admin-secondary">
+                            {PURCHASE_PAYMENT_METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod}
                           </span>
                         </td>
 
@@ -616,7 +699,19 @@ export default function ComprasPage() {
                               <Eye className="h-4 w-4" />
                             </Button>
 
-                            {p.status !== "cancelled" && !p.returns.length && (
+                            {p.status === "pending" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setPurchaseToReceive(p)}
+                                title="Confirmar recepción en almacén"
+                                className="h-8 w-8 p-0 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 cursor-pointer"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                              </Button>
+                            )}
+
+                            {canCancelPurchase(p) && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -638,7 +733,7 @@ export default function ComprasPage() {
 
             {/* Barra de Paginación */}
             <PaginationBar
-              currentPage={currentPage}
+              currentPage={safeCurrentPage}
               totalPages={totalPages}
               totalItems={filteredPurchases.length}
               pageSize={pageSize}
@@ -712,29 +807,56 @@ export default function ComprasPage() {
               {/* Mini Tarjetas de Resumen Financiero */}
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="p-3 rounded-xl bg-admin-raised border border-admin-card-border">
-                  <span className="text-[10px] text-slate-400 font-medium block">Total Factura</span>
-                  <span className="text-sm font-bold text-admin-text font-mono mt-0.5 block">
-                    {CURRENCY_SYMBOL} {selectedPurchase.totalAmount.toFixed(2)}
+                  <span className="text-[10px] text-slate-400 font-medium block">
+                    {selectedPurchase.status !== "cancelled" && selectedPurchase.returnedAmount > 0
+                      ? "Total Neto"
+                      : "Total Factura"}
                   </span>
+                  <span
+                    className={cn(
+                      "text-sm font-bold font-mono mt-0.5 block",
+                      selectedPurchase.status === "cancelled"
+                        ? "line-through text-slate-400"
+                        : "text-admin-text"
+                    )}
+                  >
+                    {CURRENCY_SYMBOL}{" "}
+                    {(selectedPurchase.status !== "cancelled" && selectedPurchase.returnedAmount > 0
+                      ? selectedPurchase.netAmount
+                      : selectedPurchase.totalAmount
+                    ).toFixed(2)}
+                  </span>
+                  {selectedPurchase.status !== "cancelled" && selectedPurchase.returnedAmount > 0 && (
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-mono block mt-0.5">
+                      Orig. {CURRENCY_SYMBOL} {selectedPurchase.totalAmount.toFixed(2)} · Dev. -{CURRENCY_SYMBOL} {selectedPurchase.returnedAmount.toFixed(2)}
+                    </span>
+                  )}
+                  {selectedPurchase.status !== "cancelled" && selectedPurchase.supplierPenaltyAmount > 0 && (
+                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono block mt-0.5">
+                      Mercadería {CURRENCY_SYMBOL} {selectedPurchase.netMerchandiseAmount.toFixed(2)} · Penalidad {CURRENCY_SYMBOL} {selectedPurchase.supplierPenaltyAmount.toFixed(2)}
+                    </span>
+                  )}
                 </div>
 
                 <div className="p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                   <span className="text-[10px] text-slate-400 font-medium block">Unidades</span>
                   <span className="text-sm font-bold text-admin-brand-text font-mono mt-0.5 block">
-                    {selectedPurchase.itemsCount} piezas
+                    {selectedPurchase.status !== "cancelled" && selectedPurchase.returnedUnits > 0
+                      ? selectedPurchase.netUnits
+                      : selectedPurchase.itemsCount}{" "}
+                    piezas
                   </span>
+                  {selectedPurchase.status !== "cancelled" && selectedPurchase.returnedUnits > 0 && (
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-mono block mt-0.5">
+                      Orig. {selectedPurchase.itemsCount} · Dev. -{selectedPurchase.returnedUnits}
+                    </span>
+                  )}
                 </div>
 
                 <div className="p-3 rounded-xl bg-admin-raised border border-admin-card-border">
                   <span className="text-[10px] text-slate-400 font-medium block">Medio de Pago</span>
                   <span className="text-sm font-bold text-admin-text mt-0.5 block">
-                    {selectedPurchase.paymentMethod === "transfer"
-                      ? "QR / Transferencia"
-                      : selectedPurchase.paymentMethod === "cash"
-                      ? "Efectivo"
-                      : selectedPurchase.paymentMethod === "card"
-                      ? "Tarjeta"
-                      : "Otro medio"}
+                    {PURCHASE_PAYMENT_METHOD_LABELS[selectedPurchase.paymentMethod] ?? selectedPurchase.paymentMethod}
                   </span>
                 </div>
               </div>
@@ -767,13 +889,7 @@ export default function ComprasPage() {
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500">Medio de Pago:</span>
                   <span className="font-medium text-admin-secondary">
-                    {selectedPurchase.paymentMethod === "transfer"
-                      ? "QR / Transferencia"
-                      : selectedPurchase.paymentMethod === "cash"
-                      ? "Efectivo"
-                      : selectedPurchase.paymentMethod === "card"
-                      ? "Tarjeta"
-                      : "Otro medio"}
+                    {PURCHASE_PAYMENT_METHOD_LABELS[selectedPurchase.paymentMethod] ?? selectedPurchase.paymentMethod}
                   </span>
                 </div>
               </div>
@@ -785,7 +901,10 @@ export default function ComprasPage() {
                     Artículos Ingresados ({selectedPurchase.items.length})
                   </span>
                   <span className="text-[11px] text-slate-400 font-medium">
-                    Total: {selectedPurchase.itemsCount} unidades
+                    Total:{" "}
+                    {selectedPurchase.status !== "cancelled" && selectedPurchase.returnedUnits > 0
+                      ? `${selectedPurchase.netUnits} u. netas (${selectedPurchase.itemsCount} orig.)`
+                      : `${selectedPurchase.itemsCount} unidades`}
                   </span>
                 </div>
 
@@ -797,7 +916,6 @@ export default function ComprasPage() {
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         {it.productImage ? (
-                          // eslint-disable-next-line @next/next/no-img-element
                           <ProductThumbnail
                             src={it.productImage}
                             alt={it.productName}
@@ -812,6 +930,11 @@ export default function ComprasPage() {
                           <p className="font-bold text-admin-text truncate">
                             {it.productName}
                           </p>
+                          {it.productSku && (
+                            <p className="text-[11px] font-mono text-admin-muted truncate">
+                              {it.productSku}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -819,7 +942,11 @@ export default function ComprasPage() {
                         <div className="text-xs font-mono font-bold text-admin-text">
                           {it.quantity} u. x {CURRENCY_SYMBOL} {it.unitCost.toFixed(2)}
                         </div>
-                        {it.returnedQuantity > 0 && <p className="text-xs text-admin-muted">Devueltas: {it.returnedQuantity}</p>}
+                        {it.returnedQuantity > 0 && (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                            Devueltas: {it.returnedQuantity} u. · Quedan: {it.quantity - it.returnedQuantity} u.
+                          </p>
+                        )}
                         <span className="text-[11px] font-bold text-admin-brand-text font-mono">
                           {CURRENCY_SYMBOL} {it.subtotal.toFixed(2)}
                         </span>
@@ -835,16 +962,21 @@ export default function ComprasPage() {
                   {selectedPurchase.returns.map(receipt => (
                     <details key={receipt.id} className="rounded-lg border border-admin-card-border p-3">
                       <summary className="cursor-pointer text-sm font-medium">
-                        DEV-{receipt.id} · {receipt.createdAt} · {receipt.items.reduce((sum, item) => sum + item.quantity, 0)} u.
+                        DEV-{receipt.id} · {receipt.createdAt} · {receipt.items.reduce((sum, item) => sum + item.quantity, 0)} u. · {formatCurrencyLocale(receipt.creditedAmount)}
                       </summary>
                       <div className="mt-2 space-y-1 text-xs text-admin-secondary">
                         <p>{receipt.reason} · {receipt.userName}</p>
                         {receipt.creditNoteReference && <p>Nota de crédito: {receipt.creditNoteReference}</p>}
+                        {receipt.adjustmentAmount > 0 && (
+                          <p className="text-amber-700 dark:text-amber-400">
+                            Valor de mercadería: {formatCurrencyLocale(receipt.expectedAmount)} · Reconocido: {formatCurrencyLocale(receipt.creditedAmount)} · Diferencia del proveedor: {formatCurrencyLocale(receipt.adjustmentAmount)}
+                          </p>
+                        )}
                         <ul className="divide-y divide-admin-card-border">
                           {receipt.items.map(item => (
                             <li key={item.purchaseItemId} className="py-2">
                               <strong className="block">{item.quantity} u. · {selectedPurchase.items.find(line => line.id === item.purchaseItemId)?.productName}</strong>
-                              Compra {formatCurrencyLocale(item.originalUnitCost)} por unidad · Kárdex {formatCurrencyLocale(item.inventoryUnitCost)} por unidad
+                              Compra {formatCurrencyLocale(item.originalUnitCost)} c/u · Subtotal {formatCurrencyLocale(item.quantity * item.originalUnitCost)}
                             </li>
                           ))}
                         </ul>
@@ -865,14 +997,6 @@ export default function ComprasPage() {
                   </p>
                 </div>
               )}
-
-              {/* Nota de Auditoría de Almacén */}
-              <div className="p-3 rounded-xl bg-admin-brand-subtle border border-admin-brand-light text-admin-brand-text flex items-start gap-2.5">
-                <Info className="h-4 w-4 shrink-0 mt-0.5 text-admin-brand-text" />
-                <div className="text-[11px] leading-relaxed">
-                  Esta orden incrementó el stock disponible en almacén y recalculó el Costo Promedio Ponderado (CPP) en el Kardex.
-                </div>
-              </div>
             </div>
 
             {/* Footer del Drawer */}
@@ -886,6 +1010,18 @@ export default function ComprasPage() {
                 Cerrar Ficha
               </Button>
 
+              {selectedPurchase.status === "pending" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setPurchaseToReceive(selectedPurchase)}
+                  className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Confirmar Recepción</span>
+                </Button>
+              )}
+
               {selectedPurchase.status === "received" && selectedPurchase.items.some(item => returnableQuantity(item) > 0) && (
                 <Button
                   type="button"
@@ -896,7 +1032,7 @@ export default function ComprasPage() {
                 </Button>
               )}
 
-              {selectedPurchase.status !== "cancelled" && !selectedPurchase.returns.length && (
+              {canCancelPurchase(selectedPurchase) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -919,7 +1055,7 @@ export default function ComprasPage() {
           purchase={selectedPurchase}
           requestId={returnRequestId}
           onClose={() => setReturnRequestId(null)}
-          onSaved={loadPurchases}
+          onSaved={() => loadPurchases(true)}
         />
       )}
 
@@ -928,7 +1064,7 @@ export default function ComprasPage() {
           ========================================================================= */}
       <Dialog
         open={!!purchaseToCancel}
-        onOpenChange={(open) => !open && setPurchaseToCancel(null)}
+        onOpenChange={(open) => !open && !isCancelling && setPurchaseToCancel(null)}
       >
         <DialogContent className="sm:max-w-md admin-panel p-6">
           <DialogHeader className="pb-2 border-b border-admin-card-border">
@@ -937,7 +1073,9 @@ export default function ComprasPage() {
               <span>Anular Orden de Compra</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-admin-muted">
-              Esta acción revertirá las existencias ingresadas al almacén y registrará un movimiento de salida en el Kardex.
+              {purchaseToCancel?.status === "pending"
+                ? "Esta orden pendiente se cancelará sin modificar existencias ni registrar salida en el Kárdex."
+                : "Esta acción revertirá las existencias ingresadas al almacén y registrará un movimiento de salida en el Kárdex."}
             </DialogDescription>
           </DialogHeader>
 
@@ -951,7 +1089,8 @@ export default function ComprasPage() {
                   Proveedor: {purchaseToCancel.supplierName}
                 </span>
                 <span className="block font-mono">
-                  Monto a revertir: {CURRENCY_SYMBOL} {purchaseToCancel.totalAmount.toFixed(2)} ({purchaseToCancel.itemsCount} piezas)
+                  {purchaseToCancel.status === "pending" ? "Monto de la orden:" : "Monto a revertir:"}{" "}
+                  {CURRENCY_SYMBOL} {purchaseToCancel.totalAmount.toFixed(2)} ({purchaseToCancel.itemsCount} piezas)
                 </span>
               </div>
 
@@ -974,6 +1113,7 @@ export default function ComprasPage() {
               type="button"
               variant="outline"
               size="sm"
+              disabled={isCancelling}
               onClick={() => setPurchaseToCancel(null)}
               className="h-9 rounded-lg border-admin-card-border text-xs cursor-pointer"
             >
@@ -995,6 +1135,74 @@ export default function ComprasPage() {
                 <>
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>Confirmar Anulación</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* =========================================================================
+          7. MODAL: CONFIRMAR RECEPCIÓN DE ORDEN PENDIENTE
+          ========================================================================= */}
+      <Dialog
+        open={!!purchaseToReceive}
+        onOpenChange={(open) => !open && !isReceiving && setPurchaseToReceive(null)}
+      >
+        <DialogContent className="sm:max-w-md admin-panel p-6">
+          <DialogHeader className="pb-2 border-b border-admin-card-border">
+            <DialogTitle className="text-base font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              <span>Confirmar Recepción en Almacén</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-admin-muted">
+              Al confirmar, la orden pasará a recibida, las unidades se sumarán a tu inventario y el ingreso quedará registrado en el historial.
+            </DialogDescription>
+          </DialogHeader>
+
+          {purchaseToReceive && (
+            <div className="space-y-2 py-2 text-xs">
+              <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-200 space-y-1">
+                <span className="font-bold block">
+                  Orden: {purchaseToReceive.purchaseNumber}
+                </span>
+                <span className="block">
+                  Proveedor: {purchaseToReceive.supplierName}
+                </span>
+                <span className="block font-mono">
+                  Total a ingresar: {CURRENCY_SYMBOL} {purchaseToReceive.totalAmount.toFixed(2)} ({purchaseToReceive.itemsCount} piezas)
+                </span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-3 gap-2 pt-3 border-t border-admin-card-border">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isReceiving}
+              onClick={() => setPurchaseToReceive(null)}
+              className="h-9 rounded-lg border-admin-card-border text-xs cursor-pointer"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleConfirmReceive}
+              disabled={isReceiving}
+              className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer gap-1.5"
+            >
+              {isReceiving ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  <span>Confirmando...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Confirmar Recepción</span>
                 </>
               )}
             </Button>

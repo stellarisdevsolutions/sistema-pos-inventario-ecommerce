@@ -15,7 +15,7 @@ export const purchaseFormSchema = z.object({
     .max(60, "El numero de factura no debe superar los 60 caracteres")
     .optional()
     .nullable(),
-  paymentMethod: z.enum(["cash", "card", "transfer", "other"]).default("transfer"),
+  paymentMethod: z.enum(["transfer", "qr", "cash"]).default("transfer"),
   paymentStatus: z.enum(["paid", "pending", "partial"]).optional().default("paid"),
   status: z.enum(["received", "pending"]).optional().default("received"),
   notes: z
@@ -42,6 +42,12 @@ export const purchaseReturnSchema = z.object({
   requestId: z.uuid(),
   reason: z.string().trim().min(1, "Indica el motivo de la devolución.").max(500),
   creditNoteReference: z.string().trim().max(60).optional(),
+  creditedAmount: z
+    .number()
+    .min(0, "El monto reconocido no puede ser negativo.")
+    .max(99999999.99, "El monto reconocido supera el límite permitido.")
+    .refine((val) => Number.isFinite(val), "Ingresa un monto válido.")
+    .optional(),
   items: z.array(z.object({ purchaseItemId: positiveInteger, quantity: positiveInteger }))
     .min(1, "Indica cuántas unidades vas a devolver.")
     .max(200)

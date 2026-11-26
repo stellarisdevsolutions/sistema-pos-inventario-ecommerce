@@ -577,7 +577,7 @@ export async function getSalesHistoryAction(): Promise<{
         saleNumber: s.saleNumber,
         customerName: s.customerName || s.customer?.name || "Público General",
         customerTaxId: s.customer?.taxId || null,
-        paymentMethod: s.paymentMethod,
+        paymentMethod: s.paymentMethod === "qr" ? "transfer" : s.paymentMethod,
         channel: s.channel,
         status: s.status,
         subtotal: parseFloat(s.subtotal) || 0,

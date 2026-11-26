@@ -6,8 +6,9 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { supplierFormSchema, type SupplierFormInput } from "@/lib/validations/supplier";
-import { businessMonthStart, formatBusinessDate } from "@/lib/business-date";
+import { businessMonthEnd, businessMonthStart, formatBusinessDate } from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
+import { summarizePurchaseReturnAmounts } from "@/lib/purchase-return-math";
 
 function safeRevalidatePath(path: string) {
   try {
@@ -56,6 +57,10 @@ export async function getSuppliersAction(): Promise<{
           },
           with: {
             returns: {
+              columns: {
+                createdAt: true,
+                creditedAmount: true,
+              },
               with: {
                 items: {
                   columns: {
@@ -78,25 +83,32 @@ export async function getSuppliersAction(): Promise<{
     });
 
     const startOfMonth = businessMonthStart();
+    const endOfMonth = businessMonthEnd();
 
     const formatted: SupplierItem[] = list.map((s) => {
-      const validPurchases = (s.purchases || []).filter((p) => p.status !== "cancelled");
+      const receivedPurchases = (s.purchases || []).filter((p) => p.status === "received");
 
-      const netPurchaseAmount = (p: (typeof validPurchases)[number]) => {
+      let totalPurchased = 0;
+      let monthlyPurchased = 0;
+
+      for (const p of receivedPurchases) {
         const total = parseFloat(p.totalAmount) || 0;
-        const returned = (p.returns || []).reduce(
-          (sum, r) =>
-            sum + r.items.reduce((itemSum, it) => itemSum + it.quantity * (parseFloat(it.originalUnitCost) || 0), 0),
-          0
-        );
-        return Math.max(0, total - returned);
-      };
+        let totalReturned = 0;
+        let monthReturned = 0;
+        for (const r of p.returns || []) {
+          const rValue = summarizePurchaseReturnAmounts(r.items, r.creditedAmount).creditedAmount;
+          totalReturned += rValue;
+          const rDate = new Date(r.createdAt);
+          if (rDate >= startOfMonth && rDate < endOfMonth) {
+            monthReturned += rValue;
+          }
+        }
 
-      const totalPurchased = validPurchases.reduce((acc, p) => acc + netPurchaseAmount(p), 0);
-
-      const monthlyPurchased = validPurchases
-        .filter((p) => p.createdAt && new Date(p.createdAt) >= startOfMonth)
-        .reduce((acc, p) => acc + netPurchaseAmount(p), 0);
+        totalPurchased += Math.max(0, total - totalReturned);
+        const pDate = p.createdAt ? new Date(p.createdAt) : null;
+        const inMonth = pDate !== null && pDate >= startOfMonth && pDate < endOfMonth;
+        monthlyPurchased += (inMonth ? total : 0) - monthReturned;
+      }
 
       return {
         id: s.id,
@@ -109,9 +121,9 @@ export async function getSuppliersAction(): Promise<{
         notes: s.notes || null,
         isActive: s.isActive ?? true,
         createdAt: formatBusinessDate(s.createdAt),
-        purchasesCount: validPurchases.length,
-        totalPurchased,
-        monthlyPurchased,
+        purchasesCount: receivedPurchases.length,
+        totalPurchased: Number(totalPurchased.toFixed(2)),
+        monthlyPurchased: Number(monthlyPurchased.toFixed(2)),
         productsCount: (s.products || []).length,
       };
     });

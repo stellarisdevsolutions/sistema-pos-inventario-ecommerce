@@ -85,6 +85,8 @@ import InventarioLoading from "./loading";
 
 type Product = InventoryProductDetail;
 
+const SHOW_CATALOG_IMPORT_BUTTONS = false as boolean;
+
 interface KardexMovement {
   id: number;
   date: string;
@@ -978,10 +980,14 @@ export default function InventarioPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <a href="/admin/inventario/plantilla" download className="admin-return rounded-xl border border-admin-card-border bg-admin-card-bg px-3 py-2">
-            Descargar plantilla Excel
-          </a>
-          <Button variant="outline" onClick={() => setCatalogImportOpen(true)}>Importar productos</Button>
+          {SHOW_CATALOG_IMPORT_BUTTONS && (
+            <>
+              <a href="/admin/inventario/plantilla" download className="admin-return rounded-xl border border-admin-card-border bg-admin-card-bg px-3 py-2">
+                Descargar plantilla Excel
+              </a>
+              <Button variant="outline" onClick={() => setCatalogImportOpen(true)}>Importar productos</Button>
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1008,7 +1014,7 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      {catalogImportOpen && (
+      {SHOW_CATALOG_IMPORT_BUTTONS && catalogImportOpen && (
         <CatalogImportDialog
           onClose={() => setCatalogImportOpen(false)}
           onImported={async () => setProducts(await getInventoryProducts())}

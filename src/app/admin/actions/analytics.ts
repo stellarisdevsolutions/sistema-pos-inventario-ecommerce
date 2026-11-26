@@ -14,6 +14,7 @@ import {
   formatBusinessTime,
 } from "@/lib/business-date";
 import { requireRole } from "@/lib/auth/session";
+import { sumPurchaseReturnPenalties } from "@/lib/purchase-return-math";
 
 export interface AnalyticsDailyItem {
   date: string;
@@ -60,6 +61,9 @@ export interface PeriodAnalyticsData {
     netSales: number;
     totalCost: number;
     grossProfit: number;
+    inventoryLosses: number;
+    supplierPenalties: number;
+    netOperatingProfit: number;
     profitMargin: number;
     totalSalesCount: number;
     completedSalesCount: number;
@@ -122,7 +126,7 @@ export async function getPeriodAnalyticsAction(
       return { success: false, error: "Selecciona un rango de entre 1 y 366 días." };
     }
 
-    const [sales, periodRefunds] = await Promise.all([
+    const [sales, periodRefunds, periodAdjustments, periodPurchaseReturns] = await Promise.all([
       db.query.sales.findMany({
         where: and(
           gte(schema.sales.createdAt, startOfDay),
@@ -158,6 +162,25 @@ export async function getPeriodAnalyticsAction(
         with: {
           sale: {
             columns: { id: true, cashShiftId: true, userId: true },
+          },
+        },
+      }),
+      db.query.inventoryAdjustments.findMany({
+        where: and(
+          gte(schema.inventoryAdjustments.createdAt, startOfDay),
+          lt(schema.inventoryAdjustments.createdAt, endOfDay)
+        ),
+        columns: { totalCost: true },
+      }),
+      db.query.purchaseReturns.findMany({
+        where: and(
+          gte(schema.purchaseReturns.createdAt, startOfDay),
+          lt(schema.purchaseReturns.createdAt, endOfDay)
+        ),
+        columns: { creditedAmount: true },
+        with: {
+          items: {
+            columns: { quantity: true, originalUnitCost: true },
           },
         },
       }),
@@ -403,6 +426,11 @@ export async function getPeriodAnalyticsAction(
     }
 
     const grossProfit = netSales - totalCost;
+    const inventoryLosses = Number(
+      periodAdjustments.reduce((sum, adj) => sum + (parseFloat(adj.totalCost) || 0), 0).toFixed(2)
+    );
+    const supplierPenalties = sumPurchaseReturnPenalties(periodPurchaseReturns);
+    const netOperatingProfit = Number((grossProfit - inventoryLosses - supplierPenalties).toFixed(2));
     const profitMargin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
     const totalSalesCount = completedCount + refundedCount;
     const averageTicket = totalSalesCount > 0 ? netSales / totalSalesCount : 0;
@@ -429,6 +457,9 @@ export async function getPeriodAnalyticsAction(
           netSales,
           totalCost,
           grossProfit,
+          inventoryLosses,
+          supplierPenalties,
+          netOperatingProfit,
           profitMargin,
           totalSalesCount,
           completedSalesCount: completedCount,

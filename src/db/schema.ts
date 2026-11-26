@@ -60,6 +60,7 @@ export const paymentMethodEnum = pgEnum("payment_method", [
   "cash",        // Efectivo
   "card",        // Tarjeta de crédito o débito
   "transfer",    // Transferencia bancaria directa
+  "qr",          // Pago por código QR
   "other",       // Otro medio de pago (vales, mixto)
 ]);
 
@@ -298,9 +299,11 @@ export const purchaseReturns = pgTable("purchase_returns", {
   requestId: uuid("request_id").notNull().unique(),
   reason: text("reason").notNull(),
   creditNoteReference: text("credit_note_reference"),
+  creditedAmount: numeric("credited_amount", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   index("purchase_returns_purchase_idx").on(t.purchaseId),
+  check("purchase_returns_credited_amount_nonnegative", sql`${t.creditedAmount} IS NULL OR ${t.creditedAmount} >= 0`),
 ]);
 
 export const purchaseReturnItems = pgTable("purchase_return_items", {

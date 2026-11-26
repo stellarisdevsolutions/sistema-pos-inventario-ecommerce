@@ -107,11 +107,55 @@ export function lockPurchaseQuery(purchaseId: number) {
   return sql`SELECT id FROM purchases WHERE id = ${purchaseId} FOR UPDATE`;
 }
 
+export function receivePurchaseQuery(purchaseId: number, userId: number) {
+  return sql`
+    WITH target AS MATERIALIZED (
+      SELECT id, purchase_number FROM purchases
+      WHERE id = ${purchaseId} AND status = 'pending'
+      FOR UPDATE
+    ), quantities AS (
+      SELECT product_id, SUM(quantity)::integer AS quantity, SUM(subtotal) / SUM(quantity) AS unit_cost
+      FROM purchase_items JOIN target ON target.id = purchase_id
+      GROUP BY product_id
+    ), locked_products AS MATERIALIZED (
+      SELECT p.id, p.stock, p.cost_price, quantities.quantity, quantities.unit_cost
+      FROM products p JOIN quantities ON p.id = quantities.product_id
+      WHERE p.is_active AND p.stock >= 0
+      ORDER BY p.id FOR UPDATE OF p
+    ), received AS (
+      UPDATE purchases p
+      SET status = 'received'
+      FROM target
+      WHERE p.id = target.id
+        AND EXISTS (SELECT 1 FROM quantities)
+        AND (SELECT count(*) FROM locked_products) = (SELECT count(*) FROM quantities)
+      RETURNING p.id, p.purchase_number
+    ), stock_change AS (
+      UPDATE products p
+      SET stock = p.stock + l.quantity,
+          cost_price = (p.stock * p.cost_price + l.quantity * l.unit_cost) / (p.stock + l.quantity),
+          updated_at = now()
+      FROM received CROSS JOIN locked_products l
+      WHERE p.id = l.id
+      RETURNING p.id, p.stock, l.quantity, l.unit_cost
+    ), movement AS (
+      INSERT INTO inventory_movements (product_id, movement_type, quantity, previous_stock, new_stock,
+        unit_cost, reference_type, reference_id, reason, user_id)
+      SELECT stock_change.id, 'purchase_in', quantity, stock - quantity, stock, unit_cost,
+        'purchase', received.id, 'Recepción de compra ' || purchase_number, ${userId}
+      FROM received CROSS JOIN stock_change
+    )
+    SELECT id, purchase_number AS "purchaseNumber" FROM received
+  `;
+}
+
 export function returnPurchaseQuery(input: PurchaseReturnInput, userId: number) {
   const lines = JSON.stringify(input.items.map(({ purchaseItemId, quantity }) => ({
     purchase_item_id: purchaseItemId,
     quantity,
   })));
+  const creditedAmount =
+    input.creditedAmount !== undefined ? input.creditedAmount.toFixed(2) : null;
 
   return sql`
     WITH requested AS MATERIALIZED (
@@ -130,6 +174,9 @@ export function returnPurchaseQuery(input: PurchaseReturnInput, userId: number) 
           SELECT SUM(quantity) FROM purchase_return_items WHERE purchase_item_id = item.id
         ), 0)
         AND NOT EXISTS (SELECT 1 FROM existing_return)
+    ), totals AS MATERIALIZED (
+      SELECT COALESCE(SUM(quantity * unit_cost), 0)::numeric(12, 2) AS expected_total
+      FROM lines
     ), quantities AS (
       SELECT product_id, SUM(quantity) AS quantity FROM lines GROUP BY product_id
     ), locked_products AS MATERIALIZED (
@@ -137,11 +184,17 @@ export function returnPurchaseQuery(input: PurchaseReturnInput, userId: number) 
       FROM products p JOIN quantities ON p.id = quantities.product_id
       ORDER BY p.id FOR UPDATE OF p
     ), returned AS (
-      INSERT INTO purchase_returns (purchase_id, user_id, request_id, reason, credit_note_reference)
-      SELECT ${input.purchaseId}, ${userId}, ${input.requestId}::uuid, ${input.reason}, ${input.creditNoteReference || null}
+      INSERT INTO purchase_returns (purchase_id, user_id, request_id, reason, credit_note_reference, credited_amount)
+      SELECT ${input.purchaseId}, ${userId}, ${input.requestId}::uuid, ${input.reason}, ${input.creditNoteReference || null},
+        COALESCE(${creditedAmount}::numeric(12, 2), totals.expected_total)
+      FROM totals
       WHERE EXISTS (SELECT 1 FROM requested)
         AND (SELECT count(*) FROM lines) = (SELECT count(*) FROM requested)
         AND NOT EXISTS (SELECT 1 FROM locked_products WHERE stock < quantity)
+        AND (
+          ${creditedAmount}::numeric(12, 2) IS NULL
+          OR (${creditedAmount}::numeric(12, 2) >= 0 AND ${creditedAmount}::numeric(12, 2) <= totals.expected_total)
+        )
       ON CONFLICT (request_id) DO NOTHING
       RETURNING id
     ), detail AS (

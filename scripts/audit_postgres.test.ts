@@ -8,7 +8,7 @@ import { readFile } from "node:fs/promises";
 import { test, type TestContext } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
+import { cancelPurchaseQuery, createPurchaseQuery, lockPurchaseQuery, receivePurchaseQuery, returnPurchaseQuery } from "@/db/operations/purchases";
 import { cancelSaleQuery, createSaleQuery, refundSaleQuery } from "@/db/operations/sales";
 import { productDbInsertSchema, productOptionConfigSchema } from "@/lib/validations/product";
 import { saleFormSchema } from "@/lib/validations/sale";
@@ -20,7 +20,7 @@ async function createDatabase(context: TestContext) {
   const db = new PGlite();
   context.after(() => db.close());
 
-  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql", "0005_product_attributes_jsonb.sql", "0006_hardening_refunds_sessions.sql", "0007_product_model_images.sql", "0008_product_archived.sql", "0009_cash_shift_recount_and_reconciliation.sql"]) {
+  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql", "0005_product_attributes_jsonb.sql", "0006_hardening_refunds_sessions.sql", "0007_product_model_images.sql", "0008_product_archived.sql", "0009_cash_shift_recount_and_reconciliation.sql", "0010_add_qr_payment_method.sql", "0011_purchase_return_credited_amount.sql"]) {
     await db.exec(await readFile(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
   }
   await db.exec(`
@@ -87,9 +87,31 @@ test("recibir y anular compras mantiene stock y Kardex consistentes", async (t) 
   `);
 
   const dialect = new PgDialect();
-  const create = (userId: number) => {
+  for (const method of ["transfer", "qr", "cash"] as const) {
+    assert.equal(
+      purchaseFormSchema.safeParse({
+        supplierId: 1,
+        paymentMethod: method,
+        items: [{ productId: 1, quantity: 1, unitCost: 10 }],
+      }).success,
+      true
+    );
+  }
+  for (const rejectedMethod of ["card", "other"]) {
+    assert.equal(
+      purchaseFormSchema.safeParse({
+        supplierId: 1,
+        paymentMethod: rejectedMethod,
+        items: [{ productId: 1, quantity: 1, unitCost: 10 }],
+      }).success,
+      false
+    );
+  }
+
+  const create = (userId: number, paymentMethod: "transfer" | "qr" | "cash" = "transfer") => {
     const query = dialect.sqlToQuery(createPurchaseQuery(purchaseFormSchema.parse({
       supplierId: 1,
+      paymentMethod,
       items: [{ productId: 1, quantity: 2, unitCost: 20 }],
     }), userId, "COM-2026-"));
     return db.query<{ id: number }>(query.sql, query.params);
@@ -97,8 +119,9 @@ test("recibir y anular compras mantiene stock y Kardex consistentes", async (t) 
   await assert.rejects(create(9999), /foreign key/);
   assert.deepEqual((await db.query("SELECT stock FROM products")).rows, [{ stock: 3 }]);
 
-  const created = await create(1);
+  const created = await create(1, "qr");
   const { id } = created.rows[0];
+  assert.deepEqual((await db.query("SELECT payment_method FROM purchases WHERE id = $1", [id])).rows, [{ payment_method: "qr" }]);
   assert.deepEqual((await db.query("SELECT stock, cost_price FROM products")).rows, [{ stock: 5, cost_price: "14.00" }]);
 
   const query = dialect.sqlToQuery(cancelPurchaseQuery(id, 1, "Fixture cancelado"));
@@ -262,6 +285,285 @@ test("devuelve al proveedor al costo vigente sin duplicar salidas ni superar la 
   assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 5 }]))).rows.length, 0);
   assert.equal((await submit(input([{ purchaseItemId: 1, quantity: 4 }]))).rows.length, 1);
   assert.deepEqual((await db.query("SELECT stock, cost_price FROM products WHERE id = 1")).rows, [{ stock: 0, cost_price: "19.14" }]);
+});
+
+test("bloquea la anulación total si falta stock en un producto de una compra múltiple y permite devolver el resto disponible", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  const toQuery = (statement: Parameters<PgDialect["sqlToQuery"]>[0]) => dialect.sqlToQuery(statement);
+  const execSql = <Row = { id: number }>(statement: Parameters<PgDialect["sqlToQuery"]>[0]) => {
+    const { sql, params } = toQuery(statement);
+    return db.query<Row>(sql, params);
+  };
+
+  await db.exec(`
+    INSERT INTO suppliers (name) VALUES ('Proveedor múltiple');
+    INSERT INTO products (name, slug, stock, cost_price, price)
+    VALUES ('Prod A', 'prod-a', 0, 0, 50), ('Prod B', 'prod-b', 0, 0, 50), ('Prod C', 'prod-c', 0, 0, 50);
+  `);
+
+  const { rows: [purchase] } = await execSql(
+    createPurchaseQuery(
+      purchaseFormSchema.parse({
+        supplierId: 1,
+        items: [
+          { productId: 1, quantity: 10, unitCost: 20 },
+          { productId: 2, quantity: 10, unitCost: 20 },
+          { productId: 3, quantity: 10, unitCost: 20 },
+        ],
+      }),
+      1,
+      "COM-"
+    )
+  );
+  const itemRows = (
+    await db.query<{ id: number; product_id: number }>(
+      "SELECT id, product_id FROM purchase_items WHERE purchase_id = $1 ORDER BY product_id",
+      [purchase.id]
+    )
+  ).rows;
+  assert.equal(itemRows.length, 3);
+  const [itemA, itemB, itemC] = itemRows;
+
+  // Simula ventas: Prod A se agotó (0 restantes), Prod B vendió 2 (8 restantes), Prod C intacto (10 restantes)
+  await db.exec("UPDATE products SET stock = 0 WHERE id = 1; UPDATE products SET stock = 8 WHERE id = 2;");
+
+  assert.equal((await execSql(cancelPurchaseQuery(purchase.id, 1, "Intento anular"))).rows.length, 0);
+  assert.deepEqual(
+    (await db.query("SELECT status FROM purchases WHERE id = $1", [purchase.id])).rows,
+    [{ status: "received" }]
+  );
+  assert.deepEqual(
+    (await db.query("SELECT id, stock FROM products ORDER BY id")).rows,
+    [{ id: 1, stock: 0 }, { id: 2, stock: 8 }, { id: 3, stock: 10 }]
+  );
+
+  const runReturn = (items: PurchaseReturnInput["items"]) =>
+    db.transaction(async (tx) => {
+      const lock = toQuery(lockPurchaseQuery(purchase.id));
+      await tx.query(lock.sql, lock.params);
+      const mutation = toQuery(
+        returnPurchaseQuery(
+          purchaseReturnSchema.parse({
+            purchaseId: purchase.id,
+            requestId: randomUUID(),
+            reason: "Devolución parcial",
+            items,
+          }),
+          1
+        )
+      );
+      return tx.query<{ id: number }>(mutation.sql, mutation.params);
+    });
+
+  // No permite devolver un producto agotado ni más del stock actual
+  assert.equal((await runReturn([{ purchaseItemId: itemA.id, quantity: 1 }])).rows.length, 0);
+  assert.equal((await runReturn([{ purchaseItemId: itemB.id, quantity: 9 }])).rows.length, 0);
+
+  // Sí permite devolver todo el saldo disponible restante (8 de Prod B y 10 de Prod C)
+  assert.equal(
+    (await runReturn([
+      { purchaseItemId: itemB.id, quantity: 8 },
+      { purchaseItemId: itemC.id, quantity: 10 },
+    ])).rows.length,
+    1
+  );
+  assert.deepEqual(
+    (await db.query("SELECT id, stock FROM products ORDER BY id")).rows,
+    [{ id: 1, stock: 0 }, { id: 2, stock: 0 }, { id: 3, stock: 0 }]
+  );
+  assert.deepEqual(
+    (await db.query("SELECT status FROM purchases WHERE id = $1", [purchase.id])).rows,
+    [{ status: "received" }]
+  );
+  assert.equal((await execSql(cancelPurchaseQuery(purchase.id, 1, "Tras devolver"))).rows.length, 0);
+});
+
+test("registra el monto reconocido por el proveedor en devoluciones sin alterar el costo de salida en Kárdex", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  const toQuery = (statement: Parameters<PgDialect["sqlToQuery"]>[0]) => dialect.sqlToQuery(statement);
+  const execSql = <Row = { id: number }>(statement: Parameters<PgDialect["sqlToQuery"]>[0]) => {
+    const { sql, params } = toQuery(statement);
+    return db.query<Row>(sql, params);
+  };
+
+  await db.exec(`
+    INSERT INTO suppliers (name) VALUES ('Proveedor Nota Crédito');
+    INSERT INTO products (name, slug, stock, cost_price, price) VALUES ('Monitor 27', 'monitor-27', 0, 0, 150);
+  `);
+
+  const { rows: [purchase] } = await execSql(
+    createPurchaseQuery(
+      purchaseFormSchema.parse({
+        supplierId: 1,
+        items: [{ productId: 1, quantity: 5, unitCost: 100 }],
+      }),
+      1,
+      "COM-"
+    )
+  );
+  const { rows: [line] } = await db.query<{ id: number }>(
+    "SELECT id FROM purchase_items WHERE purchase_id = $1",
+    [purchase.id]
+  );
+
+  const runReturn = (input: PurchaseReturnInput) =>
+    db.transaction(async (tx) => {
+      const lock = toQuery(lockPurchaseQuery(input.purchaseId));
+      await tx.query(lock.sql, lock.params);
+      const mutation = toQuery(returnPurchaseQuery(input, 1));
+      return tx.query<{ id: number }>(mutation.sql, mutation.params);
+    });
+
+  // 1. Rechaza si el esquema recibe monto reconocido negativo
+  assert.equal(
+    purchaseReturnSchema.safeParse({
+      purchaseId: purchase.id,
+      requestId: randomUUID(),
+      reason: "Prueba negativa",
+      creditedAmount: -1,
+      items: [{ purchaseItemId: line.id, quantity: 1 }],
+    }).success,
+    false
+  );
+
+  // 2. Rechaza en PostgreSQL si el monto reconocido supera el valor de compra (100 * 1 = 100)
+  const overCredit = await runReturn(
+    purchaseReturnSchema.parse({
+      purchaseId: purchase.id,
+      requestId: randomUUID(),
+      reason: "Excede costo",
+      creditedAmount: 120,
+      items: [{ purchaseItemId: line.id, quantity: 1 }],
+    })
+  );
+  assert.equal(overCredit.rows.length, 0);
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 5 }]);
+
+  // 3. Sin monto manual, guarda automáticamente el total a costo de compra (100.00)
+  const { rows: [defaultReturn] } = await runReturn(
+    purchaseReturnSchema.parse({
+      purchaseId: purchase.id,
+      requestId: randomUUID(),
+      reason: "Sin penalidad",
+      items: [{ purchaseItemId: line.id, quantity: 1 }],
+    })
+  );
+  assert.deepEqual(
+    (await db.query("SELECT credited_amount FROM purchase_returns WHERE id = $1", [defaultReturn.id])).rows,
+    [{ credited_amount: "100.00" }]
+  );
+
+  // 4. Con penalidad del proveedor (Bs 85 reconocidos sobre 100 de mercadería), guarda 85.00 y el Kárdex sale a 100.00
+  const { rows: [adjustedReturn] } = await runReturn(
+    purchaseReturnSchema.parse({
+      purchaseId: purchase.id,
+      requestId: randomUUID(),
+      reason: "Restocking fee",
+      creditNoteReference: "NC-85",
+      creditedAmount: 85,
+      items: [{ purchaseItemId: line.id, quantity: 1 }],
+    })
+  );
+  assert.deepEqual(
+    (await db.query("SELECT credited_amount, credit_note_reference FROM purchase_returns WHERE id = $1", [adjustedReturn.id])).rows,
+    [{ credited_amount: "85.00", credit_note_reference: "NC-85" }]
+  );
+  assert.deepEqual(
+    (await db.query(
+      "SELECT quantity, unit_cost FROM inventory_movements WHERE reference_type = 'purchase_return' AND reference_id = $1",
+      [adjustedReturn.id]
+    )).rows,
+    [{ quantity: -1, unit_cost: "100.00" }]
+  );
+
+  // 5. Acepta 0.00 explícito cuando el proveedor no reconoce crédito monetario (solo reposición/garantía)
+  const { rows: [zeroReturn] } = await runReturn(
+    purchaseReturnSchema.parse({
+      purchaseId: purchase.id,
+      requestId: randomUUID(),
+      reason: "Sin nota de crédito monetaria",
+      creditedAmount: 0,
+      items: [{ purchaseItemId: line.id, quantity: 1 }],
+    })
+  );
+  assert.deepEqual(
+    (await db.query("SELECT credited_amount FROM purchase_returns WHERE id = $1", [zeroReturn.id])).rows,
+    [{ credited_amount: "0.00" }]
+  );
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 2 }]);
+});
+
+test("una compra pendiente no suma stock hasta confirmarse su recepción y puede anularse sin afectar Kárdex", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  await db.exec(`
+    INSERT INTO suppliers (name) VALUES ('Proveedor Pendiente');
+    INSERT INTO products (name, slug, stock, cost_price, price) VALUES ('Monitor', 'monitor', 3, 10, 25);
+  `);
+
+  const runCreatePending = () => {
+    const stmt = dialect.sqlToQuery(
+      createPurchaseQuery(
+        purchaseFormSchema.parse({
+          supplierId: 1,
+          status: "pending",
+          paymentMethod: "transfer",
+          items: [{ productId: 1, quantity: 2, unitCost: 20 }],
+        }),
+        1,
+        "COM-2026-"
+      )
+    );
+    return db.query<{ id: number }>(stmt.sql, stmt.params);
+  };
+
+  const pendingPurchase = (await runCreatePending()).rows[0];
+  assert.deepEqual(
+    (await db.query("SELECT status FROM purchases WHERE id = $1", [pendingPurchase.id])).rows,
+    [{ status: "pending" }]
+  );
+  assert.deepEqual(
+    (await db.query("SELECT stock, cost_price FROM products WHERE id = 1")).rows,
+    [{ stock: 3, cost_price: "10.00" }]
+  );
+  assert.equal((await db.query("SELECT id FROM inventory_movements")).rows.length, 0);
+
+  const receiveStmt = dialect.sqlToQuery(receivePurchaseQuery(pendingPurchase.id, 1));
+  assert.equal((await db.query(receiveStmt.sql, receiveStmt.params)).rows.length, 1);
+  // Segunda recepción idempotente no vuelve a acreditar stock
+  assert.equal((await db.query(receiveStmt.sql, receiveStmt.params)).rows.length, 0);
+  assert.deepEqual(
+    (await db.query("SELECT status FROM purchases WHERE id = $1", [pendingPurchase.id])).rows,
+    [{ status: "received" }]
+  );
+  assert.deepEqual(
+    (await db.query("SELECT stock, cost_price FROM products WHERE id = 1")).rows,
+    [{ stock: 5, cost_price: "14.00" }]
+  );
+  assert.deepEqual(
+    (await db.query("SELECT movement_type, quantity, previous_stock, new_stock FROM inventory_movements")).rows,
+    [{ movement_type: "purchase_in", quantity: 2, previous_stock: 3, new_stock: 5 }]
+  );
+
+  // Compra pendiente con producto inactivo no puede recibirse, pero sí anularse sin afectar Kárdex
+  const secondPending = (await runCreatePending()).rows[0];
+  await db.exec("UPDATE products SET is_active = false WHERE id = 1");
+  const blockedReceive = dialect.sqlToQuery(receivePurchaseQuery(secondPending.id, 1));
+  assert.equal((await db.query(blockedReceive.sql, blockedReceive.params)).rows.length, 0);
+  assert.deepEqual(
+    (await db.query("SELECT status FROM purchases WHERE id = $1", [secondPending.id])).rows,
+    [{ status: "pending" }]
+  );
+
+  const cancelPending = dialect.sqlToQuery(cancelPurchaseQuery(secondPending.id, 1, "Orden cancelada"));
+  assert.equal((await db.query(cancelPending.sql, cancelPending.params)).rows.length, 1);
+  assert.deepEqual(
+    (await db.query("SELECT status FROM purchases WHERE id = $1", [secondPending.id])).rows,
+    [{ status: "cancelled" }]
+  );
+  assert.equal((await db.query("SELECT id FROM inventory_movements")).rows.length, 1);
 });
 
 test("el mismo intento de cobro guarda una sola venta, una salida y un abono de caja", async (t) => {
