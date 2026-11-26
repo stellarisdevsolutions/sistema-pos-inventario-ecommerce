@@ -2,14 +2,18 @@
 
 import { MetricCard } from "@/components/admin/metric-card";
 import { ProductThumbnail } from "@/components/admin/product-thumbnail";
+import { SearchableCategorySelect } from "@/components/admin/searchable-category-select";
 
 import { saleFormSchema, type SaleFormInput } from "@/lib/validations/sale";
 import { refundUnitAmounts } from "@/lib/refund-amount";
+import { SHOW_CARD_PAYMENT } from "@/lib/payment-methods";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import VentasLoading from "./loading";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +40,7 @@ import {
   Ban,
   Wallet,
   QrCode,
+  CreditCard,
   Tag,
   Lock,
   ShieldCheck,
@@ -63,6 +68,13 @@ import {
   type RefundReceiptData,
 } from "@/app/admin/actions/sales";
 
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Administrador",
+  manager: "Supervisor",
+  cashier: "Cajero",
+  warehouse: "Almacén",
+};
+
 interface CartItem {
   id: number;
   name: string;
@@ -78,14 +90,73 @@ type PendingCheckout = { payload: SaleFormInput; cart: CartItem[]; registerName?
 const checkoutStorageKey = (operatorId: number) => `pos-pending-checkout:${operatorId}`;
 
 function readPendingCheckout(operatorId: number): PendingCheckout | null {
-  const saved = localStorage.getItem(checkoutStorageKey(operatorId));
+  const key = checkoutStorageKey(operatorId);
+  const saved = localStorage.getItem(key);
   if (!saved) return null;
-  const record = JSON.parse(saved) as PendingCheckout;
-  const result = saleFormSchema.safeParse(record.payload);
-  if (!result.success || !result.data.checkoutRequestId || result.data.userId !== operatorId || !Array.isArray(record.cart)) {
-    throw new Error("No se pudo leer el intento pendiente.");
+  try {
+    const record = JSON.parse(saved) as PendingCheckout;
+    const result = saleFormSchema.safeParse(record.payload);
+    if (!result.success || !result.data.checkoutRequestId || result.data.userId !== operatorId || !Array.isArray(record.cart)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return { ...record, payload: result.data };
+  } catch {
+    localStorage.removeItem(key);
+    return null;
   }
-  return { ...record, payload: result.data };
+}
+
+interface MergeCartResult {
+  nextCart: CartItem[];
+  removedNames: string[];
+  adjustedNames: string[];
+  changed: boolean;
+}
+
+function toCents(value: number): number {
+  return Math.round(value * 100);
+}
+
+function mergeCartWithCatalog(prev: CartItem[], nextCatalog: PosProductItem[]): MergeCartResult {
+  if (prev.length === 0) {
+    return { nextCart: prev, removedNames: [], adjustedNames: [], changed: false };
+  }
+  const byId = new Map(nextCatalog.map((item) => [item.id, item]));
+  const removedNames: string[] = [];
+  const adjustedNames: string[] = [];
+  let changed = false;
+  const nextCart = prev.flatMap((line) => {
+    const fresh = byId.get(line.id);
+    if (!fresh || fresh.stock <= 0) {
+      removedNames.push(line.name);
+      changed = true;
+      return [];
+    }
+    const nextQty = Math.min(line.quantity, fresh.stock);
+    if (nextQty < line.quantity) {
+      adjustedNames.push(`${fresh.name} (${nextQty} u.)`);
+      changed = true;
+    }
+    if (
+      fresh.name !== line.name ||
+      fresh.price !== line.price ||
+      fresh.stock !== line.maxStock ||
+      fresh.image !== line.image ||
+      nextQty !== line.quantity
+    ) {
+      changed = true;
+    }
+    return [{
+      ...line,
+      name: fresh.name,
+      price: fresh.price,
+      maxStock: fresh.stock,
+      quantity: nextQty,
+      image: fresh.image,
+    }];
+  });
+  return { nextCart, removedNames, adjustedNames, changed };
 }
 
 export default function VentasPage() {
@@ -95,11 +166,17 @@ export default function VentasPage() {
 
   const [currentOperator, setCurrentOperator] = useState<Awaited<ReturnType<typeof getPosContextAction>>["currentOperator"]>(null);
   const [activeShift, setActiveShift] = useState<PosShiftItem | null>(null);
+  const activeShiftIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    activeShiftIdRef.current = activeShift?.id ?? null;
+  }, [activeShift]);
   const [shiftPendingReview, setShiftPendingReview] = useState(false);
+  const [shiftRecountRequired, setShiftRecountRequired] = useState(false);
+  const [shiftRecountReason, setShiftRecountReason] = useState<string | null>(null);
   const [administrativeSelected, setAdministrativeSelected] = useState(false);
   const [loadingContext, setLoadingContext] = useState(true);
   const [contextError, setContextError] = useState("");
-  const canCreateAdministrativeSale = !shiftPendingReview &&
+  const canCreateAdministrativeSale = !shiftPendingReview && !shiftRecountRequired &&
     (currentOperator?.role === "admin" || currentOperator?.role === "manager");
   const isAdministrativeSale = administrativeSelected && canCreateAdministrativeSale && !activeShift;
   const canSell = !contextError && (!!activeShift || isAdministrativeSale);
@@ -108,11 +185,38 @@ export default function VentasPage() {
   const [categories, setCategories] = useState<string[]>(["Todas"]);
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
+  const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
+  const [hasLoadedCatalog, setHasLoadedCatalog] = useState(false);
+  const [catalogPage, setCatalogPage] = useState(1);
+  const CATALOG_PAGE_SIZE = 18;
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [variantAttrFilters, setVariantAttrFilters] = useState<Record<string, string>>({});
   const [catalogRevision, setCatalogRevision] = useState(0);
+  const syncingCatalogRef = useRef(false);
 
   // Estado del Carrito y Venta actual
   const [cart, setCart] = useState<CartItem[]>([]);
+  const cartRef = useRef<CartItem[]>([]);
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
+
+  const applyFreshCatalogToCart = useCallback((nextCatalog: PosProductItem[]) => {
+    const merged = mergeCartWithCatalog(cartRef.current, nextCatalog);
+    if (!merged.changed) return;
+    cartRef.current = merged.nextCart;
+    setCart(merged.nextCart);
+    if (merged.removedNames.length > 0 || merged.adjustedNames.length > 0) {
+      const parts: string[] = [];
+      if (merged.removedNames.length > 0) {
+        parts.push(`Sin stock: ${merged.removedNames.join(", ")}`);
+      }
+      if (merged.adjustedNames.length > 0) {
+        parts.push(`Ajustados: ${merged.adjustedNames.join(", ")}`);
+      }
+      toast.warning(`Carrito actualizado por stock: ${parts.join(" · ")}`);
+    }
+  }, []);
   const [customerName, setCustomerName] = useState("Público General");
   const [customerTaxId, setCustomerTaxId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "transfer">("cash");
@@ -142,6 +246,7 @@ export default function VentasPage() {
     cashRegisterName?: string | null;
     shiftNumber?: string | null;
     cashierName?: string;
+    isAdministrativeSale?: boolean;
   } | null>(null);
 
   // Estado de la pestaña Historial de Ventas
@@ -157,6 +262,7 @@ export default function VentasPage() {
     posShiftSalesRevenue: 0,
   });
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
   const [historyMethodFilter, setHistoryMethodFilter] = useState("all");
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
@@ -188,7 +294,10 @@ export default function VentasPage() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const applyPosContextResult = (result: Awaited<ReturnType<typeof getPosContextAction>>) => {
+  const applyPosContextResult = (
+    result: Awaited<ReturnType<typeof getPosContextAction>>,
+    refreshCatalog = true
+  ) => {
     if (!result.success || !result.currentOperator) {
       setContextError(result.error || "No se pudo verificar tu turno de caja.");
       return;
@@ -197,19 +306,23 @@ export default function VentasPage() {
     setContextError("");
     setCurrentOperator(result.currentOperator);
     setShiftPendingReview(result.shiftPendingReview);
+    setShiftRecountRequired(result.shiftRecountRequired);
+    setShiftRecountReason(result.shiftRecountReason);
     setActiveShift(result.userShift);
-    if (result.userShift || result.shiftPendingReview) setAdministrativeSelected(false);
+    if (result.userShift || result.shiftPendingReview || result.shiftRecountRequired) setAdministrativeSelected(false);
     try {
       setPendingCheckout(readPendingCheckout(result.currentOperator.id));
     } catch {
       toast.error("No se pudo leer el cobro pendiente de este navegador.");
     }
-    setCatalogRevision((revision) => revision + 1);
+    if (refreshCatalog) {
+      setCatalogRevision((revision) => revision + 1);
+    }
   };
 
   const loadPosData = async () => {
     try {
-      applyPosContextResult(await getPosContextAction());
+      applyPosContextResult(await getPosContextAction(), true);
     } catch {
       setContextError("No se pudo verificar tu turno de caja.");
     } finally {
@@ -231,21 +344,31 @@ export default function VentasPage() {
     } catch {
       toast.error("Error al cargar ventas pasadas.");
     } finally {
+      setHasLoadedHistory(true);
       setIsLoadingHistory(false);
     }
   };
 
   useEffect(() => {
     let cancelled = false;
-    getPosContextAction()
-      .then((result) => {
-        if (!cancelled) applyPosContextResult(result);
+    Promise.all([getPosContextAction(), getPosCatalogAction()])
+      .then(([contextResult, catalogResult]) => {
+        if (cancelled) return;
+        applyPosContextResult(contextResult, false);
+        if (catalogResult.success) {
+          setCatalog(catalogResult.data);
+          setCategories(catalogResult.categories);
+          setHasLoadedCatalog(true);
+        }
       })
       .catch(() => {
         if (!cancelled) setContextError("No se pudo verificar tu turno de caja.");
       })
       .finally(() => {
-        if (!cancelled) setLoadingContext(false);
+        if (!cancelled) {
+          setLoadingContext(false);
+          setIsLoadingCatalog(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -254,10 +377,11 @@ export default function VentasPage() {
 
   useEffect(() => {
     if (!canSell || activeTab !== "pos") return;
+    if (catalogRevision === 0 && hasLoadedCatalog) return;
     let current = true;
     Promise.resolve()
       .then(() => {
-        if (current) setIsLoadingCatalog(true);
+        if (current && !hasLoadedCatalog) setIsLoadingCatalog(true);
         return getPosCatalogAction();
       })
       .then((result) => {
@@ -265,6 +389,8 @@ export default function VentasPage() {
         if (result.success) {
           setCatalog(result.data);
           setCategories(result.categories);
+          setHasLoadedCatalog(true);
+          applyFreshCatalogToCart(result.data);
         } else {
           toast.error(result.error || "No se pudo cargar el catálogo.");
         }
@@ -278,7 +404,68 @@ export default function VentasPage() {
     return () => {
       current = false;
     };
-  }, [canSell, activeTab, catalogRevision]);
+  }, [canSell, activeTab, catalogRevision, hasLoadedCatalog, applyFreshCatalogToCart]);
+
+  const syncCatalogNow = useCallback(async (showSpinner = false) => {
+    if (syncingCatalogRef.current) return;
+    syncingCatalogRef.current = true;
+    if (showSpinner) setIsRefreshingCatalog(true);
+    try {
+      const [result, contextResult] = await Promise.all([
+        getPosCatalogAction(),
+        getPosContextAction(),
+      ]);
+      if (result.success) {
+        setCatalog(result.data);
+        setCategories(result.categories);
+        setHasLoadedCatalog(true);
+        applyFreshCatalogToCart(result.data);
+      } else if (showSpinner) {
+        toast.error(result.error || "No se pudo actualizar el catálogo.");
+      }
+
+      if (contextResult.success && contextResult.currentOperator) {
+        const hadActiveShift = activeShiftIdRef.current !== null;
+        setCurrentOperator(contextResult.currentOperator);
+        setShiftPendingReview(contextResult.shiftPendingReview);
+        setShiftRecountRequired(contextResult.shiftRecountRequired);
+        setShiftRecountReason(contextResult.shiftRecountReason);
+        setActiveShift(contextResult.userShift);
+        if (contextResult.userShift || contextResult.shiftPendingReview || contextResult.shiftRecountRequired) {
+          setAdministrativeSelected(false);
+        }
+        if (hadActiveShift && !contextResult.userShift) {
+          toast.warning(
+            contextResult.shiftRecountRequired
+              ? "Se solicitó un reconteo de caja. El punto de venta quedó bloqueado."
+              : "Tu turno de caja fue cerrado o enviado a revisión."
+          );
+        }
+      }
+    } catch {
+      if (showSpinner) toast.error("No se pudo actualizar el catálogo.");
+    } finally {
+      syncingCatalogRef.current = false;
+      if (showSpinner) setIsRefreshingCatalog(false);
+    }
+  }, [applyFreshCatalogToCart]);
+
+  useEffect(() => {
+    if (!canSell || activeTab !== "pos" || pendingCheckout !== null || isSubmitting) return;
+
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void syncCatalogNow(false);
+      }
+    };
+
+    const intervalId = window.setInterval(syncWhenVisible, 30_000);
+    document.addEventListener("visibilitychange", syncWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+    };
+  }, [canSell, activeTab, pendingCheckout, isSubmitting, syncCatalogNow]);
 
   useEffect(() => {
     if (activeTab !== "history") return;
@@ -301,7 +488,10 @@ export default function VentasPage() {
         if (!cancelled) toast.error("Error al cargar ventas pasadas.");
       })
       .finally(() => {
-        if (!cancelled) setIsLoadingHistory(false);
+        if (!cancelled) {
+          setHasLoadedHistory(true);
+          setIsLoadingHistory(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -309,41 +499,45 @@ export default function VentasPage() {
   }, [activeTab]);
 
   // Cálculos de Totales
-  const subtotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotalCents = useMemo(() => {
+    return cart.reduce((sum, item) => sum + toCents(item.price) * item.quantity, 0);
   }, [cart]);
+  const subtotal = subtotalCents / 100;
 
-  const discountAmount = useMemo(() => {
+  const discountCents = useMemo(() => {
     const val = parseFloat(discountInput) || 0;
-    return Math.max(0, Math.min(val, subtotal));
-  }, [discountInput, subtotal]);
+    return Math.max(0, Math.min(toCents(val), subtotalCents));
+  }, [discountInput, subtotalCents]);
+  const discountAmount = discountCents / 100;
 
-  const total = useMemo(() => {
-    return Math.max(0, subtotal - discountAmount);
-  }, [subtotal, discountAmount]);
+  const totalCents = Math.max(0, subtotalCents - discountCents);
+  const total = totalCents / 100;
 
   // Cálculo de Cambio / Vuelto
   const cashGivenNumeric = parseFloat(cashGivenInput) || 0;
+  const cashGivenCents = toCents(cashGivenNumeric);
   const changeAmount = useMemo(() => {
     if (paymentMethod !== "cash") return 0;
-    return Math.max(0, cashGivenNumeric - total);
-  }, [paymentMethod, cashGivenNumeric, total]);
+    return Math.max(0, cashGivenCents - totalCents) / 100;
+  }, [paymentMethod, cashGivenCents, totalCents]);
 
   // Manejo de Carrito y Control de Stock en tiempo real
-  const addToCart = (product: PosProductItem) => {
-    if (pendingCheckout) return;
+  const addToCart = (product: PosProductItem): boolean => {
+    if (pendingCheckout) return false;
     if (product.stock <= 0) {
       toast.error(`"${product.name}" está agotado y no puede venderse.`);
-      return;
+      return false;
+    }
+    const existing = cart.find((i) => i.id === product.id);
+    if (existing && existing.quantity >= product.stock) {
+      toast.warning(`Stock máximo alcanzado: solo hay ${product.stock} unidades disponibles.`);
+      return false;
     }
 
     setCart((prev) => {
-      const existing = prev.find((i) => i.id === product.id);
-      if (existing) {
-        if (existing.quantity >= product.stock) {
-          toast.warning(`Stock máximo alcanzado: solo hay ${product.stock} unidades disponibles.`);
-          return prev;
-        }
+      const current = prev.find((i) => i.id === product.id);
+      if (current) {
+        if (current.quantity >= product.stock) return prev;
         return prev.map((i) =>
           i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
         );
@@ -363,6 +557,7 @@ export default function VentasPage() {
         },
       ];
     });
+    return true;
   };
 
   const updateQuantity = (id: number, delta: number) => {
@@ -391,6 +586,9 @@ export default function VentasPage() {
 
   const clearCart = () => {
     setCart([]);
+    setCustomerName("Público General");
+    setCustomerTaxId("");
+    setPaymentMethod("cash");
     setCashGivenInput("");
     setDiscountInput("0");
     setNotes("");
@@ -400,7 +598,8 @@ export default function VentasPage() {
   const handleBarcodeSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      const query = searchTerm.trim().toLowerCase();
+      const raw = searchTerm.trim();
+      const query = raw.toLowerCase();
       if (!query) return;
 
       // Buscar coincidencia exacta por barcode o sku
@@ -411,11 +610,17 @@ export default function VentasPage() {
       ) ?? catalog.find(p => p.name.toLowerCase() === query);
 
       if (match) {
-        addToCart(match);
-        toast.success(`Agregado al ticket: ${match.name}`);
+        if (addToCart(match)) {
+          toast.success(`Agregado al ticket: ${match.name}`);
+        }
         setSearchTerm("");
+        setCatalogPage(1);
+        searchInputRef.current?.focus();
       } else {
-        toast.info(`No se encontró ningún producto con código "${searchTerm}".`);
+        toast.info(`No se encontró ningún producto con código "${raw}".`);
+        setSearchTerm("");
+        setCatalogPage(1);
+        searchInputRef.current?.focus();
       }
     }
   };
@@ -449,7 +654,60 @@ export default function VentasPage() {
     }
     return [...groups.values()].filter(group => group.some(item => matches.has(item.id)));
   }, [catalog, filteredCatalog]);
-  const selectedVariants = selectedModel ? catalog.filter(p => p.modelCode === selectedModel) : [];
+
+  const categoryCounts = useMemo(() => {
+    const groupsByCategory = new Map<string, Set<string>>();
+    const allKeys = new Set<string>();
+    for (const item of catalog) {
+      const key = item.modelCode ? `model:${item.modelCode}` : `product:${item.id}`;
+      allKeys.add(key);
+      let set = groupsByCategory.get(item.category);
+      if (!set) {
+        set = new Set<string>();
+        groupsByCategory.set(item.category, set);
+      }
+      set.add(key);
+    }
+    const counts: Record<string, number> = { Todas: allKeys.size };
+    for (const [category, set] of groupsByCategory) {
+      counts[category] = set.size;
+    }
+    return counts;
+  }, [catalog]);
+
+  const totalCatalogPages = Math.ceil(catalogGroups.length / CATALOG_PAGE_SIZE) || 1;
+  const activeCatalogPage = Math.min(catalogPage, totalCatalogPages);
+  const paginatedCatalogGroups = useMemo(() => {
+    return catalogGroups.slice(
+      (activeCatalogPage - 1) * CATALOG_PAGE_SIZE,
+      activeCatalogPage * CATALOG_PAGE_SIZE
+    );
+  }, [catalogGroups, activeCatalogPage]);
+
+  const selectedVariants = useMemo(
+    () => (selectedModel ? catalog.filter((p) => p.modelCode === selectedModel) : []),
+    [catalog, selectedModel]
+  );
+
+  const variantOptionGroups = useMemo(() => {
+    const options = selectedVariants[0]?.modelOptions ?? [];
+    return options.filter((opt) =>
+      selectedVariants.some((variant) => Boolean(variant.attributes?.[opt.name]))
+    );
+  }, [selectedVariants]);
+
+  const filteredSelectedVariants = useMemo(() => {
+    const activeFilters = Object.entries(variantAttrFilters).filter(([, value]) => Boolean(value));
+    if (activeFilters.length === 0) return selectedVariants;
+    return selectedVariants.filter((variant) =>
+      activeFilters.every(([attrName, value]) => variant.attributes?.[attrName] === value)
+    );
+  }, [selectedVariants, variantAttrFilters]);
+
+  const selectedModelInCartCount = useMemo(() => {
+    const ids = new Set(selectedVariants.map((variant) => variant.id));
+    return cart.reduce((sum, item) => sum + (ids.has(item.id) ? item.quantity : 0), 0);
+  }, [selectedVariants, cart]);
 
   // Procesar Cobro de Venta (Server Action con Reglas de Negocio Estrictas)
   const handleProcessCheckout = async () => {
@@ -487,11 +745,27 @@ export default function VentasPage() {
       return;
     }
 
-    if (paymentMethod === "cash" && cashGivenNumeric < total && cashGivenInput.trim() !== "") {
-      toast.error(
-        `El monto recibido (${formatCurrency(cashGivenNumeric)}) es menor al total (${formatCurrency(total)}).`
-      );
+    const rawDiscount = discountInput.trim() === "" ? 0 : Number(discountInput);
+    if (!Number.isFinite(rawDiscount) || rawDiscount < 0) {
+      toast.error("El descuento debe ser un monto válido mayor o igual a cero.");
       return;
+    }
+    if (toCents(rawDiscount) > subtotalCents) {
+      toast.error("El descuento no puede superar el subtotal de la venta.");
+      return;
+    }
+    if (paymentMethod === "cash" && cashGivenInput.trim() !== "") {
+      const rawCashGiven = Number(cashGivenInput);
+      if (!Number.isFinite(rawCashGiven) || rawCashGiven < 0) {
+        toast.error("Ingresa un monto recibido válido.");
+        return;
+      }
+      if (toCents(rawCashGiven) < totalCents) {
+        toast.error(
+          `El monto recibido (${formatCurrency(rawCashGiven)}) es menor al total (${formatCurrency(total)}).`
+        );
+        return;
+      }
     }
 
     const salePayload: SaleFormInput = {
@@ -499,7 +773,7 @@ export default function VentasPage() {
         customerName: customerName.trim() || "Público General",
         customerTaxId: customerTaxId.trim() || null,
         paymentMethod,
-        cashGiven: paymentMethod === "cash" ? (cashGivenNumeric || total) : null,
+        cashGiven: paymentMethod === "cash" ? (cashGivenInput.trim() !== "" ? cashGivenCents / 100 : total) : null,
         changeGiven: paymentMethod === "cash" ? changeAmount : null,
         discountAmount,
         notes: notes.trim() || null,
@@ -553,6 +827,7 @@ export default function VentasPage() {
         setNotes(payload.notes ?? "");
         setDiscountInput(String(payload.discountAmount));
         toast.error(result.error || "No se pudo procesar la venta.");
+        void loadPosData();
         return;
       }
 
@@ -565,6 +840,7 @@ export default function VentasPage() {
         cashRegisterName: attempt.registerName,
         shiftNumber: attempt.shiftNumber,
         cashierName: currentOperator?.name,
+        isAdministrativeSale: payload.isAdministrativeSale,
       });
       setReceiptOpen(true);
       clearCart();
@@ -674,6 +950,10 @@ export default function VentasPage() {
       toast.warning("Por favor especifica el motivo de la devolución (producto defectuoso, talla errónea, etc).");
       return;
     }
+    if (refundMethod === "cash" && !activeShift) {
+      toast.error("El reintegro en efectivo requiere tener un turno de caja abierto.");
+      return;
+    }
 
     const requestIdToSend = refundRequestId || crypto.randomUUID();
     if (!refundRequestId) setRefundRequestId(requestIdToSend);
@@ -722,7 +1002,14 @@ export default function VentasPage() {
         !q ||
         sale.saleNumber.toLowerCase().includes(q) ||
         sale.customerName.toLowerCase().includes(q) ||
-        sale.cashierName.toLowerCase().includes(q);
+        sale.cashierName.toLowerCase().includes(q) ||
+        (sale.cashRegisterName?.toLowerCase().includes(q) ?? false) ||
+        (sale.shiftNumber?.toLowerCase().includes(q) ?? false) ||
+        sale.items.some(
+          (item) =>
+            item.productName.toLowerCase().includes(q) ||
+            (item.productSku?.toLowerCase().includes(q) ?? false)
+        );
 
       const matchesMethod =
         historyMethodFilter === "all" || sale.paymentMethod === historyMethodFilter;
@@ -763,10 +1050,31 @@ export default function VentasPage() {
     return Array.from(set).sort((a, b) => a - b).slice(0, 5);
   }, [total]);
 
+  if (loadingContext) {
+    return <VentasLoading />;
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-8">
       <header className="admin-page-header flex flex-wrap items-center justify-between gap-4">
-        <h1 className="admin-page-title">Punto de venta</h1>
+        <div className="space-y-1">
+          <h1 className="admin-page-title">Punto de venta</h1>
+          {activeTab === "pos" && (
+            <p className="admin-page-description">
+              {activeShift ? (
+                <>
+                  Caja activa: <strong className="font-semibold text-admin-text">{activeShift.cashRegisterName}</strong> · {activeShift.shiftNumber}
+                </>
+              ) : isAdministrativeSale ? (
+                <>
+                  Modalidad: <strong className="font-semibold text-admin-text">Venta administrativa</strong> (fuera de caja)
+                </>
+              ) : (
+                "Abre una caja o registra una venta administrativa para cobrar."
+              )}
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {activeTab === "pos" && isAdministrativeSale && cart.length === 0 && !pendingCheckout && (
             <Button variant="outline" onClick={() => setAdministrativeSelected(false)}>Volver a opciones</Button>
@@ -791,9 +1099,7 @@ export default function VentasPage() {
               </Button>
             </section>
           )}
-          {loadingContext ? (
-            <p role="status" className="py-3 text-sm text-admin-muted">Verificando tu turno…</p>
-          ) : contextError ? (
+          {contextError ? (
             <div className="flex flex-wrap items-center gap-3 py-3" role="alert">
               <p className="text-sm text-admin-danger">{contextError}</p>
               <Button variant="outline" onClick={() => { setLoadingContext(true); void loadPosData(); }}>Reintentar</Button>
@@ -802,9 +1108,21 @@ export default function VentasPage() {
             <section aria-label="Opciones para iniciar una venta" className="pos-start-options">
               <Link href="/admin/cajas" className="admin-panel pos-start-option">
                 <span className="pos-start-icon"><Banknote size={19} aria-hidden /></span>
-                <strong>{shiftPendingReview ? "Ver arqueo" : "Abrir caja"}</strong>
+                <strong>
+                  {shiftPendingReview
+                    ? "Ver arqueo"
+                    : shiftRecountRequired
+                    ? "Reconteo solicitado"
+                    : "Abrir caja"}
+                </strong>
                 <span className="text-sm text-admin-muted">
-                  {shiftPendingReview ? "Tu cierre está pendiente de aprobación." : "Inicia tu turno para cobrar en mostrador."}
+                  {shiftPendingReview
+                    ? "Tu cierre está pendiente de aprobación."
+                    : shiftRecountRequired
+                    ? shiftRecountReason
+                      ? `Reconteo requerido: ${shiftRecountReason}`
+                      : "Un supervisor solicitó volver a contar tu gaveta en Cajas."
+                    : "Inicia tu turno para cobrar en mostrador."}
                 </span>
               </Link>
               {canCreateAdministrativeSale && (
@@ -817,58 +1135,86 @@ export default function VentasPage() {
             </section>
           )}
 
-          {canSell && !loadingContext && (
+          {canSell && (
           <>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* LADO IZQUIERDO: CATÁLOGO DE PRODUCTOS (7 Columnas) */}
             <div className="min-w-0 lg:col-span-7 space-y-4">
-              {/* Buscador + Escáner de Códigos de Barra */}
-              <div className="admin-panel p-4 space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                <Input
-                  ref={searchInputRef}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyDown={handleBarcodeSearchKeyDown}
-                  aria-label="Buscar productos"
-                  placeholder="Buscar producto, SKU o código de barras"
-                  className="pl-9 pr-10 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:ring-2 focus:ring-admin-brand/20 focus:border-admin-brand"
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
+              {/* Buscador + Escáner de Códigos de Barra y Selector de Categorías */}
+              <div className="admin-panel p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <Input
+                    ref={searchInputRef}
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCatalogPage(1);
+                    }}
+                    onKeyDown={handleBarcodeSearchKeyDown}
+                    aria-label="Buscar productos"
+                    placeholder="Buscar producto, SKU o código de barras"
+                    className="pl-9 pr-10 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border focus:ring-2 focus:ring-admin-brand/20 focus:border-admin-brand"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchTerm("");
+                        setCatalogPage(1);
+                      }}
+                      aria-label="Limpiar búsqueda"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
 
-              {/* Filtro por Categorías */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-                {categories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer",
-                      selectedCategory === cat
-                        ? "bg-admin-brand text-white font-bold"
-                        : "bg-admin-raised text-admin-secondary hover:bg-slate-200/80 font-medium"
-                    )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <SearchableCategorySelect
+                    categories={categories}
+                    value={selectedCategory}
+                    counts={categoryCounts}
+                    onChange={(cat) => {
+                      setSelectedCategory(cat);
+                      setCatalogPage(1);
+                    }}
+                    className="flex-1 sm:w-56 shrink-0"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void syncCatalogNow(true)}
+                    disabled={isRefreshingCatalog}
+                    aria-label="Actualizar catálogo"
+                    title="Actualizar stock y precios"
+                    className="h-10 px-3 rounded-xl border-admin-card-border text-slate-600 hover:text-slate-900 shrink-0 cursor-pointer"
                   >
-                    {cat}
-                  </button>
-                ))}
+                    <RefreshCw className={cn("h-4 w-4", isRefreshingCatalog && "animate-spin")} />
+                  </Button>
+                </div>
               </div>
-            </div>
 
             {/* Grid de Productos en Caja */}
-            {isLoadingCatalog ? (
-              <div className="p-12 text-center bg-admin-card-bg rounded-xl border border-admin-card-border">
-                <RefreshCw className="h-6 w-6 text-slate-400 animate-spin mx-auto mb-2" />
-                <p className="text-xs text-slate-500 font-medium">Cargando catálogo del inventario...</p>
+            {isLoadingCatalog && !hasLoadedCatalog ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3" aria-label="Cargando catálogo">
+                {[1, 2, 3, 4, 5, 6].map((card) => (
+                  <div
+                    key={card}
+                    className="rounded-xl bg-admin-card-bg border border-admin-card-border p-3 space-y-2.5"
+                  >
+                    <Skeleton className="aspect-square w-full rounded-xl bg-admin-raised" />
+                    <Skeleton className="h-3 w-16 rounded-md bg-admin-card-border" />
+                    <Skeleton className="h-4 w-3/4 rounded-md bg-admin-card-border" />
+                    <Skeleton className="h-3 w-1/2 rounded-md bg-admin-card-border" />
+                    <div className="pt-2 border-t border-admin-card-border flex items-center justify-between">
+                      <Skeleton className="h-4 w-16 rounded-md bg-admin-card-border" />
+                      <Skeleton className="h-7 w-7 rounded-lg bg-admin-card-border" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : filteredCatalog.length === 0 ? (
               <div className="p-12 text-center bg-admin-card-bg rounded-xl border border-dashed border-admin-card-border">
@@ -881,8 +1227,9 @@ export default function VentasPage() {
                 </p>
               </div>
             ) : (
+              <>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {catalogGroups.map((group) => {
+                {paginatedCatalogGroups.map((group) => {
                   const first = group[0];
                   const grouped = group.length > 1;
                   const stock = group.reduce((sum, p) => sum + p.stock, 0);
@@ -902,7 +1249,14 @@ export default function VentasPage() {
                       key={first.id}
                       type="button"
                       disabled={isOutOfStock || pendingCheckout !== null}
-                      onClick={() => (grouped ? setSelectedModel(first.modelCode) : addToCart(first))}
+                      onClick={() => {
+                        if (grouped) {
+                          setVariantAttrFilters({});
+                          setSelectedModel(first.modelCode);
+                        } else {
+                          addToCart(first);
+                        }
+                      }}
                       className={cn(
                         "group rounded-xl bg-admin-card-bg border p-3 transition-all flex flex-col justify-between text-left",
                         isOutOfStock
@@ -985,12 +1339,34 @@ export default function VentasPage() {
                   );
                 })}
               </div>
+              {catalogGroups.length > CATALOG_PAGE_SIZE && (
+                <div className="admin-panel overflow-hidden">
+                  <PaginationBar
+                    currentPage={activeCatalogPage}
+                    totalPages={totalCatalogPages}
+                    totalItems={catalogGroups.length}
+                    pageSize={CATALOG_PAGE_SIZE}
+                    itemName="productos"
+                    onPageChange={(page) => {
+                      setCatalogPage(page);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  />
+                </div>
+              )}
+              </>
             )}
           </div>
 
           {/* LADO DERECHO: TICKET DE CAJA / REGISTRADORA (5 Columnas) */}
-          <div id="pos-ticket-panel" className={cn("min-w-0 lg:col-span-5", cart.length > 0 && "pb-24 lg:pb-0")}>
-            <div className="lg:sticky lg:top-20 admin-panel p-4 sm:p-5 space-y-4">
+          <div
+            id="pos-ticket-panel"
+            className={cn(
+              "min-w-0 lg:col-span-5 lg:sticky lg:top-20 lg:self-start",
+              cart.length > 0 && "pb-24 lg:pb-0"
+            )}
+          >
+            <div className="admin-panel p-4 sm:p-5 space-y-4 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto custom-scrollbar">
               <div className="flex items-center justify-between border-b border-admin-card-border pb-3">
                 <h2 className="text-base font-semibold text-admin-text">Ticket</h2>
                 {cart.length > 0 && (
@@ -1079,11 +1455,11 @@ export default function VentasPage() {
                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Método de Pago
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className={cn("grid gap-2", SHOW_CARD_PAYMENT ? "grid-cols-3" : "grid-cols-2")}>
                   <button
                     type="button"
                     aria-pressed={paymentMethod === "cash"}
-                  onClick={() => setPaymentMethod("cash")}
+                    onClick={() => setPaymentMethod("cash")}
                     className={cn(
                       "h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer",
                       paymentMethod === "cash"
@@ -1095,10 +1471,27 @@ export default function VentasPage() {
                     <span>Efectivo</span>
                   </button>
 
+                  {SHOW_CARD_PAYMENT && (
+                    <button
+                      type="button"
+                      aria-pressed={paymentMethod === "card"}
+                      onClick={() => setPaymentMethod("card")}
+                      className={cn(
+                        "h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer",
+                        paymentMethod === "card"
+                          ? "bg-admin-brand text-white font-semibold"
+                          : "bg-admin-raised text-admin-secondary border border-admin-card-border hover:bg-slate-100"
+                      )}
+                    >
+                      <CreditCard className="h-3.5 w-3.5" />
+                      <span>Tarjeta</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     aria-pressed={paymentMethod === "transfer"}
-                  onClick={() => setPaymentMethod("transfer")}
+                    onClick={() => setPaymentMethod("transfer")}
                     className={cn(
                       "h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer",
                       paymentMethod === "transfer"
@@ -1107,7 +1500,7 @@ export default function VentasPage() {
                     )}
                   >
                     <QrCode className="h-3.5 w-3.5" />
-                    <span>QR / transferencia</span>
+                    <span>QR</span>
                   </button>
                 </div>
               </div>
@@ -1257,14 +1650,42 @@ export default function VentasPage() {
             3. HISTORIAL DE VENTAS Y TICKETS (CON AUDITORÍA DE CAJAS VS ADM. DIRECTA)
             ========================================================================= */
         <div className="space-y-4">
-          <section className="admin-metrics" aria-label="Resumen de ventas">
-            <MetricCard label="Total vendido" value={formatCurrency(historyKpis.totalRevenue)}
-              detail={`${historyKpis.totalSalesCount} transacciones`} icon={Wallet} />
-            <MetricCard label="Ventas de hoy" value={formatCurrency(historyKpis.todayRevenue)}
-              detail="Ingresos del día" icon={Clock} />
-            <MetricCard label="Ticket promedio" value={formatCurrency(historyKpis.averageTicket)}
-              detail="Por comprobante" icon={Receipt} />
-          </section>
+          {isLoadingHistory && !hasLoadedHistory ? (
+            <section className="admin-metrics" aria-label="Cargando resumen de ventas">
+              {[1, 2, 3].map((metric) => (
+                <div key={metric} className="admin-metric">
+                  <Skeleton className="h-4 w-24 rounded-md bg-admin-card-border" />
+                  <Skeleton className="h-7 w-28 rounded-lg bg-admin-card-border" />
+                  <Skeleton className="h-3 w-36 rounded-md bg-admin-card-border" />
+                </div>
+              ))}
+            </section>
+          ) : (
+            <section className="admin-metrics" aria-label="Resumen de ventas">
+              <MetricCard
+                label="Total vendido"
+                value={formatCurrency(historyKpis.totalRevenue)}
+                detail={
+                  historyKpis.administrativeSalesCount > 0
+                    ? `${historyKpis.posShiftSalesCount} en caja · ${historyKpis.administrativeSalesCount} fuera de caja`
+                    : `${historyKpis.totalSalesCount} ${historyKpis.totalSalesCount === 1 ? "transacción" : "transacciones"}`
+                }
+                icon={Wallet}
+              />
+              <MetricCard
+                label="Ventas de hoy"
+                value={formatCurrency(historyKpis.todayRevenue)}
+                detail="Neto del día"
+                icon={Clock}
+              />
+              <MetricCard
+                label="Ticket promedio"
+                value={formatCurrency(historyKpis.averageTicket)}
+                detail="Por comprobante"
+                icon={Receipt}
+              />
+            </section>
+          )}
 
           {/* Filtros de Búsqueda del Historial */}
           <div className="admin-panel p-4 flex flex-col sm:flex-row items-center gap-3">
@@ -1276,7 +1697,7 @@ export default function VentasPage() {
                   setHistorySearch(e.target.value);
                   setHistoryPage(1);
                 }}
-                placeholder="Buscar por N° Ticket, cliente u operador..."
+                placeholder="Buscar por ticket, producto, SKU, caja, cliente u operador..."
                 className="pl-9 h-10 text-xs rounded-xl bg-admin-raised border-admin-card-border"
               />
             </div>
@@ -1308,7 +1729,7 @@ export default function VentasPage() {
                 <option value="all">Todos los Métodos</option>
                 <option value="cash">Efectivo</option>
                 <option value="card">Tarjeta</option>
-                <option value="transfer">QR / Transferencia</option>
+                <option value="transfer">QR</option>
                 <option value="other">Otro</option>
               </select>
 
@@ -1357,13 +1778,41 @@ export default function VentasPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-admin-card-border font-medium text-admin-secondary">
-                  {isLoadingHistory ? (
-                    <tr>
-                      <td colSpan={9} className="text-center py-10 text-slate-400">
-                        <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
-                        Cargando historial de ventas...
-                      </td>
-                    </tr>
+                  {isLoadingHistory && !hasLoadedHistory ? (
+                    [1, 2, 3, 4, 5, 6].map((row) => (
+                      <tr key={row}>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-24 rounded-md bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-24 rounded-md bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-24 rounded-md bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-28 rounded-md bg-admin-card-border" />
+                            <Skeleton className="h-3 w-16 rounded-md bg-admin-card-border" />
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-24 rounded-md bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-5 w-20 rounded-md bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-4 w-16 rounded-md bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-5 w-24 rounded-full mx-auto bg-admin-card-border" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Skeleton className="h-8 w-20 rounded-lg ml-auto bg-admin-card-border" />
+                        </td>
+                      </tr>
+                    ))
                   ) : paginatedSalesHistory.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-10 text-slate-400">
@@ -1384,7 +1833,9 @@ export default function VentasPage() {
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="font-bold text-admin-text block">{sale.cashierName}</span>
-                          <span className="text-[10px] text-slate-400 capitalize">{sale.userRole || "Usuario"}</span>
+                          <span className="text-[10px] text-slate-400">
+                            {ROLE_LABELS[sale.userRole || ""] ?? "Usuario"}
+                          </span>
                         </td>
                         <td className="py-3.5 px-4 font-bold text-admin-text">
                           {sale.customerName}
@@ -1394,7 +1845,7 @@ export default function VentasPage() {
                             {sale.paymentMethod === "cash"
                               ? "Efectivo"
                               : sale.paymentMethod === "transfer"
-                              ? "QR / Transf."
+                              ? "QR"
                               : sale.paymentMethod === "card"
                               ? "Tarjeta"
                               : "Otro"}
@@ -1506,11 +1957,14 @@ export default function VentasPage() {
                                   )}
 
                                   {/* Anular venta completa */}
-                                  {(currentOperator?.role === "admin" || currentOperator?.role === "manager") && sale.status === "completed" && (
+                                  {(currentOperator?.role === "admin" || currentOperator?.role === "manager") &&
+                                    sale.status === "completed" &&
+                                    sale.canCancelInShift && (
                                     <Button
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
+                                        setCancelReason("");
                                         setSaleToCancel(sale);
                                         setCancelModalOpen(true);
                                       }}
@@ -1551,76 +2005,200 @@ export default function VentasPage() {
       <Dialog
         open={selectedVariants.length > 0}
         onOpenChange={(open) => {
-          if (!open) setSelectedModel(null);
+          if (!open) {
+            setSelectedModel(null);
+            setVariantAttrFilters({});
+          }
         }}
       >
-        <DialogContent className="admin-panel max-h-[85dvh] overflow-y-auto">
+        <DialogContent className="admin-panel sm:max-w-lg max-h-[85dvh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{selectedVariants[0]?.baseName}</DialogTitle>
-            <DialogDescription>Elige la variante para añadirla al ticket.</DialogDescription>
+            <DialogDescription>
+              Elige una o varias variantes para añadirlas al ticket.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2.5">
-            {selectedVariants.map((p) => {
-              const qtyInCart = cart.find((line) => line.id === p.id)?.quantity ?? 0;
-              const outOfStock = p.stock <= 0;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  disabled={outOfStock || pendingCheckout !== null}
-                  onClick={() => {
-                    addToCart(p);
-                    setSelectedModel(null);
-                  }}
-                  className={cn(
-                    "w-full flex items-center gap-3 rounded-xl border border-admin-card-border bg-admin-card-bg p-3 text-left transition-colors",
-                    outOfStock
-                      ? "opacity-50 cursor-not-allowed bg-admin-raised"
-                      : "hover:border-admin-brand hover:bg-admin-brand-subtle cursor-pointer"
-                  )}
-                >
-                  <ProductThumbnail
-                    src={p.image}
-                    alt={p.name}
-                    className="size-11 rounded-lg object-cover border border-admin-card-border shrink-0"
-                  />
-                  {p.variantColor && (
-                    <span
-                      className="size-4 rounded-[5px] border border-black/15 shrink-0"
-                      style={{ backgroundColor: p.variantColor }}
-                    />
-                  )}
-                  <span className="flex-1 min-w-0">
-                    <span className="text-xs font-semibold text-admin-text flex items-center gap-2 flex-wrap">
-                      <span className="truncate">{p.variant}</span>
-                      {qtyInCart > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-admin-brand-subtle text-admin-brand-text px-1.5 py-0.5 text-[10px] font-semibold">
-                          <ShoppingCart className="size-2.5" />
-                          {qtyInCart} en ticket
-                        </span>
+
+          {variantOptionGroups.length > 0 && (
+            <div className="space-y-2.5 pb-2 border-b border-admin-card-border">
+              {variantOptionGroups.map((opt) => {
+                const selectedValue = variantAttrFilters[opt.name] || "";
+                const availableValues = opt.values.filter((val) =>
+                  selectedVariants.some((variant) => variant.attributes?.[opt.name] === val.name)
+                );
+                if (availableValues.length === 0) return null;
+                return (
+                  <div key={opt.id} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold text-admin-secondary">{opt.name}</span>
+                      {selectedValue && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setVariantAttrFilters((prev) => ({ ...prev, [opt.name]: "" }))
+                          }
+                          className="text-admin-brand-text hover:underline cursor-pointer"
+                        >
+                          Mostrar todos
+                        </button>
                       )}
-                    </span>
-                    <small className="block font-mono text-[11px] text-admin-muted mt-0.5">
-                      {p.sku}
-                    </small>
-                  </span>
-                  <span className="text-right shrink-0">
-                    <span className="block text-sm font-semibold text-admin-text tabular-nums">
-                      {formatCurrency(p.price)}
-                    </span>
-                    <small
-                      className={cn(
-                        "block text-[11px] font-medium tabular-nums",
-                        outOfStock ? "text-rose-600 dark:text-rose-400" : "text-admin-muted"
-                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableValues.map((val) => {
+                        const active = selectedValue === val.name;
+                        return (
+                          <button
+                            key={val.name}
+                            type="button"
+                            onClick={() =>
+                              setVariantAttrFilters((prev) => ({
+                                ...prev,
+                                [opt.name]: active ? "" : val.name,
+                              }))
+                            }
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                              active
+                                ? "border-admin-brand bg-admin-brand text-admin-on-solid"
+                                : "border-admin-card-border bg-admin-raised text-admin-secondary hover:border-admin-brand/50"
+                            )}
+                          >
+                            {val.hex && (
+                              <span
+                                className="size-3 rounded-full border border-black/15 shrink-0"
+                                style={{ backgroundColor: val.hex }}
+                              />
+                            )}
+                            <span>{val.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="space-y-2.5 overflow-y-auto pr-1 custom-scrollbar">
+            {filteredSelectedVariants.length === 0 ? (
+              <p className="py-6 text-center text-xs text-admin-muted">
+                No hay variantes que coincidan con los filtros elegidos.
+              </p>
+            ) : (
+              filteredSelectedVariants.map((p) => {
+                const qtyInCart = cart.find((line) => line.id === p.id)?.quantity ?? 0;
+                const outOfStock = p.stock <= 0;
+                return (
+                  <div
+                    key={p.id}
+                    className={cn(
+                      "w-full flex items-center justify-between gap-3 rounded-xl border border-admin-card-border bg-admin-card-bg p-3 transition-colors",
+                      outOfStock && "opacity-55 bg-admin-raised"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      disabled={outOfStock || pendingCheckout !== null}
+                      onClick={() => addToCart(p)}
+                      className="flex flex-1 min-w-0 items-center gap-3 text-left cursor-pointer disabled:cursor-not-allowed"
                     >
-                      {outOfStock ? "Agotado" : `${p.stock} disp.`}
-                    </small>
-                  </span>
-                </button>
-              );
-            })}
+                      <ProductThumbnail
+                        src={p.image}
+                        alt={p.name}
+                        className="size-11 rounded-lg object-cover border border-admin-card-border shrink-0"
+                      />
+                      {p.variantColor && (
+                        <span
+                          className="size-4 rounded-[5px] border border-black/15 shrink-0"
+                          style={{ backgroundColor: p.variantColor }}
+                        />
+                      )}
+                      <span className="flex-1 min-w-0">
+                        <span className="text-xs font-semibold text-admin-text flex items-center gap-2 flex-wrap">
+                          <span className="truncate">{p.variant}</span>
+                        </span>
+                        <small className="block font-mono text-[11px] text-admin-muted mt-0.5 truncate">
+                          {p.sku}
+                        </small>
+                      </span>
+                      <span className="text-right shrink-0">
+                        <span className="block text-sm font-semibold text-admin-text tabular-nums">
+                          {formatCurrency(p.price)}
+                        </span>
+                        <small
+                          className={cn(
+                            "block text-[11px] font-medium tabular-nums",
+                            outOfStock ? "text-rose-600 dark:text-rose-400" : "text-admin-muted"
+                          )}
+                        >
+                          {outOfStock ? "Agotado" : `${p.stock} disp.`}
+                        </small>
+                      </span>
+                    </button>
+
+                    <div className="shrink-0">
+                      {qtyInCart > 0 ? (
+                        <div className="flex items-center border border-admin-card-border rounded-lg bg-admin-raised overflow-hidden">
+                          <button
+                            type="button"
+                            disabled={pendingCheckout !== null}
+                            onClick={() => updateQuantity(p.id, -1)}
+                            aria-label={`Restar una unidad de ${p.variant || p.name}`}
+                            className="h-8 w-7 flex items-center justify-center text-slate-600 hover:bg-admin-card-bg cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="w-7 text-center text-xs font-semibold text-admin-text tabular-nums">
+                            {qtyInCart}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={pendingCheckout !== null || qtyInCart >= p.stock}
+                            onClick={() => addToCart(p)}
+                            aria-label={`Agregar otra unidad de ${p.variant || p.name}`}
+                            className="h-8 w-7 flex items-center justify-center text-slate-600 hover:bg-admin-card-bg cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={outOfStock || pendingCheckout !== null}
+                          onClick={() => addToCart(p)}
+                          aria-label={`Agregar ${p.variant || p.name}`}
+                          className="h-8 px-2.5 rounded-lg bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-semibold cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
+
+          <DialogFooter className="pt-2 border-t border-admin-card-border flex items-center justify-between sm:justify-between gap-2">
+            <span className="text-xs text-admin-muted">
+              {selectedModelInCartCount > 0
+                ? `${selectedModelInCartCount} ${selectedModelInCartCount === 1 ? "unidad" : "unidades"} en el ticket`
+                : "Haz clic en una variante para agregar"}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setSelectedModel(null);
+                setVariantAttrFilters({});
+              }}
+              className="h-9 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid text-xs font-bold cursor-pointer"
+            >
+              Listo
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
@@ -1644,7 +2222,7 @@ export default function VentasPage() {
 
             {/* Datos del Cliente, Operador y Caja */}
             <div className="space-y-0.5 text-[11px] text-slate-600 pb-2 border-b border-dashed border-slate-200">
-              {lastTicket?.cashRegisterName && (
+              {lastTicket?.cashRegisterName ? (
                 <>
                   <div className="flex justify-between text-[10px] text-slate-500">
                     <span>Terminal / Caja:</span>
@@ -1657,7 +2235,12 @@ export default function VentasPage() {
                     <span>{lastTicket.shiftNumber}</span>
                   </div>
                 </>
-              )}
+              ) : lastTicket?.isAdministrativeSale ? (
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>Modalidad:</span>
+                  <span className="font-bold text-slate-800">Venta Administrativa</span>
+                </div>
+              ) : null}
               <div className="flex justify-between text-[10px] text-slate-500">
                 <span>Operador:</span>
                 <span className="font-bold text-slate-800">
@@ -1720,7 +2303,7 @@ export default function VentasPage() {
                     : lastTicket?.paymentMethod === "card"
                     ? "Tarjeta"
                     : lastTicket?.paymentMethod === "transfer"
-                    ? "QR / Transferencia"
+                    ? "QR"
                     : lastTicket?.paymentMethod}
                 </span>
               </div>
@@ -1793,14 +2376,19 @@ export default function VentasPage() {
             </div>
 
             <div className="space-y-0.5 text-[11px] text-slate-600 pb-2 border-b border-dashed border-slate-200">
-              {ticketToReprint?.cashRegisterName && (
+              {ticketToReprint?.cashRegisterName ? (
                 <div className="flex justify-between text-[10px] text-slate-500">
                   <span>Caja / Turno:</span>
                   <span className="font-bold text-slate-800">
                     {ticketToReprint?.cashRegisterName || "Caja"} ({ticketToReprint?.shiftNumber || "Turno"})
                   </span>
                 </div>
-              )}
+              ) : ticketToReprint?.isAdministrativeSale ? (
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>Modalidad:</span>
+                  <span className="font-bold text-slate-800">Venta Administrativa</span>
+                </div>
+              ) : null}
               <div className="flex justify-between text-[10px] text-slate-500">
                 <span>Operador:</span>
                 <span className="font-bold text-slate-800">{ticketToReprint?.cashierName}</span>
@@ -1809,25 +2397,56 @@ export default function VentasPage() {
                 <span>Cliente:</span>
                 <span className="font-bold text-slate-800">{ticketToReprint?.customerName}</span>
               </div>
+              {ticketToReprint?.customerTaxId && (
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>NIT / CI:</span>
+                  <span className="font-bold text-slate-800">{ticketToReprint.customerTaxId}</span>
+                </div>
+              )}
             </div>
 
-            <div className="space-y-1.5 py-1">
-              {ticketToReprint?.items.map((item) => (
-                <div key={item.id} className="flex justify-between text-[11px] items-baseline">
-                  <div className="truncate pr-2">
-                    <span className="font-bold">{item.quantity}x</span> {item.productName}
-                    {item.returnedQuantity > 0 && (
-                      <span className="block text-[10px] text-amber-700 font-semibold">
-                        Devueltas: {item.returnedQuantity} unid. (-{formatCurrency(item.returnedQuantity * item.unitPrice)})
-                      </span>
-                    )}
-                  </div>
-                  <span className="font-bold shrink-0">{formatCurrency(item.subtotal)}</span>
+            {(() => {
+              const reprintProrationMap = ticketToReprint
+                ? refundUnitAmounts(ticketToReprint.items, ticketToReprint.totalAmount)
+                : null;
+              return (
+                <div className="space-y-1.5 py-1">
+                  {ticketToReprint?.items.map((item) => {
+                    const returnedSubtotal =
+                      item.returnedQuantity > 0 && reprintProrationMap
+                        ? (reprintProrationMap.get(item.id)?.(0, item.returnedQuantity) ?? 0) / 100
+                        : 0;
+                    return (
+                      <div key={item.id} className="flex justify-between text-[11px] items-baseline">
+                        <div className="truncate pr-2">
+                          <span className="font-bold">{item.quantity}x</span> {item.productName}
+                          {item.returnedQuantity > 0 && (
+                            <span className="block text-[10px] text-amber-700 font-semibold">
+                              Devueltas: {item.returnedQuantity} unid. (-{formatCurrency(returnedSubtotal)})
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-bold shrink-0">{formatCurrency(item.subtotal)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
 
             <div className="pt-2 border-t border-dashed border-slate-300 space-y-1">
+              {(ticketToReprint?.discountAmount || 0) > 0 && (
+                <>
+                  <div className="flex justify-between text-[11px] text-slate-500">
+                    <span>Subtotal:</span>
+                    <span>{formatCurrency(ticketToReprint?.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-emerald-700 font-bold">
+                    <span>Descuento:</span>
+                    <span>-{formatCurrency(ticketToReprint?.discountAmount || 0)}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between text-[11px] text-slate-500">
                 <span>Total Venta Original:</span>
                 <span>{formatCurrency(ticketToReprint?.totalAmount)}</span>
@@ -1850,7 +2469,7 @@ export default function VentasPage() {
                     : ticketToReprint?.paymentMethod === "card"
                     ? "Tarjeta"
                     : ticketToReprint?.paymentMethod === "transfer"
-                    ? "QR / Transf."
+                    ? "QR"
                     : "Otro"}
                 </span>
               </div>
@@ -2120,7 +2739,7 @@ export default function VentasPage() {
                 >
                   <option value="cash">Efectivo (Resta de la Gaveta de Caja)</option>
                   <option value="card">Tarjeta</option>
-                  <option value="transfer">QR / Transferencia Bancaria</option>
+                  <option value="transfer">QR</option>
                   <option value="other">Otro medio</option>
                 </select>
                 <p className="text-[10px] text-slate-400">
@@ -2128,6 +2747,11 @@ export default function VentasPage() {
                     ? "Se descontará del saldo esperado en gaveta para cuadre de arqueo."
                     : "No altera el saldo físico de efectivo en gaveta."}
                 </p>
+                {refundMethod === "cash" && !activeShift && (
+                  <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400">
+                    Para reintegrar en efectivo necesitas tener tu turno abierto en Cajas, o selecciona otro método de reintegro.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -2202,7 +2826,7 @@ export default function VentasPage() {
             <Button
               type="button"
               size="sm"
-              disabled={isSubmittingRefund || refundCalculation.itemsCount === 0}
+              disabled={isSubmittingRefund || refundCalculation.itemsCount === 0 || (refundMethod === "cash" && !activeShift)}
               onClick={handleProcessRefund}
               className="text-xs h-9 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1.5 shadow-amber-600/20"
             >
@@ -2297,7 +2921,7 @@ export default function VentasPage() {
                     : refundReceiptData?.refundMethod === "card"
                     ? "Tarjeta"
                     : refundReceiptData?.refundMethod === "transfer"
-                    ? "Transferencia / QR"
+                    ? "QR"
                     : "Otro"}
                 </span>
               </div>

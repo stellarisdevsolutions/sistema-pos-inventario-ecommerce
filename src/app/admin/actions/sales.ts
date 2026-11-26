@@ -9,9 +9,15 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { cancelSaleQuery, createSaleQuery, refundSaleQuery } from "@/db/operations/sales";
 import * as schema from "@/db/schema";
-import { isNull, eq, and, inArray } from "drizzle-orm";
+import { isNull, eq, and, inArray, gte, lt } from "drizzle-orm";
 import { saleFormSchema, refundSaleSchema, type SaleFormInput, type RefundSaleItemsInput } from "@/lib/validations/sale";
-import { businessDate, formatBusinessDateTime, formatBusinessTime } from "@/lib/business-date";
+import {
+  addBusinessDays,
+  businessDate,
+  businessDayStart,
+  formatBusinessDateTime,
+  formatBusinessTime,
+} from "@/lib/business-date";
 import { refundUnitAmounts } from "@/lib/refund-amount";
 import { checkRateLimit, recordFailedAttempt, resetRateLimit } from "@/lib/auth/rate-limit";
 import { encodeSupervisorPin } from "@/lib/auth/supervisor-pin";
@@ -99,6 +105,8 @@ export type SaleHistoryItem = {
   cashRegisterName?: string | null;
   shiftNumber?: string | null;
   isAdministrativeSale: boolean;
+  customerTaxId: string | null;
+  canCancelInShift: boolean;
   createdAt: string;
   rawCreatedAt: string;
   itemsCount: number;
@@ -201,27 +209,39 @@ export async function getPosContextAction(): Promise<{
   currentOperator: Pick<SessionUser, "id" | "name" | "role"> | null;
   userShift: PosShiftItem | null;
   shiftPendingReview: boolean;
+  shiftRecountRequired: boolean;
+  shiftRecountReason: string | null;
   error?: string;
 }> {
   try {
     const { id, name, role } = await requireRole(POS_ROLES);
     const shift = await db.query.cashShifts.findFirst({
       where: and(eq(schema.cashShifts.status, "open"), eq(schema.cashShifts.userId, id)),
-      columns: { id: true, shiftNumber: true, cashRegisterId: true, actualCash: true },
+      columns: {
+        id: true,
+        shiftNumber: true,
+        cashRegisterId: true,
+        actualCash: true,
+        recountRequestedAt: true,
+        recountReason: true,
+      },
       with: { cashRegister: { columns: { name: true } } },
       orderBy: (s, { desc }) => [desc(s.id)],
     });
 
     const shiftPendingReview = !!shift && shift.actualCash !== null;
+    const shiftRecountRequired = !!shift && shift.actualCash === null && shift.recountRequestedAt !== null;
     return {
       success: true,
       currentOperator: { id, name, role },
-      userShift: shift && !shiftPendingReview ? {
+      userShift: shift && !shiftPendingReview && !shiftRecountRequired ? {
         id: shift.id,
         shiftNumber: shift.shiftNumber,
         cashRegisterName: shift.cashRegister?.name || `Caja #${shift.cashRegisterId}`,
       } : null,
       shiftPendingReview,
+      shiftRecountRequired,
+      shiftRecountReason: shiftRecountRequired ? shift.recountReason : null,
     };
   } catch (error) {
     return {
@@ -229,6 +249,8 @@ export async function getPosContextAction(): Promise<{
       currentOperator: null,
       userShift: null,
       shiftPendingReview: false,
+      shiftRecountRequired: false,
+      shiftRecountReason: null,
       error: adminActionError(error, "No se pudo verificar tu turno de caja."),
     };
   }
@@ -325,8 +347,8 @@ export async function createSaleAction(input: SaleFormInput): Promise<{
         },
       });
 
-      if (!shift || shift.status !== "open" || shift.actualCash !== null) {
-        return await rejectSale("El turno de caja no está disponible para cobrar. Puede estar pendiente de aprobación o cerrado.");
+      if (!shift || shift.status !== "open" || shift.actualCash !== null || shift.recountRequestedAt !== null) {
+        return await rejectSale("El turno de caja no está disponible para cobrar. Puede estar en reconteo, pendiente de aprobación o cerrado.");
       }
 
       if (shift.userId !== operatingUser.id) {
@@ -448,26 +470,45 @@ export async function getSalesHistoryAction(): Promise<{
 }> {
   try {
     const user = await requireRole(POS_ROLES);
-    const list = await db.query.sales.findMany({
-      where: user.role === "cashier" ? eq(schema.sales.userId, user.id) : undefined,
-      with: {
-        user: true,
-        customer: true,
-        cashShift: {
-          with: {
-            cashRegister: true,
-          },
-        },
-        items: {
-          with: {
-            product: true,
-          },
-        },
-      },
-      orderBy: (s, { desc }) => [desc(s.id)],
-    });
-
     const todayStr = businessDate();
+    const todayStart = businessDayStart(todayStr);
+    const tomorrowStart = addBusinessDays(todayStart, 1);
+
+    const [list, todayRefunds] = await Promise.all([
+      db.query.sales.findMany({
+        where: user.role === "cashier" ? eq(schema.sales.userId, user.id) : undefined,
+        with: {
+          user: true,
+          customer: true,
+          cashShift: {
+            with: {
+              cashRegister: true,
+            },
+          },
+          items: {
+            with: {
+              product: true,
+            },
+          },
+          refunds: {
+            columns: { id: true },
+          },
+        },
+        orderBy: (s, { desc }) => [desc(s.id)],
+      }),
+      db.query.saleRefunds.findMany({
+        where: and(
+          gte(schema.saleRefunds.createdAt, todayStart),
+          lt(schema.saleRefunds.createdAt, tomorrowStart)
+        ),
+        columns: { amount: true },
+        with: {
+          sale: {
+            columns: { userId: true },
+          },
+        },
+      }),
+    ]);
 
     let totalRevenue = 0;
     let todayRevenue = 0;
@@ -480,8 +521,10 @@ export async function getSalesHistoryAction(): Promise<{
 
     const formatted: SaleHistoryItem[] = list.map((s) => {
       const totalNum = parseFloat(s.totalAmount) || 0;
-      const isToday = businessDate(s.createdAt) === todayStr;
+      const isToday = s.createdAt >= todayStart && s.createdAt < tomorrowStart;
       const isAdministrative = !s.cashShiftId;
+      const canCancelInShift =
+        !s.cashShiftId || (s.cashShift?.status === "open" && s.cashShift?.actualCash === null && s.cashShift?.recountRequestedAt === null);
 
       const formattedDate = formatBusinessDateTime(s.createdAt);
 
@@ -516,7 +559,8 @@ export async function getSalesHistoryAction(): Promise<{
           ticketsWithNetAmount += 1;
         }
         if (isToday) {
-          todayRevenue += persistedNet;
+          const legacyRef = s.refunds.length === 0 ? persistedRefunded : 0;
+          todayRevenue += Math.max(0, totalNum - legacyRef);
         }
 
         if (isAdministrative) {
@@ -532,6 +576,7 @@ export async function getSalesHistoryAction(): Promise<{
         id: s.id,
         saleNumber: s.saleNumber,
         customerName: s.customerName || s.customer?.name || "Público General",
+        customerTaxId: s.customer?.taxId || null,
         paymentMethod: s.paymentMethod,
         channel: s.channel,
         status: s.status,
@@ -551,6 +596,7 @@ export async function getSalesHistoryAction(): Promise<{
         cashRegisterName: s.cashShift?.cashRegister?.name || null,
         shiftNumber: s.cashShift?.shiftNumber || null,
         isAdministrativeSale: isAdministrative,
+        canCancelInShift,
         createdAt: formattedDate,
         rawCreatedAt: s.createdAt.toISOString(),
         itemsCount: totalItemsCount,
@@ -558,20 +604,30 @@ export async function getSalesHistoryAction(): Promise<{
       };
     });
 
-    const averageTicket = ticketsWithNetAmount > 0 ? totalRevenue / ticketsWithNetAmount : 0;
+    for (const r of todayRefunds) {
+      if (user.role === "cashier" && r.sale?.userId !== user.id) continue;
+      todayRevenue -= parseFloat(r.amount) || 0;
+    }
+
+    const totalRevenueRounded = Number(totalRevenue.toFixed(2));
+    const todayRevenueRounded = Number(todayRevenue.toFixed(2));
+    const averageTicket =
+      ticketsWithNetAmount > 0
+        ? Number((totalRevenueRounded / ticketsWithNetAmount).toFixed(2))
+        : 0;
 
     return {
       success: true,
       data: formatted,
       kpis: {
-        totalRevenue,
-        todayRevenue,
+        totalRevenue: totalRevenueRounded,
+        todayRevenue: todayRevenueRounded,
         totalSalesCount: completedCount,
         averageTicket,
         administrativeSalesCount,
-        administrativeSalesRevenue,
+        administrativeSalesRevenue: Number(administrativeSalesRevenue.toFixed(2)),
         posShiftSalesCount,
-        posShiftSalesRevenue,
+        posShiftSalesRevenue: Number(posShiftSalesRevenue.toFixed(2)),
       },
     };
   } catch (error) {
@@ -758,6 +814,7 @@ export async function refundSaleItemsAction(
               eq(schema.cashShifts.id, input.cashShiftId),
               eq(schema.cashShifts.status, "open"),
               isNull(schema.cashShifts.actualCash),
+              isNull(schema.cashShifts.recountRequestedAt),
               eq(schema.cashShifts.userId, operator.id)
             ),
           })
@@ -772,7 +829,8 @@ export async function refundSaleItemsAction(
         where: and(
           eq(schema.cashShifts.id, sale.cashShiftId),
           eq(schema.cashShifts.status, "open"),
-          isNull(schema.cashShifts.actualCash)
+          isNull(schema.cashShifts.actualCash),
+          isNull(schema.cashShifts.recountRequestedAt)
         ),
         columns: { id: true },
       });

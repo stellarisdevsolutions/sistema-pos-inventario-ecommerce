@@ -10,7 +10,9 @@ import {
   approveCashCountQuery,
   archiveCashRegisterQuery,
   deleteUnusedCashRegisterQuery,
+  directCloseShiftQuery,
   openShiftQuery,
+  requestCashRecountQuery,
   submitCashCountQuery,
 } from "@/db/operations/cash-shifts";
 import {
@@ -20,16 +22,18 @@ import {
   formatBusinessShortDateTime,
   formatBusinessTime,
 } from "@/lib/business-date";
-import { eq, and, count, or, ne, isNotNull, gte, lt, inArray, sql } from "drizzle-orm";
+import { eq, and, count, ne, isNotNull, gte, lt, inArray, sql } from "drizzle-orm";
 import { requireRole } from "@/lib/auth/session";
 import {
   openShiftSchema,
   closeShiftSchema,
+  requestCashRecountSchema,
   submitCashCountSchema,
   createCashRegisterSchema,
   updateCashRegisterSchema,
   toggleCashRegisterArchiveSchema,
   deleteCashRegisterSchema,
+  type RequestCashRecountInput,
   type SubmitCashCountInput,
   type OpenShiftInput,
   type CloseShiftInput,
@@ -70,8 +74,24 @@ export type ActiveShiftDetail = {
   userId: number;
   cashierName: string;
   pendingReview: boolean;
-  totals: { initialCash: number; cashSales: number; electronicSales: number } | null;
-  review: { expectedCash: number; actualCash: number; difference: number } | null;
+  recountRequired: boolean;
+  recountReason: string | null;
+  totals: {
+    initialCash: number;
+    cashSales: number;
+    cardSales: number;
+    transferSales: number;
+    otherSales: number;
+    electronicSales: number;
+    expectedCash: number;
+  } | null;
+  review: {
+    expectedCash: number;
+    actualCash: number;
+    difference: number;
+    expectedTransfer: number;
+    expectedCard: number;
+  } | null;
   openedAt: string;
   rawOpenedAt: string;
   notes: string | null;
@@ -103,7 +123,11 @@ export type ClosedShiftItem = {
   expectedCash: number;
   actualCash: number;
   difference: number;
-  status: "balanced" | "surplus" | "shortage";
+  actualTransfer: number | null;
+  transferDifference: number | null;
+  actualCard: number | null;
+  cardDifference: number | null;
+  status: "balanced" | "surplus" | "shortage" | "mixed";
   notes: string | null;
 };
 
@@ -202,7 +226,7 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
     const hiddenOpenShiftIds = new Set<number>();
     for (const s of activeShiftsList) {
       activeShiftsMap.set(s.cashRegisterId, s);
-      if (!canReview || (s.userId === operator.id && s.actualCash === null)) {
+      if (!canReview) {
         hiddenOpenShiftIds.add(s.id);
       }
     }
@@ -230,7 +254,9 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
       const transferNum = parseFloat(active.transferSales) || 0;
       const otherNum = parseFloat(active.otherSales) || 0;
       const pendingReview = active.actualCash !== null;
-      const showTotals = canReview && (active.userId !== operator.id || pendingReview);
+      const recountRequired = !pendingReview && active.recountRequestedAt !== null;
+      const recountReason = recountRequired ? active.recountReason : null;
+      const showTotals = canReview;
       const expectedCash = Number(active.expectedCash);
       const actualCash = Number(active.actualCash);
 
@@ -253,14 +279,26 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
           userId: active.userId,
           cashierName: active.user?.name || "Cajero",
           pendingReview,
+          recountRequired,
+          recountReason,
           totals: showTotals
-            ? { initialCash: initialNum, cashSales: cashNum, electronicSales: cardNum + transferNum + otherNum }
+            ? {
+                initialCash: initialNum,
+                cashSales: cashNum,
+                cardSales: cardNum,
+                transferSales: transferNum,
+                otherSales: otherNum,
+                electronicSales: cardNum + transferNum + otherNum,
+                expectedCash,
+              }
             : null,
           review: canReview && pendingReview
             ? {
                 expectedCash,
                 actualCash,
                 difference: Number((actualCash - expectedCash).toFixed(2)),
+                expectedTransfer: transferNum,
+                expectedCard: cardNum,
               }
             : null,
           openedAt: formatBusinessShortDateTime(active.openedAt),
@@ -309,7 +347,9 @@ export async function getCashRegistersAndShiftsAction(): Promise<{
         .where(
           and(
             eq(schema.cashShifts.status, "closed"),
-            sql`abs(coalesce(${schema.cashShifts.difference}, 0)) < 0.01`
+            sql`abs(coalesce(${schema.cashShifts.difference}, 0)) < 0.01`,
+            sql`abs(coalesce(${schema.cashShifts.transferDifference}, 0)) < 0.01`,
+            sql`abs(coalesce(${schema.cashShifts.cardDifference}, 0)) < 0.01`
           )
         );
       balancedShiftsCount = balancedCountResult[0]?.count || 0;
@@ -377,12 +417,29 @@ export async function getClosedShiftsHistoryAction(): Promise<{
 
     const formatted: ClosedShiftItem[] = list.map((s) => {
       const diffNum = parseFloat(s.difference || "0") || 0;
-      let status: "balanced" | "surplus" | "shortage" = "balanced";
-      if (Math.abs(diffNum) < 0.01) {
-        status = "balanced";
-      } else if (diffNum > 0) {
+      const actualTransfer =
+        s.actualTransfer !== null && s.actualTransfer !== undefined ? parseFloat(s.actualTransfer) : null;
+      const transferDiff =
+        s.transferDifference !== null && s.transferDifference !== undefined
+          ? parseFloat(s.transferDifference)
+          : null;
+      const actualCard =
+        s.actualCard !== null && s.actualCard !== undefined ? parseFloat(s.actualCard) : null;
+      const cardDiff =
+        s.cardDifference !== null && s.cardDifference !== undefined
+          ? parseFloat(s.cardDifference)
+          : null;
+
+      const diffs = [diffNum, transferDiff ?? 0, cardDiff ?? 0];
+      const hasSurplus = diffs.some((d) => d >= 0.01);
+      const hasShortage = diffs.some((d) => d <= -0.01);
+
+      let status: ClosedShiftItem["status"] = "balanced";
+      if (hasSurplus && hasShortage) {
+        status = "mixed";
+      } else if (hasSurplus) {
         status = "surplus";
-      } else {
+      } else if (hasShortage) {
         status = "shortage";
       }
 
@@ -403,6 +460,10 @@ export async function getClosedShiftsHistoryAction(): Promise<{
         expectedCash: parseFloat(s.expectedCash) || 0,
         actualCash: parseFloat(s.actualCash || "0") || 0,
         difference: diffNum,
+        actualTransfer,
+        transferDifference: transferDiff,
+        actualCard,
+        cardDifference: cardDiff,
         status,
         notes: s.notes,
       };
@@ -516,13 +577,140 @@ export async function submitCashCountAction(input: SubmitCashCountInput) {
   }
 }
 
+export async function requestCashRecountAction(input: RequestCashRecountInput) {
+  try {
+    const supervisor = await requireRole(["admin", "manager"]);
+    const { shiftId, reason } = requestCashRecountSchema.parse(input);
+    const result = await db.execute(
+      requestCashRecountQuery(shiftId, supervisor.id, reason, supervisor.name)
+    );
+    if (!result.rows.length) {
+      const existing = await db.query.cashShifts.findFirst({
+        where: eq(schema.cashShifts.id, shiftId),
+        columns: { status: true, actualCash: true },
+      });
+      if (!existing || existing.status !== "open") {
+        return { success: false, error: "Este turno ya fue cerrado." };
+      }
+      return {
+        success: false,
+        error: "El turno todavía no tiene un conteo pendiente de revisión.",
+      };
+    }
+
+    safeRevalidatePath("/admin/cajas");
+    safeRevalidatePath("/admin/ventas");
+    safeRevalidatePath("/admin");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: adminActionError(error, "Error al solicitar el reconteo.") };
+  }
+}
+
 export async function closeShiftAction(input: CloseShiftInput) {
   try {
     const supervisor = await requireRole(["admin", "manager"]);
-    const { shiftId, notes } = closeShiftSchema.parse(input);
-    const result = await db.execute(approveCashCountQuery(shiftId, supervisor.id, notes || null));
-    if (!result.rows.length) {
-      return { success: false, error: "El turno ya no está pendiente de aprobación o falta explicar la diferencia." };
+    const parsed = closeShiftSchema.parse(input);
+    const {
+      shiftId,
+      mode,
+      actualCash,
+      expectedCash,
+      actualTransfer,
+      expectedTransfer,
+      actualCard,
+      expectedCard,
+      notes,
+    } = parsed;
+    const normalizedNotes = notes?.trim() || null;
+    const effectiveMode = mode ?? (actualCash !== undefined ? "direct" : "approve");
+
+    if (effectiveMode === "direct") {
+      if (actualCash === undefined) {
+        return { success: false, error: "Ingresa el efectivo contado para cerrar la caja." };
+      }
+      const result = await db.execute(
+        directCloseShiftQuery(
+          shiftId,
+          supervisor.id,
+          actualCash.toFixed(2),
+          normalizedNotes,
+          expectedCash !== undefined ? expectedCash.toFixed(2) : null,
+          {
+            actualTransfer: actualTransfer !== undefined ? actualTransfer.toFixed(2) : null,
+            expectedTransfer: expectedTransfer !== undefined ? expectedTransfer.toFixed(2) : null,
+            actualCard: actualCard !== undefined ? actualCard.toFixed(2) : null,
+            expectedCard: expectedCard !== undefined ? expectedCard.toFixed(2) : null,
+          }
+        )
+      );
+      if (!result.rows.length) {
+        const existing = await db.query.cashShifts.findFirst({
+          where: eq(schema.cashShifts.id, shiftId),
+          columns: {
+            status: true,
+            actualCash: true,
+            expectedCash: true,
+            transferSales: true,
+            cardSales: true,
+          },
+        });
+        if (!existing || existing.status !== "open") {
+          return { success: false, error: "Este turno ya fue cerrado." };
+        }
+        if (existing.actualCash !== null) {
+          return {
+            success: false,
+            error:
+              "Este turno ya tiene un conteo físico enviado. Actualiza la pantalla para revisar y aprobar el arqueo.",
+          };
+        }
+        if (
+          (expectedCash !== undefined && Math.abs(Number(existing.expectedCash) - expectedCash) >= 0.005) ||
+          (expectedTransfer !== undefined && Math.abs(Number(existing.transferSales) - expectedTransfer) >= 0.005) ||
+          (expectedCard !== undefined && Math.abs(Number(existing.cardSales) - expectedCard) >= 0.005)
+        ) {
+          return {
+            success: false,
+            error:
+              "Los totales esperados de la caja cambiaron por un movimiento reciente. Actualiza la pantalla y verifica el arqueo nuevamente.",
+          };
+        }
+        return {
+          success: false,
+          error:
+            "Existe una diferencia en efectivo o QR. Ingresa una observación obligatoria para cerrar la caja.",
+        };
+      }
+    } else {
+      const result = await db.execute(
+        approveCashCountQuery(shiftId, supervisor.id, normalizedNotes, {
+          adjustedActualCash: actualCash !== undefined ? actualCash.toFixed(2) : null,
+          actualTransfer: actualTransfer !== undefined ? actualTransfer.toFixed(2) : null,
+          actualCard: actualCard !== undefined ? actualCard.toFixed(2) : null,
+          supervisorName: supervisor.name,
+        })
+      );
+      if (!result.rows.length) {
+        const existing = await db.query.cashShifts.findFirst({
+          where: eq(schema.cashShifts.id, shiftId),
+          columns: { status: true, actualCash: true },
+        });
+        if (!existing || existing.status !== "open") {
+          return { success: false, error: "Este turno ya fue cerrado." };
+        }
+        if (existing.actualCash === null) {
+          return {
+            success: false,
+            error: "El turno ya no tiene un conteo pendiente. Actualiza la pantalla para continuar.",
+          };
+        }
+        return {
+          success: false,
+          error:
+            "Falta la observación de cierre obligatoria (por diferencia en arqueo o por edición del conteo).",
+        };
+      }
     }
 
     safeRevalidatePath("/admin/cajas");
@@ -888,11 +1076,7 @@ export async function getShiftSalesAction(shiftId: number): Promise<{
         eq(schema.cashShifts.id, shiftId),
         user.role === "cashier"
           ? and(eq(schema.cashShifts.userId, user.id), eq(schema.cashShifts.status, "closed"))
-          : or(
-              ne(schema.cashShifts.userId, user.id),
-              eq(schema.cashShifts.status, "closed"),
-              isNotNull(schema.cashShifts.actualCash)
-            )
+          : undefined
       ),
       columns: {
         id: true,

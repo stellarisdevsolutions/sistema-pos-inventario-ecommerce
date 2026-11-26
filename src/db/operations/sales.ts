@@ -28,21 +28,58 @@ export function createSaleQuery(input: {
         AS item(product_id integer, quantity integer, unit_price numeric)
     ), locked_shift AS MATERIALIZED (
       SELECT id FROM cash_shifts
-      WHERE id = ${shiftId} AND user_id = ${operatorId} AND status = 'open' AND actual_cash IS NULL
+      WHERE id = ${shiftId} AND user_id = ${operatorId} AND status = 'open' AND actual_cash IS NULL AND recount_requested_at IS NULL
       FOR UPDATE
     ), locked_products AS MATERIALIZED (
       SELECT p.id, p.name, p.variant, p.sku, p.stock, p.cost_price
       FROM products p JOIN lines ON lines.product_id = p.id
-      WHERE p.is_active AND p.stock >= lines.quantity AND p.price = lines.unit_price
+      WHERE p.is_active AND NOT p.is_archived AND p.stock >= lines.quantity AND p.price = lines.unit_price
         AND (${shiftId}::integer IS NULL OR EXISTS (SELECT 1 FROM locked_shift))
       ORDER BY p.id FOR UPDATE OF p
     ), numbered AS (
       SELECT nextval(pg_get_serial_sequence('sales', 'id'))::integer AS id
       WHERE (SELECT count(*) FROM locked_products) = (SELECT count(*) FROM lines)
+    ), customer_params AS (
+      SELECT
+        ${sale.customerId ?? null}::integer AS explicit_id,
+        nullif(btrim(${sale.customerTaxId ?? null}::text), '') AS tax_id
+    ), existing_customer AS (
+      SELECT c.id
+      FROM customers c
+      CROSS JOIN customer_params cp
+      WHERE cp.explicit_id IS NULL
+        AND cp.tax_id IS NOT NULL
+        AND btrim(c.tax_id) = cp.tax_id
+        AND EXISTS (SELECT 1 FROM numbered)
+      ORDER BY c.id DESC
+      LIMIT 1
+    ), created_customer AS (
+      INSERT INTO customers (name, tax_id)
+      SELECT ${sale.customerName}, cp.tax_id
+      FROM customer_params cp
+      WHERE cp.explicit_id IS NULL
+        AND cp.tax_id IS NOT NULL
+        AND EXISTS (SELECT 1 FROM numbered)
+        AND NOT EXISTS (SELECT 1 FROM existing_customer)
+        AND (
+          ${sale.checkoutRequestId ?? null}::uuid IS NULL
+          OR NOT EXISTS (
+            SELECT 1 FROM sales
+            WHERE user_id = ${operatorId}
+              AND checkout_request_id = ${sale.checkoutRequestId ?? null}::uuid
+          )
+        )
+      RETURNING id
+    ), resolved_customer AS (
+      SELECT COALESCE(
+        (SELECT explicit_id FROM customer_params),
+        (SELECT id FROM existing_customer),
+        (SELECT id FROM created_customer)
+      ) AS id
     ), sale AS (
       INSERT INTO sales (id, sale_number, customer_id, customer_name, cash_shift_id, user_id, subtotal,
         discount_amount, total_amount, cash_given, change_given, payment_method, status, channel, notes, checkout_request_id, checkout_fingerprint)
-      SELECT id, ${prefix} || lpad(id::text, greatest(4, length(id::text)), '0'), ${sale.customerId ?? null},
+      SELECT id, ${prefix} || lpad(id::text, greatest(4, length(id::text)), '0'), (SELECT id FROM resolved_customer),
         ${sale.customerName}, ${shiftId}, ${operatorId}, ${subtotal.toFixed(2)}, ${discount.toFixed(2)},
         ${total.toFixed(2)}, ${cashGiven?.toFixed(2) ?? null}, ${changeGiven?.toFixed(2) ?? null},
         ${sale.paymentMethod}::payment_method, 'completed', ${sale.channel}::sale_channel, ${notes},
@@ -89,7 +126,7 @@ export function cancelSaleQuery(saleId: number, operatorId: number, reason: stri
       SELECT * FROM sales WHERE id = ${saleId} AND status = 'completed' AND refunded_amount = 0 FOR UPDATE
     ), locked_shift AS MATERIALIZED (
       SELECT shift.id, shift.expected_cash FROM cash_shifts shift JOIN target ON shift.id = target.cash_shift_id
-      WHERE shift.status = 'open' AND shift.actual_cash IS NULL
+      WHERE shift.status = 'open' AND shift.actual_cash IS NULL AND shift.recount_requested_at IS NULL
       FOR UPDATE OF shift
     ), cancelled AS (
       UPDATE sales SET status = 'cancelled', notes = concat_ws(' | ', target.notes, ${reason}::text)
@@ -122,11 +159,11 @@ export function cancelSaleQuery(saleId: number, operatorId: number, reason: stri
       FROM cancelled CROSS JOIN stock_change
     ), balance AS (
       UPDATE cash_shifts shift SET
-        cash_sales = GREATEST(0, shift.cash_sales - CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END),
+        cash_sales = shift.cash_sales - CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END,
         expected_cash = shift.expected_cash - CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END,
-        card_sales = GREATEST(0, shift.card_sales - CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END),
-        transfer_sales = GREATEST(0, shift.transfer_sales - CASE WHEN payment_method = 'transfer' THEN total_amount ELSE 0 END),
-        other_sales = GREATEST(0, shift.other_sales - CASE WHEN payment_method = 'other' THEN total_amount ELSE 0 END)
+        card_sales = shift.card_sales - CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END,
+        transfer_sales = shift.transfer_sales - CASE WHEN payment_method = 'transfer' THEN total_amount ELSE 0 END,
+        other_sales = shift.other_sales - CASE WHEN payment_method = 'other' THEN total_amount ELSE 0 END
       FROM cancelled WHERE shift.id = cancelled.cash_shift_id
     )
     SELECT id FROM cancelled
@@ -171,6 +208,7 @@ export function refundSaleQuery(input: {
       WHERE id = ${cashShiftId}
         AND status = 'open'
         AND actual_cash IS NULL
+        AND recount_requested_at IS NULL
         AND (${refundMethod}::text <> 'cash' OR (user_id = ${operatorId} AND expected_cash >= ${money}::numeric))
         AND EXISTS (SELECT 1 FROM target)
       FOR UPDATE
@@ -221,11 +259,11 @@ export function refundSaleQuery(input: {
       FROM refund CROSS JOIN stock_change
     ), balance AS (
       UPDATE cash_shifts SET
-        cash_sales = GREATEST(0, cash_sales - CASE WHEN ${refundMethod}::text = 'cash' THEN ${money}::numeric ELSE 0 END),
+        cash_sales = cash_sales - CASE WHEN ${refundMethod}::text = 'cash' THEN ${money}::numeric ELSE 0 END,
         expected_cash = expected_cash - CASE WHEN ${refundMethod}::text = 'cash' THEN ${money}::numeric ELSE 0 END,
-        card_sales = GREATEST(0, card_sales - CASE WHEN ${refundMethod}::text = 'card' THEN ${money}::numeric ELSE 0 END),
-        transfer_sales = GREATEST(0, transfer_sales - CASE WHEN ${refundMethod}::text = 'transfer' THEN ${money}::numeric ELSE 0 END),
-        other_sales = GREATEST(0, other_sales - CASE WHEN ${refundMethod}::text = 'other' THEN ${money}::numeric ELSE 0 END)
+        card_sales = card_sales - CASE WHEN ${refundMethod}::text = 'card' THEN ${money}::numeric ELSE 0 END,
+        transfer_sales = transfer_sales - CASE WHEN ${refundMethod}::text = 'transfer' THEN ${money}::numeric ELSE 0 END,
+        other_sales = other_sales - CASE WHEN ${refundMethod}::text = 'other' THEN ${money}::numeric ELSE 0 END
       FROM refund WHERE cash_shifts.id = ${cashShiftId}
     )
     SELECT refund.id, refund_record.id AS "refundId"

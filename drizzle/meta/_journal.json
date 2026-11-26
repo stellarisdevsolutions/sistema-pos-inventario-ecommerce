@@ -64,6 +64,13 @@
       "when": 1795572000000,
       "tag": "0008_product_archived",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795650000000,
+      "tag": "0009_cash_shift_recount_and_reconciliation",
+      "breakpoints": true
     }
   ]
 }

@@ -35,12 +35,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CURRENCY_SYMBOL, formatCurrency } from "@/lib/currency";
+import { SHOW_CARD_PAYMENT } from "@/lib/payment-methods";
 import { useAuth } from "@/context/auth-context";
 import {
   getCashRegistersAndShiftsAction,
   getClosedShiftsHistoryAction,
   openShiftAction,
   closeShiftAction,
+  requestCashRecountAction,
   submitCashCountAction,
   getShiftSalesAction,
   type CashRegisterItem,
@@ -52,8 +54,108 @@ import {
   type ShiftRefundDetail,
 } from "@/app/admin/actions/cash-shifts";
 
+function toCents(value: number): number {
+  return Math.round(value * 100);
+}
+
+function parseMoneyInput(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const num = Number(trimmed);
+  if (!Number.isFinite(num) || num < 0) return null;
+  if (Math.abs(num * 100 - Math.round(num * 100)) >= 1e-6) return null;
+  return Number(num.toFixed(2));
+}
+
+function formatDiffAmount(diff: number): string {
+  if (Math.abs(diff) < 0.005) return formatCurrency(0);
+  return `${diff > 0 ? "+" : "-"}${formatCurrency(Math.abs(diff))}`;
+}
+
+function ReconciliationAmountField({
+  id,
+  label,
+  expectedAmount,
+  expectedHint = false,
+  value,
+  onChange,
+  difference,
+  diffLabels,
+  disabled = false,
+}: {
+  id: string;
+  label: string;
+  expectedAmount: number;
+  expectedHint?: boolean;
+  value: string;
+  onChange: (nextValue: string) => void;
+  difference: number | null;
+  diffLabels: { shortage: string; surplus: string; balanced: string };
+  disabled?: boolean;
+}) {
+  return (
+    <>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-xs font-bold text-admin-secondary" htmlFor={id}>
+            {label}
+            {expectedHint && (
+              <span className="ml-1.5 font-normal text-slate-500">
+                (Esp. <span className="font-mono">{formatCurrency(expectedAmount)}</span>)
+              </span>
+            )}
+          </label>
+          <button
+            type="button"
+            disabled={expectedAmount < 0 || disabled}
+            onClick={() => onChange(expectedAmount.toFixed(2))}
+            className="text-[11px] font-semibold text-admin-brand-text hover:underline disabled:opacity-40 cursor-pointer"
+          >
+            Igualar esperado
+          </button>
+        </div>
+        <Input
+          id={id}
+          type="number"
+          step="0.01"
+          min="0"
+          disabled={disabled}
+          placeholder={expectedAmount.toFixed(2)}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+
+      {difference !== null && (
+        <div className="flex items-center justify-between rounded-xl border border-admin-card-border bg-admin-raised px-3.5 py-2.5 text-xs">
+          <span className="font-semibold text-admin-secondary">
+            {difference < 0
+              ? diffLabels.shortage
+              : difference > 0
+              ? diffLabels.surplus
+              : diffLabels.balanced}
+          </span>
+          <span
+            className={cn(
+              "font-mono font-bold",
+              difference < 0
+                ? "text-rose-600 dark:text-rose-400"
+                : difference > 0
+                ? "text-blue-600 dark:text-blue-400"
+                : "text-emerald-600 dark:text-emerald-400"
+            )}
+          >
+            {formatDiffAmount(difference)}
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function CajasPage() {
   const { user, isLoading: isAuthLoading } = useAuth();
+  const canReview = Boolean(user && user.role !== "cashier");
   const [activeTab, setActiveTab] = useState<"registers" | "history">("registers");
 
   // Estado de cajas y turnos activos
@@ -78,12 +180,85 @@ export default function CajasPage() {
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
 
-  // Modal: {shiftToClose?.review ? "Revisar y aprobar cierre" : "Registrar conteo de efectivo"}
+  // Modal: revisión de arqueo, cierre directo, reconteo o conteo ciego
   const [closeShiftModalOpen, setCloseShiftModalOpen] = useState(false);
   const [shiftToClose, setShiftToClose] = useState<ActiveShiftDetail | null>(null);
   const [actualCashCounted, setActualCashCounted] = useState<string>("");
+  const [actualTransferCounted, setActualTransferCounted] = useState<string>("");
+  const [actualCardCounted, setActualCardCounted] = useState<string>("");
+  const [isEditingCashierCount, setIsEditingCashierCount] = useState(false);
+  const [showRecountForm, setShowRecountForm] = useState(false);
+  const [recountReasonInput, setRecountReasonInput] = useState("");
+  const [isRequestingRecount, setIsRequestingRecount] = useState(false);
   const [supervisorNote, setSupervisorNote] = useState("");
   const [isClosingShift, setIsClosingShift] = useState(false);
+
+  const activeReview = shiftToClose?.review ?? null;
+  const activeTotals = shiftToClose?.totals ?? null;
+  const isReviewMode = Boolean(activeReview);
+  const isDirectCloseMode = Boolean(
+    canReview && shiftToClose && !shiftToClose.pendingReview && activeTotals
+  );
+  const isSupervisorAudit = isReviewMode || isDirectCloseMode;
+
+  const parsedCounted = parseMoneyInput(actualCashCounted);
+  const hasEditedCashierCount = Boolean(
+    isReviewMode &&
+      activeReview &&
+      isEditingCashierCount &&
+      parsedCounted !== null &&
+      toCents(parsedCounted) !== toCents(activeReview.actualCash)
+  );
+  const auditExpectedCash = activeReview
+    ? activeReview.expectedCash
+    : activeTotals
+    ? activeTotals.expectedCash
+    : 0;
+  const effectiveActualCash =
+    isReviewMode && activeReview
+      ? isEditingCashierCount
+        ? parsedCounted
+        : activeReview.actualCash
+      : parsedCounted;
+  const cashDifferenceCents =
+    isSupervisorAudit && effectiveActualCash !== null
+      ? toCents(effectiveActualCash) - toCents(auditExpectedCash)
+      : null;
+  const cashDifference = cashDifferenceCents !== null ? cashDifferenceCents / 100 : null;
+
+  const auditExpectedTransfer = activeReview
+    ? activeReview.expectedTransfer
+    : activeTotals
+    ? activeTotals.transferSales
+    : 0;
+  const parsedTransfer = parseMoneyInput(actualTransferCounted);
+  const transferDifferenceCents =
+    isSupervisorAudit && parsedTransfer !== null
+      ? toCents(parsedTransfer) - toCents(auditExpectedTransfer)
+      : null;
+  const transferDifference =
+    transferDifferenceCents !== null ? transferDifferenceCents / 100 : null;
+
+  const auditExpectedCard = activeReview
+    ? activeReview.expectedCard
+    : activeTotals
+    ? activeTotals.cardSales
+    : 0;
+  const showCardAudit =
+    isSupervisorAudit && (SHOW_CARD_PAYMENT || Math.abs(auditExpectedCard) >= 0.01);
+  const parsedCard = parseMoneyInput(actualCardCounted);
+  const cardDifferenceCents =
+    showCardAudit && parsedCard !== null
+      ? toCents(parsedCard) - toCents(auditExpectedCard)
+      : null;
+  const cardDifference = cardDifferenceCents !== null ? cardDifferenceCents / 100 : null;
+
+  const requiresClosingObservation = Boolean(
+    (cashDifferenceCents !== null && cashDifferenceCents !== 0) ||
+      (transferDifferenceCents !== null && transferDifferenceCents !== 0) ||
+      (cardDifferenceCents !== null && cardDifferenceCents !== 0) ||
+      hasEditedCashierCount
+  );
 
   // Modal: Apertura de Turno
   const [openShiftModalOpen, setOpenShiftModalOpen] = useState(false);
@@ -258,38 +433,151 @@ export default function CajasPage() {
     }
   };
 
+  const openCloseShiftModal = (active: ActiveShiftDetail) => {
+    const expectedQr = active.review
+      ? active.review.expectedTransfer
+      : active.totals?.transferSales ?? 0;
+    const expectedCard = active.review
+      ? active.review.expectedCard
+      : active.totals?.cardSales ?? 0;
+    setShiftToClose(active);
+    setActualCashCounted("");
+    setActualTransferCounted(expectedQr === 0 ? "0.00" : "");
+    setActualCardCounted(expectedCard === 0 ? "0.00" : "");
+    setIsEditingCashierCount(false);
+    setShowRecountForm(false);
+    setRecountReasonInput("");
+    setSupervisorNote("");
+    setCloseShiftModalOpen(true);
+  };
+
+  // Manejar solicitud de reconteo al cajero
+  const handleRequestRecount = async () => {
+    if (!shiftToClose) return;
+    const reason = recountReasonInput.trim();
+    if (reason.length < 3) {
+      toast.error("Indica el motivo del reconteo (mínimo 3 caracteres).");
+      return;
+    }
+
+    setIsRequestingRecount(true);
+    try {
+      const res = await requestCashRecountAction({ shiftId: shiftToClose.id, reason });
+      if (res.success) {
+        toast.success("Reconteo solicitado. El cajero deberá volver a contar el efectivo a ciegas.");
+        setCloseShiftModalOpen(false);
+        setShiftToClose(null);
+        setShowRecountForm(false);
+        setRecountReasonInput("");
+        loadRegistersData();
+      } else {
+        toast.error(res.error || "No se pudo solicitar el reconteo.");
+        loadRegistersData();
+      }
+    } catch {
+      toast.error("Error al procesar la solicitud de reconteo.");
+    } finally {
+      setIsRequestingRecount(false);
+    }
+  };
+
   // Manejar arqueo y cierre de turno
   const handleCloseShift = async () => {
     if (!shiftToClose) return;
 
-    const review = shiftToClose.review;
-    const countedNum = Number(actualCashCounted);
-    if (review) {
-      if (review.difference !== 0 && !supervisorNote.trim()) {
-        toast.error("Explica la diferencia para aprobar el cierre.");
+    if (activeReview) {
+      if (isEditingCashierCount && parsedCounted === null) {
+        toast.error("Ingresa un efectivo final válido (máximo 2 decimales).");
         return;
       }
-    } else if (!actualCashCounted.trim() || !Number.isFinite(countedNum) || countedNum < 0) {
-      toast.error("Ingresa un efectivo contado válido mayor o igual a cero.");
+      if (parsedTransfer === null) {
+        toast.error("Ingresa el monto de QR verificado en banco (máximo 2 decimales).");
+        return;
+      }
+      if (showCardAudit && parsedCard === null) {
+        toast.error("Ingresa el monto verificado de tarjeta (máximo 2 decimales).");
+        return;
+      }
+      if (requiresClosingObservation && !supervisorNote.trim()) {
+        toast.error(
+          hasEditedCashierCount
+            ? "Ingresa una observación obligatoria explicando la edición del conteo o las diferencias."
+            : "Explica la diferencia detectada para aprobar el cierre."
+        );
+        return;
+      }
+    } else if (isDirectCloseMode && activeTotals) {
+      if (parsedCounted === null) {
+        toast.error("Ingresa un efectivo contado válido (máximo 2 decimales).");
+        return;
+      }
+      if (parsedTransfer === null) {
+        toast.error("Ingresa el monto de QR verificado en banco (máximo 2 decimales).");
+        return;
+      }
+      if (showCardAudit && parsedCard === null) {
+        toast.error("Ingresa el monto verificado de tarjeta (máximo 2 decimales).");
+        return;
+      }
+      if (requiresClosingObservation && !supervisorNote.trim()) {
+        toast.error("Ingresa una observación de cierre explicando las diferencias detectadas.");
+        return;
+      }
+    } else if (parsedCounted === null) {
+      toast.error("Ingresa un efectivo contado válido (máximo 2 decimales).");
       return;
     }
 
     setIsClosingShift(true);
     try {
-      const res = review
-        ? await closeShiftAction({ shiftId: shiftToClose.id, notes: supervisorNote.trim() })
-        : await submitCashCountAction({ shiftId: shiftToClose.id, actualCash: countedNum });
+      const res = activeReview
+        ? await closeShiftAction({
+            shiftId: shiftToClose.id,
+            mode: "approve",
+            actualCash: isEditingCashierCount && parsedCounted !== null ? parsedCounted : undefined,
+            actualTransfer: parsedTransfer ?? undefined,
+            actualCard: showCardAudit && parsedCard !== null ? parsedCard : undefined,
+            notes: supervisorNote.trim(),
+          })
+        : isDirectCloseMode && activeTotals
+        ? await closeShiftAction({
+            shiftId: shiftToClose.id,
+            mode: "direct",
+            actualCash: parsedCounted!,
+            expectedCash: activeTotals.expectedCash,
+            actualTransfer: parsedTransfer!,
+            expectedTransfer: activeTotals.transferSales,
+            actualCard: showCardAudit && parsedCard !== null ? parsedCard : undefined,
+            expectedCard: showCardAudit ? activeTotals.cardSales : undefined,
+            notes: supervisorNote.trim(),
+          })
+        : await submitCashCountAction({
+            shiftId: shiftToClose.id,
+            actualCash: parsedCounted!,
+          });
 
       if (res.success) {
-        toast.success(review ? "Cierre aprobado" : "Conteo enviado para revisión");
+        toast.success(
+          activeReview
+            ? "Cierre auditado y aprobado"
+            : isDirectCloseMode
+            ? "Caja arqueada y cerrada con éxito"
+            : "Conteo enviado para revisión"
+        );
         setCloseShiftModalOpen(false);
         setShiftToClose(null);
         setActualCashCounted("");
+        setActualTransferCounted("");
+        setActualCardCounted("");
+        setIsEditingCashierCount(false);
+        setShowRecountForm(false);
+        setRecountReasonInput("");
         setSupervisorNote("");
         loadRegistersData();
         if (activeTab === "history") loadHistoryData();
       } else {
         toast.error(res.error || "No se pudo cerrar el turno.");
+        if (isSupervisorAudit) loadRegistersData();
       }
     } catch {
       toast.error("Error al procesar el cierre de caja.");
@@ -323,7 +611,7 @@ export default function CajasPage() {
   );
 
   const ownShift = user ? registers.find((register) => register.activeShift?.userId === user.id)?.activeShift : null;
-  const hasOwnOpenShift = Boolean(ownShift && !ownShift.pendingReview);
+  const hasOwnOpenShift = Boolean(ownShift && !ownShift.pendingReview && !ownShift.recountRequired);
 
   if (!hasLoadedRegisters || isAuthLoading) {
     return <CajasLoading />;
@@ -368,7 +656,7 @@ export default function CajasPage() {
       {/* =========================================================================
           2. KPIS FINANCIEROS DE CONTROL DE CAJAS
           ========================================================================= */}
-      {user && user.role !== "cashier" && !hasOwnOpenShift && (
+      {canReview && (
         <section className="admin-metrics" aria-label="Indicadores de cajas">
           <MetricCard
             label="Fondo inicial en gavetas"
@@ -384,9 +672,9 @@ export default function CajasPage() {
             tone={kpis.todayCashSales < 0 ? "warning" : "success"}
           />
           <MetricCard
-            label="Cobros electrónicos hoy"
+            label={SHOW_CARD_PAYMENT ? "Cobros electrónicos hoy" : "Ventas por QR hoy"}
             value={formatCurrency(kpis.todayCardTransferSales)}
-            detail="Tarjeta, QR y otros en turnos"
+            detail={SHOW_CARD_PAYMENT ? "Tarjeta, QR y otros en turnos" : "Neto por QR en turnos de hoy"}
             icon={CreditCard}
           />
           <MetricCard
@@ -481,16 +769,22 @@ export default function CajasPage() {
                         <div
                           className={cn(
                             "inline-flex items-center gap-1.5 text-xs font-semibold",
-                            active.pendingReview ? "text-amber-400" : "text-emerald-400"
+                            active.pendingReview || active.recountRequired ? "text-amber-400" : "text-emerald-400"
                           )}
                         >
                           <span
                             className={cn(
                               "h-2 w-2 rounded-full",
-                              active.pendingReview ? "bg-amber-400" : "bg-emerald-400 animate-pulse"
+                              active.pendingReview || active.recountRequired ? "bg-amber-400" : "bg-emerald-400 animate-pulse"
                             )}
                           />
-                          <span>{active.pendingReview ? "Pendiente de aprobación" : "Turno abierto"}</span>
+                          <span>
+                            {active.pendingReview
+                              ? "Pendiente de aprobación"
+                              : active.recountRequired
+                              ? "Reconteo solicitado"
+                              : "Turno abierto"}
+                          </span>
                         </div>
                       </div>
 
@@ -512,18 +806,44 @@ export default function CajasPage() {
                         </span>
                       </div>
 
-                      {active.totals && (
-                        <dl className="grid grid-cols-3 gap-3 text-xs">
-                          <div><dt>Fondo inicial</dt><dd>{formatCurrency(active.totals.initialCash)}</dd></div>
-                          <div><dt>Ventas en efectivo</dt><dd>{formatCurrency(active.totals.cashSales)}</dd></div>
-                          <div><dt>Tarjeta y QR</dt><dd>{formatCurrency(active.totals.electronicSales)}</dd></div>
-                        </dl>
-                      )}
+                      {active.totals && (() => {
+                        const showElectronicGroup =
+                          SHOW_CARD_PAYMENT || active.totals.cardSales !== 0 || active.totals.otherSales !== 0;
+                        return (
+                          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                            <div>
+                              <dt className="text-slate-400">Fondo inicial</dt>
+                              <dd className="font-mono font-semibold text-white">{formatCurrency(active.totals.initialCash)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-slate-400">Ventas en efectivo</dt>
+                              <dd className="font-mono font-semibold text-white">{formatCurrency(active.totals.cashSales)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-slate-400">{showElectronicGroup ? "Tarjeta y QR" : "Ventas por QR"}</dt>
+                              <dd className="font-mono font-semibold text-white">
+                                {formatCurrency(showElectronicGroup ? active.totals.electronicSales : active.totals.transferSales)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-emerald-300 font-medium">Esperado en gaveta</dt>
+                              <dd className="font-mono font-bold text-emerald-300">{formatCurrency(active.totals.expectedCash)}</dd>
+                            </div>
+                          </dl>
+                        );
+                      })()}
 
                       {active.pendingReview && !active.review && (
                         <p className="rounded-lg bg-amber-500/10 border border-amber-400/20 px-3 py-2 text-xs text-amber-200">
                           Conteo enviado. Esperando aprobación de un supervisor.
                         </p>
+                      )}
+
+                      {active.recountRequired && !active.pendingReview && (
+                        <div className="rounded-lg bg-amber-500/10 border border-amber-400/20 px-3 py-2 text-xs text-amber-200 space-y-0.5">
+                          <p className="font-semibold">Reconteo solicitado — POS bloqueado hasta confirmar el nuevo conteo</p>
+                          {active.recountReason && <p>Motivo: {active.recountReason}</p>}
+                        </div>
                       )}
                     </div>
 
@@ -534,15 +854,16 @@ export default function CajasPage() {
                           <Receipt className="h-4 w-4" /> Ver tickets
                         </Button>
                       )}
-                      {(active.review || (!active.pendingReview && active.userId === user?.id)) && (
-                        <Button type="button" onClick={() => {
-                          setShiftToClose(active);
-                          setActualCashCounted("");
-                          setSupervisorNote("");
-                          setCloseShiftModalOpen(true);
-                        }}>
+                      {(active.review || (canReview && !active.pendingReview) || (!active.pendingReview && active.userId === user?.id)) && (
+                        <Button type="button" onClick={() => openCloseShiftModal(active)}>
                           <Banknote className="h-4 w-4" />
-                          {active.review ? "Revisar arqueo" : "Registrar conteo"}
+                          {active.review
+                            ? "Revisar arqueo"
+                            : canReview && !active.pendingReview
+                            ? "Arquear y cerrar"
+                            : active.recountRequired
+                            ? "Registrar nuevo conteo"
+                            : "Registrar conteo"}
                         </Button>
                       )}
                     </div>
@@ -638,6 +959,7 @@ export default function CajasPage() {
                 <option value="balanced">Cierres Cuadrados</option>
                 <option value="surplus">Sobrantes (+)</option>
                 <option value="shortage">Faltantes (-)</option>
+                <option value="mixed">Descuadres cruzados</option>
               </select>
 
               <Button
@@ -662,9 +984,9 @@ export default function CajasPage() {
                     <th className="py-3 px-4">Cajero</th>
                     <th className="py-3 px-4">Supervisor</th>
                     <th className="py-3 px-4">Apertura / Cierre</th>
-                    <th className="py-3 px-4 text-right">Efectivo Esperado</th>
-                    <th className="py-3 px-4 text-right">Efectivo Contado</th>
-                    <th className="py-3 px-4 text-right">Diferencia</th>
+                    <th className="py-3 px-4 text-right">Efectivo (Esp. / Cont.)</th>
+                    <th className="py-3 px-4 text-right">Dif. Efectivo</th>
+                    <th className="py-3 px-4 text-right">Dif. QR</th>
                     <th className="py-3 px-4 text-center">Estado</th>
                     <th className="py-3 px-4 text-right">Acción</th>
                   </tr>
@@ -734,11 +1056,9 @@ export default function CajasPage() {
                           <div>{shift.openedAt}</div>
                           <div className="text-slate-400">{shift.closedAt}</div>
                         </td>
-                        <td className="py-3.5 px-4 text-right font-mono font-bold">
-                          {formatCurrency(shift.expectedCash)}
-                        </td>
-                        <td className="py-3.5 px-4 text-right font-mono font-bold">
-                          {formatCurrency(shift.actualCash)}
+                        <td className="py-3.5 px-4 text-right font-mono">
+                          <div className="font-bold text-admin-text">{formatCurrency(shift.actualCash)}</div>
+                          <div className="text-[10px] text-slate-400">Esp. {formatCurrency(shift.expectedCash)}</div>
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono font-semibold">
                           <span
@@ -750,10 +1070,25 @@ export default function CajasPage() {
                                 : "text-rose-600 dark:text-rose-400"
                             }
                           >
-                            {shift.difference === 0
-                              ? formatCurrency(0)
-                              : `${shift.difference > 0 ? "+" : ""}${formatCurrency(shift.difference)}`}
+                            {formatDiffAmount(shift.difference)}
                           </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-mono font-semibold">
+                          {shift.transferDifference === null ? (
+                            <span className="text-slate-400">—</span>
+                          ) : (
+                            <span
+                              className={
+                                shift.transferDifference === 0
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : shift.transferDifference > 0
+                                  ? "text-blue-600 dark:text-blue-400"
+                                  : "text-rose-600 dark:text-rose-400"
+                              }
+                            >
+                              {formatDiffAmount(shift.transferDifference)}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
@@ -764,6 +1099,8 @@ export default function CajasPage() {
                                   ? "bg-emerald-500"
                                   : shift.status === "surplus"
                                   ? "bg-blue-500"
+                                  : shift.status === "mixed"
+                                  ? "bg-amber-500"
                                   : "bg-rose-500"
                               )}
                             />
@@ -773,6 +1110,8 @@ export default function CajasPage() {
                                   ? "text-emerald-700 dark:text-emerald-400"
                                   : shift.status === "surplus"
                                   ? "text-blue-700 dark:text-blue-400"
+                                  : shift.status === "mixed"
+                                  ? "text-amber-700 dark:text-amber-400"
                                   : "text-rose-700 dark:text-rose-400"
                               )}
                             >
@@ -780,6 +1119,8 @@ export default function CajasPage() {
                                 ? "Cuadrado"
                                 : shift.status === "surplus"
                                 ? "Sobrante"
+                                : shift.status === "mixed"
+                                ? "Descuadre"
                                 : "Faltante"}
                             </span>
                           </div>
@@ -809,62 +1150,333 @@ export default function CajasPage() {
       )}
 
       {/* =========================================================================
-          6. MODAL: ARQUEO CIEGO & CIERRE DE TURNO
+          6. MODAL: ARQUEO CIEGO, REVISIÓN SUPERVISADA Y CIERRE DE TURNO
           ========================================================================= */}
-      <Dialog open={closeShiftModalOpen} onOpenChange={setCloseShiftModalOpen}>
-        <DialogContent className="sm:max-w-lg admin-panel p-6">
+      <Dialog
+        open={closeShiftModalOpen}
+        onOpenChange={(open) => {
+          if (!open && (isClosingShift || isRequestingRecount)) return;
+          setCloseShiftModalOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto admin-panel p-6">
           <DialogHeader className="pb-3 border-b border-admin-card-border">
             <DialogTitle className="text-lg font-semibold text-admin-text flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-admin-brand-text" />
-              {shiftToClose?.review ? "Revisar y aprobar cierre" : "Registrar conteo de efectivo"}
+              {isReviewMode
+                ? "Revisar y aprobar cierre"
+                : isDirectCloseMode
+                ? "Arqueo y cierre de caja"
+                : shiftToClose?.recountRequired
+                ? "Registrar reconteo de efectivo"
+                : "Registrar conteo de efectivo"}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
               Turno #{shiftToClose?.shiftNumber} — Operado por {shiftToClose?.cashierName} en {shiftToClose?.cashRegisterCode}.
             </DialogDescription>
           </DialogHeader>
 
-          {shiftToClose?.review ? (
+          {activeReview ? (
             <div className="space-y-4 py-3 text-sm">
-              <dl className="grid grid-cols-3 gap-3 rounded-xl bg-admin-raised p-3">
-                <div>
-                  <dt className="text-xs text-slate-500">Esperado</dt>
-                  <dd className="font-mono font-semibold">{formatCurrency(shiftToClose.review.expectedCash)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-slate-500">Contado</dt>
-                  <dd className="font-mono font-semibold">{formatCurrency(shiftToClose.review.actualCash)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-slate-500">
-                    {shiftToClose.review.difference < 0
-                      ? "Faltante"
-                      : shiftToClose.review.difference > 0
-                      ? "Sobrante"
-                      : "Cuadrado"}
-                  </dt>
-                  <dd
-                    className={cn(
-                      "font-mono font-semibold",
-                      shiftToClose.review.difference < 0
-                        ? "text-rose-600 dark:text-rose-400"
-                        : shiftToClose.review.difference > 0
-                        ? "text-blue-600 dark:text-blue-400"
-                        : "text-emerald-600 dark:text-emerald-400"
-                    )}
+              {/* Bloque de Efectivo con opción auditada de edición */}
+              <div className="space-y-2.5 rounded-xl bg-admin-raised p-3.5 border border-admin-card-border">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-admin-text">Efectivo físico en gaveta</span>
+                  <button
+                    type="button"
+                    disabled={showRecountForm || isClosingShift || isRequestingRecount}
+                    onClick={() => {
+                      if (!isEditingCashierCount) {
+                        setActualCashCounted(activeReview.actualCash.toFixed(2));
+                        setIsEditingCashierCount(true);
+                      } else {
+                        setActualCashCounted("");
+                        setIsEditingCashierCount(false);
+                      }
+                    }}
+                    className="text-[11px] font-semibold text-admin-brand-text hover:underline disabled:opacity-40 cursor-pointer"
                   >
-                    {shiftToClose.review.difference === 0
-                      ? formatCurrency(0)
-                      : `${shiftToClose.review.difference > 0 ? "+" : "-"}${formatCurrency(Math.abs(shiftToClose.review.difference))}`}
+                    {isEditingCashierCount ? "Mantener conteo del cajero" : "Editar conteo"}
+                  </button>
+                </div>
+
+                <dl className="grid grid-cols-3 gap-3">
+                  <div>
+                    <dt className="text-xs text-slate-500">Esperado</dt>
+                    <dd className="font-mono font-semibold">{formatCurrency(activeReview.expectedCash)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">
+                      {isEditingCashierCount ? "Contado final" : "Contado cajero"}
+                    </dt>
+                    <dd className="font-mono font-semibold">
+                      {effectiveActualCash !== null ? formatCurrency(effectiveActualCash) : "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">
+                      {cashDifference === null
+                        ? "Diferencia"
+                        : cashDifference < 0
+                        ? "Faltante"
+                        : cashDifference > 0
+                        ? "Sobrante"
+                        : "Cuadrado"}
+                    </dt>
+                    <dd
+                      className={cn(
+                        "font-mono font-semibold",
+                        cashDifference === null
+                          ? "text-slate-400"
+                          : cashDifference < 0
+                          ? "text-rose-600 dark:text-rose-400"
+                          : cashDifference > 0
+                          ? "text-blue-600 dark:text-blue-400"
+                          : "text-emerald-600 dark:text-emerald-400"
+                      )}
+                    >
+                      {cashDifference === null ? "—" : formatDiffAmount(cashDifference)}
+                    </dd>
+                  </div>
+                </dl>
+
+                {isEditingCashierCount && (
+                  <div className="space-y-1.5 pt-2 border-t border-admin-card-border">
+                    <label className="text-xs font-bold text-admin-secondary" htmlFor="physical-cash-count">
+                      Efectivo contado final ({CURRENCY_SYMBOL})
+                    </label>
+                    <Input
+                      id="physical-cash-count"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={actualCashCounted}
+                      onChange={(e) => setActualCashCounted(e.target.value)}
+                    />
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                      El cajero declaró {formatCurrency(activeReview.actualCash)}. Toda corrección registra auditoría y exige observación obligatoria.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Conciliación QR en banco */}
+              <ReconciliationAmountField
+                id="actual-qr-count"
+                label={`QR en banco (${CURRENCY_SYMBOL})`}
+                expectedAmount={activeReview.expectedTransfer}
+                expectedHint
+                value={actualTransferCounted}
+                onChange={setActualTransferCounted}
+                difference={transferDifference}
+                diffLabels={{
+                  shortage: "Faltante en QR",
+                  surplus: "Sobrante en QR",
+                  balanced: "QR cuadrado",
+                }}
+                disabled={showRecountForm}
+              />
+
+              {/* Conciliación Tarjeta (oculta mientras SHOW_CARD_PAYMENT = false y sin ventas con tarjeta) */}
+              {showCardAudit && (
+                <ReconciliationAmountField
+                  id="actual-card-count"
+                  label={`Tarjeta POS (${CURRENCY_SYMBOL})`}
+                  expectedAmount={activeReview.expectedCard}
+                  expectedHint
+                  value={actualCardCounted}
+                  onChange={setActualCardCounted}
+                  difference={cardDifference}
+                  diffLabels={{
+                    shortage: "Faltante en tarjeta",
+                    surplus: "Sobrante en tarjeta",
+                    balanced: "Tarjeta cuadrada",
+                  }}
+                  disabled={showRecountForm}
+                />
+              )}
+
+              {!showRecountForm ? (
+                <div className="space-y-3">
+                  <label className="grid gap-2 text-xs font-bold text-admin-secondary" htmlFor="cash-review-note">
+                    {requiresClosingObservation
+                      ? "Observación de cierre (obligatorio)"
+                      : "Observación de cierre (opcional)"}
+                    <Input
+                      id="cash-review-note"
+                      maxLength={500}
+                      value={supervisorNote}
+                      onChange={(e) => setSupervisorNote(e.target.value)}
+                    />
+                  </label>
+
+                  <div className="flex items-center justify-between rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 px-3.5 py-2.5 text-xs">
+                    <span className="text-amber-800 dark:text-amber-200">
+                      ¿Prefieres que el cajero vuelva a contar?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRecountForm(true);
+                        setIsEditingCashierCount(false);
+                        setActualCashCounted("");
+                      }}
+                      className="font-bold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer shrink-0 ml-2"
+                    >
+                      Solicitar reconteo
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 p-3.5 text-xs">
+                  <p className="font-semibold text-amber-900 dark:text-amber-200">
+                    Devolver turno a reconteo a ciegas
+                  </p>
+                  <p className="text-amber-800 dark:text-amber-300/90 leading-relaxed">
+                    Se guardará el conteo previo en el historial del turno y el punto de venta seguirá bloqueado hasta que el cajero registre su nuevo conteo.
+                  </p>
+                  <label className="grid gap-1.5 font-bold text-admin-secondary" htmlFor="recount-reason-input">
+                    Motivo del reconteo (obligatorio)
+                    <Input
+                      id="recount-reason-input"
+                      maxLength={300}
+                      placeholder="Ej. Diferencia de Bs 20 en billetes de 10..."
+                      value={recountReasonInput}
+                      onChange={(e) => setRecountReasonInput(e.target.value)}
+                    />
+                  </label>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isRequestingRecount}
+                      onClick={() => setShowRecountForm(false)}
+                      className="h-9 rounded-xl text-xs"
+                    >
+                      Volver
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isRequestingRecount}
+                      onClick={handleRequestRecount}
+                      className="h-9 rounded-xl text-xs bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                    >
+                      {isRequestingRecount ? "Enviando..." : "Confirmar reconteo"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : isDirectCloseMode && activeTotals ? (
+            <div className="space-y-4 py-3 text-sm">
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-xl bg-admin-raised p-3 border border-admin-card-border">
+                <div>
+                  <dt className="text-[11px] text-slate-500">Fondo inicial</dt>
+                  <dd className="font-mono text-xs font-semibold text-admin-text">
+                    {formatCurrency(activeTotals.initialCash)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] text-slate-500">Ventas efectivo</dt>
+                  <dd className="font-mono text-xs font-semibold text-admin-text">
+                    {formatCurrency(activeTotals.cashSales)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] text-slate-500">
+                    {SHOW_CARD_PAYMENT || activeTotals.cardSales !== 0 || activeTotals.otherSales !== 0
+                      ? "Tarjeta / QR"
+                      : "Ventas QR"}
+                  </dt>
+                  <dd className="font-mono text-xs font-semibold text-admin-text">
+                    {formatCurrency(
+                      SHOW_CARD_PAYMENT || activeTotals.cardSales !== 0 || activeTotals.otherSales !== 0
+                        ? activeTotals.electronicSales
+                        : activeTotals.transferSales
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold text-admin-brand-text">Esperado</dt>
+                  <dd className="font-mono text-xs font-bold text-admin-brand-text">
+                    {formatCurrency(activeTotals.expectedCash)}
                   </dd>
                 </div>
               </dl>
-              <label className="grid gap-2 text-xs font-bold text-admin-secondary" htmlFor="cash-review-note">
-                {shiftToClose.review.difference === 0 ? "Observación opcional" : "Motivo de la diferencia (obligatorio)"}
-                <Input id="cash-review-note" maxLength={500} value={supervisorNote} onChange={(e) => setSupervisorNote(e.target.value)} />
+
+              <ReconciliationAmountField
+                id="physical-cash-count"
+                label={`Efectivo contado (${CURRENCY_SYMBOL})`}
+                expectedAmount={activeTotals.expectedCash}
+                value={actualCashCounted}
+                onChange={setActualCashCounted}
+                difference={cashDifference}
+                diffLabels={{
+                  shortage: "Faltante en efectivo",
+                  surplus: "Sobrante en efectivo",
+                  balanced: "Efectivo cuadrado",
+                }}
+              />
+
+              {/* QR en banco */}
+              <ReconciliationAmountField
+                id="actual-qr-count"
+                label={`QR en banco (${CURRENCY_SYMBOL})`}
+                expectedAmount={activeTotals.transferSales}
+                value={actualTransferCounted}
+                onChange={setActualTransferCounted}
+                difference={transferDifference}
+                diffLabels={{
+                  shortage: "Faltante en QR",
+                  surplus: "Sobrante en QR",
+                  balanced: "QR cuadrado",
+                }}
+              />
+
+              {showCardAudit && (
+                <ReconciliationAmountField
+                  id="actual-card-count"
+                  label={`Tarjeta POS (${CURRENCY_SYMBOL})`}
+                  expectedAmount={activeTotals.cardSales}
+                  value={actualCardCounted}
+                  onChange={setActualCardCounted}
+                  difference={cardDifference}
+                  diffLabels={{
+                    shortage: "Faltante en tarjeta",
+                    surplus: "Sobrante en tarjeta",
+                    balanced: "Tarjeta cuadrada",
+                  }}
+                />
+              )}
+
+              <label className="grid gap-2 text-xs font-bold text-admin-secondary" htmlFor="cash-direct-note">
+                {requiresClosingObservation
+                  ? "Observación de cierre (obligatorio)"
+                  : "Observación de cierre (opcional)"}
+                <Input
+                  id="cash-direct-note"
+                  maxLength={500}
+                  value={supervisorNote}
+                  onChange={(e) => setSupervisorNote(e.target.value)}
+                />
               </label>
             </div>
           ) : (
             <div className="space-y-3 py-3 text-sm">
+              {shiftToClose?.recountRequired && (
+                <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs space-y-1">
+                  <p className="font-bold text-amber-800 dark:text-amber-300">
+                    Reconteo solicitado por supervisión
+                  </p>
+                  {shiftToClose.recountReason && (
+                    <p className="text-amber-700 dark:text-amber-200">
+                      Motivo: {shiftToClose.recountReason}
+                    </p>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-admin-secondary">
                 Cuenta el dinero físico de la gaveta. Al enviar el conteo, el turno queda bloqueado para cobros hasta que un supervisor apruebe el cierre.
               </p>
@@ -879,30 +1491,40 @@ export default function CajasPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={isClosingShift}
+              disabled={isClosingShift || isRequestingRecount}
               className="rounded-xl h-10 text-xs font-bold border-slate-200"
               onClick={() => setCloseShiftModalOpen(false)}
             >
               Cancelar
             </Button>
-            <Button
-              size="sm"
-              disabled={isClosingShift}
-              onClick={handleCloseShift}
-              className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
-            >
-              {isClosingShift ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  <span>Procesando Arqueo...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="h-3.5 w-3.5" />
-                  <span>{shiftToClose?.review ? "Aprobar cierre" : "Enviar conteo"}</span>
-                </>
-              )}
-            </Button>
+            {!showRecountForm && (
+              <Button
+                size="sm"
+                disabled={isClosingShift}
+                onClick={handleCloseShift}
+                className="rounded-xl h-10 text-xs font-bold bg-admin-brand hover:bg-admin-brand-hover text-admin-on-solid gap-1.5 cursor-pointer"
+              >
+                {isClosingShift ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Procesando Arqueo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>
+                      {isReviewMode
+                        ? "Aprobar y cerrar"
+                        : isDirectCloseMode
+                        ? "Confirmar y cerrar caja"
+                        : shiftToClose?.recountRequired
+                        ? "Enviar nuevo conteo"
+                        : "Enviar conteo"}
+                    </span>
+                  </>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1090,11 +1712,19 @@ export default function CajasPage() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Ventas Tarjeta / QR:</span>
+                  <span className="text-slate-500">Ventas por QR:</span>
                   <span className="font-mono font-bold text-admin-brand-text">
-                    {formatCurrency(selectedClosedShift.cardSales + selectedClosedShift.transferSales)}
+                    {formatCurrency(selectedClosedShift.transferSales)}
                   </span>
                 </div>
+                {(SHOW_CARD_PAYMENT || selectedClosedShift.cardSales !== 0 || (selectedClosedShift.cardDifference ?? 0) !== 0) && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Ventas con Tarjeta:</span>
+                    <span className="font-mono font-bold text-admin-brand-text">
+                      {formatCurrency(selectedClosedShift.cardSales)}
+                    </span>
+                  </div>
+                )}
                 {selectedClosedShift.otherSales > 0 && (
                   <div className="flex justify-between">
                     <span className="text-slate-500">Otros Medios:</span>
@@ -1111,8 +1741,8 @@ export default function CajasPage() {
                   <span>Efectivo Contado:</span>
                   <span className="font-mono">{formatCurrency(selectedClosedShift.actualCash)}</span>
                 </div>
-                <div className="pt-2 border-t border-admin-card-border flex justify-between font-semibold text-sm">
-                  <span>Diferencia de Caja:</span>
+                <div className="flex justify-between font-semibold text-sm">
+                  <span>Diferencia Efectivo:</span>
                   <span
                     className={
                       selectedClosedShift.difference === 0
@@ -1122,11 +1752,67 @@ export default function CajasPage() {
                         : "text-rose-600"
                     }
                   >
-                    {selectedClosedShift.difference === 0
-                      ? formatCurrency(0)
-                      : `${selectedClosedShift.difference > 0 ? "+" : ""}${formatCurrency(selectedClosedShift.difference)}`}
+                    {formatDiffAmount(selectedClosedShift.difference)}
                   </span>
                 </div>
+
+                {selectedClosedShift.actualTransfer !== null && selectedClosedShift.transferDifference !== null && (
+                  <div className="pt-2 border-t border-admin-card-border space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">QR Esperado:</span>
+                      <span className="font-mono font-semibold">{formatCurrency(selectedClosedShift.transferSales)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">QR Verificado:</span>
+                      <span className="font-mono font-semibold">{formatCurrency(selectedClosedShift.actualTransfer)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold">
+                      <span>Diferencia QR:</span>
+                      <span
+                        className={cn(
+                          "font-mono",
+                          selectedClosedShift.transferDifference === 0
+                            ? "text-emerald-600"
+                            : selectedClosedShift.transferDifference > 0
+                            ? "text-blue-600"
+                            : "text-rose-600"
+                        )}
+                      >
+                        {formatDiffAmount(selectedClosedShift.transferDifference)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {(SHOW_CARD_PAYMENT || selectedClosedShift.cardSales !== 0 || (selectedClosedShift.cardDifference ?? 0) !== 0) &&
+                  selectedClosedShift.actualCard !== null &&
+                  selectedClosedShift.cardDifference !== null && (
+                  <div className="pt-2 border-t border-admin-card-border space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Tarjeta Esperada:</span>
+                      <span className="font-mono font-semibold">{formatCurrency(selectedClosedShift.cardSales)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Tarjeta Verificada:</span>
+                      <span className="font-mono font-semibold">{formatCurrency(selectedClosedShift.actualCard)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold">
+                      <span>Diferencia Tarjeta:</span>
+                      <span
+                        className={cn(
+                          "font-mono",
+                          selectedClosedShift.cardDifference === 0
+                            ? "text-emerald-600"
+                            : selectedClosedShift.cardDifference > 0
+                            ? "text-blue-600"
+                            : "text-rose-600"
+                        )}
+                      >
+                        {formatDiffAmount(selectedClosedShift.cardDifference)}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {selectedClosedShift.notes && (
@@ -1246,7 +1932,7 @@ export default function CajasPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 flex items-center gap-1.5 font-medium">
                     <CreditCard className="h-3.5 w-3.5 text-admin-brand-text" />
-                    Tarjeta / QR / Otros:
+                    {SHOW_CARD_PAYMENT ? "Tarjeta / QR / Otros:" : "QR neto:"}
                   </span>
                   <span className="font-bold text-admin-text">
                     {formatCurrency(shiftSalesData.electronicSalesTotal)}
@@ -1293,7 +1979,7 @@ export default function CajasPage() {
                                 ? "Tarjeta"
                                 : sale.paymentMethod === "other"
                                 ? "Otro"
-                                : "QR / Transf."}
+                                : "QR"}
                             </span>
                             <div className="text-right">
                               <span
@@ -1386,7 +2072,7 @@ export default function CajasPage() {
                               ? "Tarjeta"
                               : refund.refundMethod === "other"
                               ? "Otro"
-                              : "QR / Transf."}
+                              : "QR"}
                           </span>
                         </div>
                       </div>

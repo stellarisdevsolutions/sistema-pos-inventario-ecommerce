@@ -242,6 +242,12 @@ export const cashShifts = pgTable("cash_shifts", {
   expectedCash: numeric("expected_cash", { precision: 12, scale: 2 }).notNull().default("0"), // Fondo + Efectivo
   actualCash: numeric("actual_cash", { precision: 12, scale: 2 }),                             // Conteo físico final
   difference: numeric("difference", { precision: 12, scale: 2 }),                             // Sobrante (+) o Faltante (-)
+  actualTransfer: numeric("actual_transfer", { precision: 12, scale: 2 }),                     // QR verificado en extracto
+  transferDifference: numeric("transfer_difference", { precision: 12, scale: 2 }),             // Sobrante (+) o Faltante (-) QR
+  actualCard: numeric("actual_card", { precision: 12, scale: 2 }),                             // Tarjeta verificada (oculta mientras SHOW_CARD_PAYMENT = false)
+  cardDifference: numeric("card_difference", { precision: 12, scale: 2 }),                     // Sobrante (+) o Faltante (-) tarjeta
+  recountRequestedAt: timestamp("recount_requested_at"),                                       // Marca de reconteo ciego solicitado
+  recountReason: text("recount_reason"),                                                       // Motivo indicado por el supervisor
   status: cashShiftStatusEnum("status").default("open").notNull(),
   openedAt: timestamp("opened_at").defaultNow().notNull(),
   closedAt: timestamp("closed_at"),

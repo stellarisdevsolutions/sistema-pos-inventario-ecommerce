@@ -14,13 +14,13 @@ import { productDbInsertSchema, productOptionConfigSchema } from "@/lib/validati
 import { saleFormSchema } from "@/lib/validations/sale";
 import { purchaseFormSchema, purchaseReturnSchema, type PurchaseReturnInput } from "@/lib/validations/purchase";
 import { inventoryAdjustmentQuery } from "@/db/operations/inventory-adjustment";
-import { approveCashCountQuery, archiveCashRegisterQuery, deleteUnusedCashRegisterQuery, openShiftQuery, submitCashCountQuery } from "@/db/operations/cash-shifts";
+import { approveCashCountQuery, archiveCashRegisterQuery, deleteUnusedCashRegisterQuery, directCloseShiftQuery, openShiftQuery, requestCashRecountQuery, submitCashCountQuery } from "@/db/operations/cash-shifts";
 
 async function createDatabase(context: TestContext) {
   const db = new PGlite();
   context.after(() => db.close());
 
-  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql", "0005_product_attributes_jsonb.sql", "0006_hardening_refunds_sessions.sql", "0007_product_model_images.sql", "0008_product_archived.sql"]) {
+  for (const migration of ["0000_new_meggan.sql", "0001_unique_open_cash_shifts.sql", "0002_purchase_returns.sql", "0003_checkout_requests.sql", "0004_product_variants.sql", "0005_product_attributes_jsonb.sql", "0006_hardening_refunds_sessions.sql", "0007_product_model_images.sql", "0008_product_archived.sql", "0009_cash_shift_recount_and_reconciliation.sql"]) {
     await db.exec(await readFile(new URL(`../drizzle/${migration}`, import.meta.url), "utf8"));
   }
   await db.exec(`
@@ -607,6 +607,22 @@ test("archivar exige desactivar canales pero conserva historial y permite regist
     [{ is_archived: true, is_active: false, stock: 4 }]
   );
 
+  const archivedSaleStmt = dialect.sqlToQuery(
+    createSaleQuery({
+      sale: saleFormSchema.parse({ items: [{ productId: 1, quantity: 1, unitPrice: 50 }] }),
+      operatorId: 1,
+      shiftId: null,
+      prefix: "VTA-2026-",
+      subtotal: 50,
+      discount: 0,
+      total: 50,
+      cashGiven: 50,
+      changeGiven: 0,
+      notes: null,
+    })
+  );
+  assert.equal((await db.query(archivedSaleStmt.sql, archivedSaleStmt.params)).rows.length, 0);
+
   const adjStmt = dialect.sqlToQuery(
     inventoryAdjustmentQuery({
       productId: 1,
@@ -666,4 +682,316 @@ test("cajas físicas: archivar bloquea turnos abiertos y solo se elimina sin his
   assert.deepEqual(restoredRows.map((r) => r.isActive), [true]);
 
   assert.equal((await db.query(openAStmt.sql, openAStmt.params)).rows.length, 1);
+});
+
+test("POS multi-caja, devolución cruzada de turno y persistencia de NIT/CI", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  await db.exec(`
+    INSERT INTO cash_registers (name, code) VALUES ('Caja 1', 'CAJA-1'), ('Caja 2', 'CAJA-2');
+    INSERT INTO products (name, slug, stock, cost_price, price) VALUES ('Producto Concurrencia', 'producto-concurrencia', 10, 20, 40);
+  `);
+
+  for (const [cashRegisterId, userId, initialCash] of [[1, 1, 100], [2, 2, 200]] as const) {
+    const openStmt = dialect.sqlToQuery(
+      openShiftQuery({ cashRegisterId, userId, initialCash, notes: null, prefix: "TURNO-2026-" })
+    );
+    assert.equal((await db.query(openStmt.sql, openStmt.params)).rows.length, 1);
+  }
+
+  const runSale = async (params: {
+    operatorId: number;
+    shiftId: number;
+    quantity: number;
+    customerName: string;
+    customerTaxId: string | null;
+  }) => {
+    const total = params.quantity * 40;
+    const stmt = dialect.sqlToQuery(
+      createSaleQuery({
+        sale: saleFormSchema.parse({
+          checkoutRequestId: randomUUID(),
+          customerName: params.customerName,
+          customerTaxId: params.customerTaxId,
+          paymentMethod: "cash",
+          cashGiven: total,
+          items: [{ productId: 1, quantity: params.quantity, unitPrice: 40 }],
+        }),
+        operatorId: params.operatorId,
+        shiftId: params.shiftId,
+        prefix: "VTA-2026-",
+        subtotal: total,
+        discount: 0,
+        total,
+        cashGiven: total,
+        changeGiven: 0,
+        notes: null,
+      })
+    );
+    return (await db.query<{ saleId: number }>(stmt.sql, stmt.params)).rows;
+  };
+
+  // Stock insuficiente con NIT no crea cliente huérfano ni descuenta stock
+  const rejectedInitial = await runSale({
+    operatorId: 2,
+    shiftId: 2,
+    quantity: 11,
+    customerName: "Cliente Rechazado",
+    customerTaxId: "NIT-ORPHAN",
+  });
+  assert.equal(rejectedInitial.length, 0);
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 10 }]);
+  assert.deepEqual((await db.query("SELECT count(*)::integer AS count FROM customers")).rows, [{ count: 0 }]);
+
+  // Caja 1 vende 2 unidades y persiste el NIT/CI en customers
+  const sale1Rows = await runSale({
+    operatorId: 1,
+    shiftId: 1,
+    quantity: 2,
+    customerName: "Ana Perez",
+    customerTaxId: " 99887766 ",
+  });
+  assert.equal(sale1Rows.length, 1);
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 8 }]);
+
+  // Caja 2 intenta vender 10 (stock obsoleto) -> rechazado
+  const staleSale = await runSale({
+    operatorId: 2,
+    shiftId: 2,
+    quantity: 10,
+    customerName: "Otro",
+    customerTaxId: null,
+  });
+  assert.equal(staleSale.length, 0);
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 8 }]);
+
+  // Caja 2 vende las 8 restantes reutilizando el mismo NIT/CI sin duplicar cliente
+  const sale2Rows = await runSale({
+    operatorId: 2,
+    shiftId: 2,
+    quantity: 8,
+    customerName: "Ana Perez",
+    customerTaxId: "99887766",
+  });
+  assert.equal(sale2Rows.length, 1);
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 0 }]);
+  assert.deepEqual(
+    (await db.query("SELECT name, tax_id FROM customers")).rows,
+    [{ name: "Ana Perez", tax_id: "99887766" }]
+  );
+  assert.deepEqual(
+    (await db.query("SELECT customer_id FROM sales ORDER BY id")).rows,
+    [{ customer_id: 1 }, { customer_id: 1 }]
+  );
+
+  // Cerrar Turno 1 y abrir Turno 3 para probar devolución cruzada de turno sin clamp GREATEST(0, ...)
+  await db.exec("UPDATE cash_shifts SET status = 'closed', actual_cash = expected_cash, closed_at = now() WHERE id = 1");
+  const openShift3Stmt = dialect.sqlToQuery(
+    openShiftQuery({ cashRegisterId: 1, userId: 1, initialCash: 200, notes: null, prefix: "TURNO-2026-" })
+  );
+  assert.equal((await db.query(openShift3Stmt.sql, openShift3Stmt.params)).rows.length, 1);
+  const [shift3] = (await db.query<{ id: number }>("SELECT id FROM cash_shifts WHERE status = 'open' AND user_id = 1")).rows;
+
+  const [sale1Item] = (await db.query<{ id: number }>("SELECT id FROM sale_items WHERE sale_id = $1", [sale1Rows[0].saleId])).rows;
+  const cashRefundStmt = dialect.sqlToQuery(
+    refundSaleQuery({
+      saleId: sale1Rows[0].saleId,
+      operatorId: 1,
+      supervisorId: 2,
+      cashShiftId: shift3.id,
+      amount: 40,
+      note: "Devolución cruzada en efectivo",
+      refundMethod: "cash",
+      requestId: randomUUID(),
+      items: [{ id: sale1Item.id, returnedQuantity: 0, quantity: 1 }],
+    })
+  );
+  assert.equal((await db.query(cashRefundStmt.sql, cashRefundStmt.params)).rows.length, 1);
+  assert.deepEqual((await db.query("SELECT stock FROM products WHERE id = 1")).rows, [{ stock: 1 }]);
+  assert.deepEqual(
+    (await db.query("SELECT cash_sales, expected_cash FROM cash_shifts WHERE id = $1", [shift3.id])).rows,
+    [{ cash_sales: "-40.00", expected_cash: "160.00" }]
+  );
+
+  const [sale2Item] = (await db.query<{ id: number }>("SELECT id FROM sale_items WHERE sale_id = $1", [sale2Rows[0].saleId])).rows;
+  const qrRefundStmt = dialect.sqlToQuery(
+    refundSaleQuery({
+      saleId: sale2Rows[0].saleId,
+      operatorId: 1,
+      supervisorId: 2,
+      cashShiftId: shift3.id,
+      amount: 40,
+      note: "Devolución cruzada por QR",
+      refundMethod: "transfer",
+      requestId: randomUUID(),
+      items: [{ id: sale2Item.id, returnedQuantity: 0, quantity: 1 }],
+    })
+  );
+  assert.equal((await db.query(qrRefundStmt.sql, qrRefundStmt.params)).rows.length, 1);
+  assert.deepEqual(
+    (await db.query("SELECT cash_sales, transfer_sales, expected_cash FROM cash_shifts WHERE id = $1", [shift3.id])).rows,
+    [{ cash_sales: "-40.00", transfer_sales: "-40.00", expected_cash: "160.00" }]
+  );
+});
+
+test("arqueo directo de supervisor cierra en un paso, exige motivo ante diferencias y no pisa conteos ciegos", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  await db.exec(`
+    INSERT INTO cash_registers (name, code) VALUES ('Caja 1', 'CAJA-1'), ('Caja 2', 'CAJA-2');
+  `);
+
+  const runSql = (statement: ReturnType<typeof directCloseShiftQuery>) => {
+    const q = dialect.sqlToQuery(statement);
+    return db.query<{ id: number }>(q.sql, q.params);
+  };
+
+  // Turno 1: abierto por admin/supervisor (userId 1) con fondo 150.00
+  assert.equal(
+    (await runSql(openShiftQuery({ cashRegisterId: 1, userId: 1, initialCash: 150, notes: null, prefix: "TURNO-2026-" }))).rows.length,
+    1
+  );
+
+  // Rechaza cierre directo si expectedCash esperado está desactualizado
+  assert.equal((await runSql(directCloseShiftQuery(1, 1, "150.00", null, "140.00"))).rows.length, 0);
+  // Rechaza diferencia sin motivo
+  assert.equal((await runSql(directCloseShiftQuery(1, 1, "145.00", null, "150.00"))).rows.length, 0);
+  // Cierra en 1 paso cuando hay diferencia con motivo explicado
+  assert.equal((await runSql(directCloseShiftQuery(1, 1, "145.00", "Faltante por sencillo", "150.00"))).rows.length, 1);
+  // No permite cerrar dos veces
+  assert.equal((await runSql(directCloseShiftQuery(1, 1, "145.00", "Repetido", "150.00"))).rows.length, 0);
+
+  assert.deepEqual(
+    (await db.query("SELECT status, expected_cash, actual_cash, difference, closed_by_user_id, notes FROM cash_shifts WHERE id = 1")).rows,
+    [{
+      status: "closed",
+      expected_cash: "150.00",
+      actual_cash: "145.00",
+      difference: "-5.00",
+      closed_by_user_id: 1,
+      notes: "Faltante por sencillo",
+    }]
+  );
+
+  // Turno 2: cajero (userId 2) envía conteo ciego -> cierre directo no debe sobrescribirlo
+  assert.equal(
+    (await runSql(openShiftQuery({ cashRegisterId: 2, userId: 2, initialCash: 100, notes: null, prefix: "TURNO-2026-" }))).rows.length,
+    1
+  );
+  assert.equal((await runSql(submitCashCountQuery(2, 2, "98.00"))).rows.length, 1);
+  assert.equal((await runSql(directCloseShiftQuery(2, 1, "100.00", "Intento directo", "100.00"))).rows.length, 0);
+
+  // Supervisor sí puede aprobar el conteo ciego preservando actual_cash del cajero
+  assert.equal((await runSql(approveCashCountQuery(2, 1, "Aprobado con diferencia"))).rows.length, 1);
+  assert.deepEqual(
+    (await db.query("SELECT status, expected_cash, actual_cash, difference, closed_by_user_id FROM cash_shifts WHERE id = 2")).rows,
+    [{ status: "closed", expected_cash: "100.00", actual_cash: "98.00", difference: "-2.00", closed_by_user_id: 1 }]
+  );
+
+  // Turno 3: cierre directo exacto sin nota (cuadrado)
+  assert.equal(
+    (await runSql(openShiftQuery({ cashRegisterId: 1, userId: 1, initialCash: 200, notes: null, prefix: "TURNO-2026-" }))).rows.length,
+    1
+  );
+  assert.equal((await runSql(directCloseShiftQuery(3, 1, "200.00", null, "200.00"))).rows.length, 1);
+  assert.deepEqual(
+    (await db.query("SELECT status, expected_cash, actual_cash, difference, notes FROM cash_shifts WHERE id = 3")).rows,
+    [{ status: "closed", expected_cash: "200.00", actual_cash: "200.00", difference: "0.00", notes: null }]
+  );
+});
+
+test("reconteo ciego mantiene POS bloqueado, permite edición auditada y concilia QR", async (t) => {
+  const db = await createDatabase(t);
+  const dialect = new PgDialect();
+  await db.exec(`
+    INSERT INTO cash_registers (name, code) VALUES ('Caja Principal', 'CAJA-1'), ('Caja Secundaria', 'CAJA-2');
+    INSERT INTO products (name, slug, stock, cost_price, price) VALUES ('Producto Test', 'producto-test', 10, 30, 50);
+  `);
+
+  const runQ = <T = { id: number }>(stmt: ReturnType<typeof directCloseShiftQuery>) => {
+    const q = dialect.sqlToQuery(stmt);
+    return db.query<T>(q.sql, q.params);
+  };
+
+  // Turno 1: cajero (userId 2) abre con 100, vende 1 unidad en efectivo (50 -> expected 150) y 1 en QR (50)
+  assert.equal((await runQ(openShiftQuery({ cashRegisterId: 1, userId: 2, initialCash: 100, notes: null, prefix: "TURNO-2026-" }))).rows.length, 1);
+  assert.equal((await runQ(createSaleQuery({
+    sale: saleFormSchema.parse({ checkoutRequestId: randomUUID(), paymentMethod: "cash", cashGiven: 50, items: [{ productId: 1, quantity: 1, unitPrice: 50 }] }),
+    operatorId: 2, shiftId: 1, prefix: "VTA-2026-", subtotal: 50, discount: 0, total: 50, cashGiven: 50, changeGiven: 0, notes: null,
+  }))).rows.length, 1);
+  assert.equal((await runQ(createSaleQuery({
+    sale: saleFormSchema.parse({ checkoutRequestId: randomUUID(), paymentMethod: "transfer", items: [{ productId: 1, quantity: 1, unitPrice: 50 }] }),
+    operatorId: 2, shiftId: 1, prefix: "VTA-2026-", subtotal: 50, discount: 0, total: 50, cashGiven: null, changeGiven: null, notes: null,
+  }))).rows.length, 1);
+
+  // Cajero envía conteo ciego erróneo (140)
+  assert.equal((await runQ(submitCashCountQuery(1, 2, "140.00"))).rows.length, 1);
+
+  // Supervisor (userId 1) solicita reconteo -> resetea actual_cash, guarda motivo y mantiene POS bloqueado
+  assert.equal((await runQ(requestCashRecountQuery(1, 1, "Diferencia de Bs 10 en caja", "Admin"))).rows.length, 1);
+  assert.equal((await runQ(createSaleQuery({
+    sale: saleFormSchema.parse({ checkoutRequestId: randomUUID(), paymentMethod: "cash", cashGiven: 50, items: [{ productId: 1, quantity: 1, unitPrice: 50 }] }),
+    operatorId: 2, shiftId: 1, prefix: "VTA-2026-", subtotal: 50, discount: 0, total: 50, cashGiven: 50, changeGiven: 0, notes: null,
+  }))).rows.length, 0);
+
+  // Cajero vuelve a contar a ciegas (145) -> limpia marca de reconteo
+  assert.equal((await runQ(submitCashCountQuery(1, 2, "145.00"))).rows.length, 1);
+
+  // Supervisor edita conteo final (145 -> 150) y registra QR verificado con faltante (30 vs 50)
+  // Sin observación obligatoria debe fallar aunque efectivo cuadre en 150
+  assert.equal(
+    (await runQ(approveCashCountQuery(1, 1, null, {
+      adjustedActualCash: "150.00",
+      actualTransfer: "30.00",
+      supervisorName: "Admin",
+    }))).rows.length,
+    0
+  );
+
+  // Con observación obligatoria cierra y guarda trazabilidad completa
+  assert.equal(
+    (await runQ(approveCashCountQuery(1, 1, "Faltante QR pendiente de abono", {
+      adjustedActualCash: "150.00",
+      actualTransfer: "30.00",
+      supervisorName: "Admin",
+    }))).rows.length,
+    1
+  );
+
+  const [shift1] = (await db.query<{
+    status: string;
+    actual_cash: string;
+    difference: string;
+    actual_transfer: string;
+    transfer_difference: string;
+    recount_reason: string | null;
+    notes: string;
+  }>("SELECT status, actual_cash, difference, actual_transfer, transfer_difference, recount_reason, notes FROM cash_shifts WHERE id = 1")).rows;
+  assert.equal(shift1.status, "closed");
+  assert.equal(shift1.actual_cash, "150.00");
+  assert.equal(shift1.difference, "0.00");
+  assert.equal(shift1.actual_transfer, "30.00");
+  assert.equal(shift1.transfer_difference, "-20.00");
+  assert.equal(shift1.recount_reason, null);
+  assert.match(shift1.notes, /\[Reconteo solicitado por Admin \(conteo previo 140\.00\): Diferencia de Bs 10 en caja\]/);
+  assert.match(shift1.notes, /\[Conteo editado por Admin: cajero 145\.00 -> final 150\.00\]/);
+
+  // Turno 2: cierre directo con venta QR y faltante en extracto
+  assert.equal((await runQ(openShiftQuery({ cashRegisterId: 2, userId: 1, initialCash: 200, notes: null, prefix: "TURNO-2026-" }))).rows.length, 1);
+  assert.equal((await runQ(createSaleQuery({
+    sale: saleFormSchema.parse({ checkoutRequestId: randomUUID(), paymentMethod: "transfer", items: [{ productId: 1, quantity: 1, unitPrice: 50 }] }),
+    operatorId: 1, shiftId: 2, prefix: "VTA-2026-", subtotal: 50, discount: 0, total: 50, cashGiven: null, changeGiven: null, notes: null,
+  }))).rows.length, 1);
+
+  assert.equal((await runQ(directCloseShiftQuery(2, 1, "200.00", null, "200.00", {
+    actualTransfer: "40.00", expectedTransfer: "50.00",
+  }))).rows.length, 0);
+  assert.equal((await runQ(directCloseShiftQuery(2, 1, "200.00", "Transferencia observada", "200.00", {
+    actualTransfer: "40.00", expectedTransfer: "50.00",
+  }))).rows.length, 1);
+
+  assert.deepEqual(
+    (await db.query("SELECT actual_transfer, transfer_difference FROM cash_shifts WHERE id = 2")).rows,
+    [{ actual_transfer: "40.00", transfer_difference: "-10.00" }]
+  );
 });

@@ -316,11 +316,26 @@
     visibility: visible;
   }
 
+  [data-slot="dialog-content"]:has(#thermal-receipt, #thermal-refund-receipt, #thermal-reporte-z) {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
   #thermal-receipt,
   #thermal-refund-receipt,
   #thermal-reporte-z {
     position: absolute;
     left: 0;
+    right: 0;
     top: 0;
     width: 80mm;
     max-width: 100%;
